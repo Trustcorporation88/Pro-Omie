@@ -1,0 +1,551 @@
+// Pro Omie - schema do banco (Fases 0 e 1: fundação e financeiro)
+// Todas as tabelas ficam no schema "erp" do Postgres (fora da Data API do Supabase).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────── Enums ─────────────────────────
+
+enum Papel {
+  ADMIN
+  FINANCEIRO
+  VENDAS
+  ESTOQUE
+  CONTADOR
+}
+
+enum RegimeTributario {
+  MEI
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+}
+
+enum TipoPessoa {
+  FISICA
+  JURIDICA
+  ESTRANGEIRA
+}
+
+enum IndicadorIE {
+  CONTRIBUINTE
+  ISENTO
+  NAO_CONTRIBUINTE
+}
+
+enum TipoProduto {
+  PRODUTO
+  SERVICO
+}
+
+enum TipoCategoria {
+  RECEITA
+  DESPESA
+}
+
+enum GrupoDRE {
+  RECEITA_BRUTA
+  DEDUCOES
+  CUSTOS
+  DESPESAS_PESSOAL
+  DESPESAS_ADMINISTRATIVAS
+  DESPESAS_COMERCIAIS
+  RECEITAS_FINANCEIRAS
+  DESPESAS_FINANCEIRAS
+  OUTRAS_RECEITAS
+  OUTRAS_DESPESAS
+  IMPOSTOS_LUCRO
+  NAO_OPERACIONAL
+}
+
+enum TipoConta {
+  CORRENTE
+  POUPANCA
+  CAIXA
+  CARTAO_CREDITO
+  INVESTIMENTO
+  CONTA_PAGAMENTO
+}
+
+enum MeioPagamento {
+  DINHEIRO
+  PIX
+  BOLETO
+  CARTAO_CREDITO
+  CARTAO_DEBITO
+  TRANSFERENCIA
+  CHEQUE
+  DEBITO_AUTOMATICO
+  OUTRO
+}
+
+enum TipoTitulo {
+  RECEBER
+  PAGAR
+}
+
+enum StatusTitulo {
+  ABERTO
+  PARCIAL
+  QUITADO
+  CANCELADO
+}
+
+enum OrigemTitulo {
+  MANUAL
+  RECORRENCIA
+  CONCILIACAO
+  VENDA
+  COMPRA
+  CONTRATO
+  NOTA_FISCAL
+}
+
+enum TipoMovimento {
+  CREDITO
+  DEBITO
+}
+
+enum OrigemMovimento {
+  BAIXA
+  TRANSFERENCIA
+  AJUSTE
+}
+
+enum StatusExtratoItem {
+  PENDENTE
+  CONCILIADO
+  IGNORADO
+}
+
+// ───────────────────────── Empresa e acesso ─────────────────────────
+
+model Empresa {
+  id                 String           @id @default(cuid())
+  razaoSocial        String
+  nomeFantasia       String?
+  cnpj               String           @unique
+  inscricaoEstadual  String?
+  inscricaoMunicipal String?
+  regimeTributario   RegimeTributario @default(SIMPLES_NACIONAL)
+  cnae               String?
+  email              String?
+  telefone           String?
+  cep                String?
+  logradouro         String?
+  numero             String?
+  complemento        String?
+  bairro             String?
+  cidade             String?
+  uf                 String?
+  codigoMunicipio    String?
+  matrizId           String?
+  matriz             Empresa?         @relation("Filiais", fields: [matrizId], references: [id])
+  filiais            Empresa[]        @relation("Filiais")
+  ativo              Boolean          @default(true)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  contasBancarias ContaBancaria[]
+  titulos         Titulo[]
+
+  @@map("empresas")
+}
+
+model Usuario {
+  id               String    @id @default(cuid())
+  nome             String
+  email            String    @unique
+  senhaHash        String
+  papel            Papel     @default(FINANCEIRO)
+  ativo            Boolean   @default(true)
+  trocarSenha      Boolean   @default(false)
+  versaoSessao     Int       @default(1)
+  ultimoAcesso     DateTime?
+  tentativasFalhas Int       @default(0)
+  bloqueadoAte     DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  auditorias Auditoria[]
+
+  @@map("usuarios")
+}
+
+model Auditoria {
+  id         String   @id @default(cuid())
+  usuarioId  String?
+  usuario    Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  acao       String
+  entidade   String
+  entidadeId String?
+  resumo     String?
+  dados      Json?
+  ip         String?
+  createdAt  DateTime @default(now())
+
+  @@index([entidade, entidadeId])
+  @@index([createdAt])
+  @@map("auditoria")
+}
+
+// ───────────────────────── Cadastros ─────────────────────────
+
+model Pessoa {
+  id                 String      @id @default(cuid())
+  tipoPessoa         TipoPessoa  @default(JURIDICA)
+  documento          String?     @unique
+  nome               String
+  nomeFantasia       String?
+  cliente            Boolean     @default(true)
+  fornecedor         Boolean     @default(false)
+  indicadorIE        IndicadorIE @default(NAO_CONTRIBUINTE)
+  inscricaoEstadual  String?
+  inscricaoMunicipal String?
+  email              String?
+  telefone           String?
+  contato            String?
+  cep                String?
+  logradouro         String?
+  numero             String?
+  complemento        String?
+  bairro             String?
+  cidade             String?
+  uf                 String?
+  codigoMunicipio    String?
+  limiteCredito      Decimal?    @db.Decimal(14, 2)
+  observacoes        String?
+  ativo              Boolean     @default(true)
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  titulos Titulo[]
+  regras  RegraConciliacao[]
+
+  @@index([nome])
+  @@map("pessoas")
+}
+
+model Produto {
+  id              String      @id @default(cuid())
+  tipo            TipoProduto @default(PRODUTO)
+  codigo          String      @unique
+  descricao       String
+  unidade         String      @default("UN")
+  gtin            String?
+  ncm             String?
+  cest            String?
+  origem          Int         @default(0)
+  codigoServico   String?
+  precoVenda      Decimal     @default(0) @db.Decimal(14, 2)
+  precoCusto      Decimal     @default(0) @db.Decimal(14, 4)
+  controlaEstoque Boolean     @default(true)
+  estoqueMinimo   Decimal?    @db.Decimal(14, 4)
+  estoqueMaximo   Decimal?    @db.Decimal(14, 4)
+  observacoes     String?
+  ativo           Boolean     @default(true)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  @@index([descricao])
+  @@map("produtos")
+}
+
+model Categoria {
+  id        String        @id @default(cuid())
+  codigo    String?
+  nome      String
+  tipo      TipoCategoria
+  grupoDre  GrupoDRE
+  ativo     Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  titulos Titulo[]
+  rateios TituloRateio[]
+  regras  RegraConciliacao[]
+
+  @@unique([tipo, nome])
+  @@map("categorias")
+}
+
+model CentroCusto {
+  id        String   @id @default(cuid())
+  codigo    String?
+  nome      String   @unique
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titulos Titulo[]
+  rateios TituloRateio[]
+  regras  RegraConciliacao[]
+
+  @@map("centros_custo")
+}
+
+model ContaBancaria {
+  id               String    @id @default(cuid())
+  empresaId        String
+  empresa          Empresa   @relation(fields: [empresaId], references: [id])
+  nome             String
+  tipo             TipoConta @default(CORRENTE)
+  bancoCodigo      String?
+  bancoNome        String?
+  agencia          String?
+  numero           String?
+  saldoInicial     Decimal   @default(0) @db.Decimal(14, 2)
+  dataSaldoInicial DateTime  @db.Date
+  ativo            Boolean   @default(true)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  movimentos            Movimento[]
+  titulos               Titulo[]
+  baixas                Baixa[]
+  importacoes           ExtratoImportacao[]
+  extratoItens          ExtratoItem[]
+  transferenciasOrigem  Transferencia[]     @relation("TransfOrigem")
+  transferenciasDestino Transferencia[]     @relation("TransfDestino")
+
+  @@map("contas_bancarias")
+}
+
+model FormaPagamento {
+  id        String        @id @default(cuid())
+  nome      String        @unique
+  meio      MeioPagamento @default(OUTRO)
+  ativo     Boolean       @default(true)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  titulos Titulo[]
+  baixas  Baixa[]
+
+  @@map("formas_pagamento")
+}
+
+model CondicaoPagamento {
+  id        String   @id @default(cuid())
+  nome      String   @unique
+  dias      String
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("condicoes_pagamento")
+}
+
+// ───────────────────────── Financeiro ─────────────────────────
+
+model Titulo {
+  id                 String          @id @default(cuid())
+  numero             Int             @unique @default(autoincrement())
+  tipo               TipoTitulo
+  status             StatusTitulo    @default(ABERTO)
+  origem             OrigemTitulo    @default(MANUAL)
+  origemId           String?
+  empresaId          String
+  empresa            Empresa         @relation(fields: [empresaId], references: [id])
+  pessoaId           String?
+  pessoa             Pessoa?         @relation(fields: [pessoaId], references: [id])
+  descricao          String
+  documento          String?
+  categoriaId        String?
+  categoria          Categoria?      @relation(fields: [categoriaId], references: [id])
+  centroCustoId      String?
+  centroCusto        CentroCusto?    @relation(fields: [centroCustoId], references: [id])
+  contaBancariaId    String?
+  contaBancaria      ContaBancaria?  @relation(fields: [contaBancariaId], references: [id])
+  formaPagamentoId   String?
+  formaPagamento     FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
+  emissao            DateTime        @db.Date
+  competencia        DateTime        @db.Date
+  vencimento         DateTime        @db.Date
+  valor              Decimal         @db.Decimal(14, 2)
+  valorPago          Decimal         @default(0) @db.Decimal(14, 2)
+  parcela            Int             @default(1)
+  totalParcelas      Int             @default(1)
+  grupoId            String?
+  observacoes        String?
+  quitadoEm          DateTime?       @db.Date
+  canceladoEm        DateTime?
+  motivoCancelamento String?
+  criadoPorId        String?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  rateios TituloRateio[]
+  baixas  Baixa[]
+  anexos  Anexo[]
+
+  @@index([tipo, status, vencimento])
+  @@index([pessoaId])
+  @@index([grupoId])
+  @@index([competencia])
+  @@map("titulos")
+}
+
+model TituloRateio {
+  id            String       @id @default(cuid())
+  tituloId      String
+  titulo        Titulo       @relation(fields: [tituloId], references: [id], onDelete: Cascade)
+  categoriaId   String
+  categoria     Categoria    @relation(fields: [categoriaId], references: [id])
+  centroCustoId String?
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id])
+  percentual    Decimal      @db.Decimal(7, 4)
+  valor         Decimal      @db.Decimal(14, 2)
+
+  @@index([tituloId])
+  @@index([categoriaId])
+  @@map("titulo_rateios")
+}
+
+model Baixa {
+  id               String          @id @default(cuid())
+  tituloId         String
+  titulo           Titulo          @relation(fields: [tituloId], references: [id], onDelete: Cascade)
+  contaBancariaId  String
+  contaBancaria    ContaBancaria   @relation(fields: [contaBancariaId], references: [id])
+  formaPagamentoId String?
+  formaPagamento   FormaPagamento? @relation(fields: [formaPagamentoId], references: [id])
+  data             DateTime        @db.Date
+  valor            Decimal         @db.Decimal(14, 2)
+  juros            Decimal         @default(0) @db.Decimal(14, 2)
+  multa            Decimal         @default(0) @db.Decimal(14, 2)
+  desconto         Decimal         @default(0) @db.Decimal(14, 2)
+  valorTotal       Decimal         @db.Decimal(14, 2)
+  observacao       String?
+  estornada        Boolean         @default(false)
+  estornadaEm      DateTime?
+  criadoPorId      String?
+  createdAt        DateTime        @default(now())
+
+  movimento Movimento?
+
+  @@index([tituloId])
+  @@index([data])
+  @@map("baixas")
+}
+
+model Movimento {
+  id              String          @id @default(cuid())
+  contaBancariaId String
+  contaBancaria   ContaBancaria   @relation(fields: [contaBancariaId], references: [id])
+  data            DateTime        @db.Date
+  tipo            TipoMovimento
+  valor           Decimal         @db.Decimal(14, 2)
+  descricao       String
+  origem          OrigemMovimento
+  baixaId         String?         @unique
+  baixa           Baixa?          @relation(fields: [baixaId], references: [id], onDelete: Cascade)
+  transferenciaId String?
+  transferencia   Transferencia?  @relation(fields: [transferenciaId], references: [id], onDelete: Cascade)
+  conciliado      Boolean         @default(false)
+  criadoPorId     String?
+  createdAt       DateTime        @default(now())
+
+  extratoItem ExtratoItem?
+
+  @@index([contaBancariaId, data])
+  @@index([data])
+  @@map("movimentos")
+}
+
+model Transferencia {
+  id             String        @id @default(cuid())
+  contaOrigemId  String
+  contaOrigem    ContaBancaria @relation("TransfOrigem", fields: [contaOrigemId], references: [id])
+  contaDestinoId String
+  contaDestino   ContaBancaria @relation("TransfDestino", fields: [contaDestinoId], references: [id])
+  data           DateTime      @db.Date
+  valor          Decimal       @db.Decimal(14, 2)
+  descricao      String?
+  criadoPorId    String?
+  createdAt      DateTime      @default(now())
+
+  movimentos Movimento[]
+
+  @@map("transferencias")
+}
+
+model ExtratoImportacao {
+  id              String        @id @default(cuid())
+  contaBancariaId String
+  contaBancaria   ContaBancaria @relation(fields: [contaBancariaId], references: [id])
+  arquivoNome     String
+  dataInicio      DateTime?     @db.Date
+  dataFim         DateTime?     @db.Date
+  saldoFinal      Decimal?      @db.Decimal(14, 2)
+  dataSaldo       DateTime?     @db.Date
+  totalItens      Int           @default(0)
+  novosItens      Int           @default(0)
+  criadoPorId     String?
+  createdAt       DateTime      @default(now())
+
+  itens ExtratoItem[]
+
+  @@map("extrato_importacoes")
+}
+
+model ExtratoItem {
+  id              String            @id @default(cuid())
+  importacaoId    String
+  importacao      ExtratoImportacao @relation(fields: [importacaoId], references: [id], onDelete: Cascade)
+  contaBancariaId String
+  contaBancaria   ContaBancaria     @relation(fields: [contaBancariaId], references: [id])
+  fitId           String
+  data            DateTime          @db.Date
+  valor           Decimal           @db.Decimal(14, 2)
+  descricao       String
+  documento       String?
+  status          StatusExtratoItem @default(PENDENTE)
+  movimentoId     String?           @unique
+  movimento       Movimento?        @relation(fields: [movimentoId], references: [id], onDelete: SetNull)
+  createdAt       DateTime          @default(now())
+
+  @@unique([contaBancariaId, fitId])
+  @@index([contaBancariaId, status, data])
+  @@map("extrato_itens")
+}
+
+model RegraConciliacao {
+  id            String       @id @default(cuid())
+  termo         String
+  tipo          TipoTitulo?
+  categoriaId   String
+  categoria     Categoria    @relation(fields: [categoriaId], references: [id])
+  pessoaId      String?
+  pessoa        Pessoa?      @relation(fields: [pessoaId], references: [id])
+  centroCustoId String?
+  centroCusto   CentroCusto? @relation(fields: [centroCustoId], references: [id])
+  ativo         Boolean      @default(true)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("regras_conciliacao")
+}
+
+model Anexo {
+  id          String   @id @default(cuid())
+  tituloId    String?
+  titulo      Titulo?  @relation(fields: [tituloId], references: [id], onDelete: Cascade)
+  nome        String
+  mimeType    String
+  tamanho     Int
+  storage     String   @default("db")
+  caminho     String?
+  dados       Bytes?
+  criadoPorId String?
+  createdAt   DateTime @default(now())
+
+  @@index([tituloId])
+  @@map("anexos")
+}
