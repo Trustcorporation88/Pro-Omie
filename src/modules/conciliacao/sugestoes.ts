@@ -1,5 +1,5 @@
 // Sugestões automáticas para itens PENDENTE do extrato: movimento existente, título em aberto ou regra.
-import type { DB } from "@/lib/db";
+import { Prisma, type DB } from "@/lib/db";
 import { addDias, diffDias, isoParaDate } from "@/lib/datas";
 import { isoReq, num } from "@/lib/serial";
 import { normalizarTexto } from "./utils";
@@ -22,8 +22,11 @@ function faixaDatas(itens: ItemBase[], janela: number) {
   return { gte: isoParaDate(addDias(datas[0], -janela)), lte: isoParaDate(addDias(datas[datas.length - 1], janela)) };
 }
 
-function valoresDistintos(itens: ItemBase[]): number[] {
-  return Array.from(new Set(itens.map((i) => centavos(i.valor)))).map((c) => c / 100);
+/** Decimal exato a partir de centavos: comparar coluna Decimal com número JS (ex.: 89.9) falha na igualdade. */
+const decimal = (cents: number) => new Prisma.Decimal(cents).dividedBy(100);
+
+function valoresDistintos(itens: ItemBase[]): Prisma.Decimal[] {
+  return Array.from(new Set(itens.map((i) => centavos(i.valor)))).map(decimal);
 }
 
 /**
@@ -108,7 +111,7 @@ export async function sugerirTitulos(db: DB, contaBancariaId: string, itens: Ite
       status: { in: ["ABERTO", "PARCIAL"] },
       tipo: { in: Array.from(tipos) },
       vencimento: faixaDatas(validos, JANELA_TITULO),
-      valor: { gte: Math.max(0, menorValor - 0.01) },
+      valor: { gte: decimal(Math.max(0, Math.round(menorValor * 100) - 1)) },
     },
     select: {
       id: true,
