@@ -5,6 +5,9 @@ import { PrismaClient, Prisma } from "@/generated/prisma/client";
  * Cliente Prisma único por processo.
  * DATABASE_URL aponta para o pooler do Supabase em modo transação (porta 6543).
  * Todas as tabelas vivem no schema "erp".
+ *
+ * O cliente fica em globalThis também em produção: o Next empacota rotas de API, páginas e
+ * server actions em grafos de módulos separados, e sem isso cada um abriria o próprio pool.
  */
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
@@ -23,7 +26,7 @@ function criarCliente() {
 }
 
 export const prisma = globalForPrisma.prisma ?? criarCliente();
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+globalForPrisma.prisma = prisma;
 
 export { Prisma };
 export type DB = Prisma.TransactionClient | PrismaClient;

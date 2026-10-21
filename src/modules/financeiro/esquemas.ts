@@ -8,12 +8,12 @@ import { ehISOValido, hojeISO } from "@/lib/datas";
 const id = (msg = "Registro inválido.") => z.string({ error: msg }).trim().min(1, msg);
 
 const idOpc = z
-  .union([z.string(), z.null(), z.undefined()])
+  .union([z.string(), z.null()]).optional()
   .transform((v) => (typeof v === "string" && v.trim() ? v.trim() : null));
 
 const textoOpc = (max = 500) =>
   z
-    .union([z.string(), z.null(), z.undefined()])
+    .union([z.string(), z.null()]).optional()
     .transform((v) => (typeof v === "string" && v.trim() ? v.trim() : null))
     .refine((v) => v === null || v.length <= max, `Use no máximo ${max} caracteres.`);
 
@@ -37,7 +37,7 @@ const dataMovimento = (msg = "Informe uma data válida.") =>
 
 /** Dinheiro: aceita número ou texto "1.234,56"; arredonda a centavos. */
 const dinheiro = z
-  .union([z.number(), z.string(), z.null(), z.undefined()])
+  .union([z.number(), z.string(), z.null()]).optional()
   .transform((v) => arred2(parseMoeda(v ?? 0)))
   .refine((v) => Number.isFinite(v), "Valor inválido.");
 

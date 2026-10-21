@@ -4,16 +4,16 @@ import { ehISOValido, isoParaDate } from "@/lib/datas";
 
 // Auxiliares de coerção (valores chegam do formulário como string/boolean).
 const opc = z
-  .union([z.string(), z.number(), z.null(), z.undefined()])
+  .union([z.string(), z.number(), z.null()]).optional()
   .transform((v) => (v === null || v === undefined ? null : String(v).trim() || null));
 const obrig = (msg: string) => z.union([z.string(), z.number()]).transform((v) => String(v).trim()).pipe(z.string().min(1, msg));
-const bool = z.union([z.boolean(), z.string(), z.null(), z.undefined()]).transform((v) => v === true || v === "true" || v === "on");
-const moeda = z.union([z.number(), z.string(), z.null(), z.undefined()]).transform((v) => parseMoeda(v ?? 0));
+const bool = z.union([z.boolean(), z.string(), z.null()]).optional().transform((v) => v === true || v === "true" || v === "on");
+const moeda = z.union([z.number(), z.string(), z.null()]).optional().transform((v) => parseMoeda(v ?? 0));
 const moedaOpc = z
-  .union([z.number(), z.string(), z.null(), z.undefined()])
+  .union([z.number(), z.string(), z.null()]).optional()
   .transform((v) => (v === null || v === undefined || v === "" ? null : parseMoeda(v)));
 const numOpc = z
-  .union([z.number(), z.string(), z.null(), z.undefined()])
+  .union([z.number(), z.string(), z.null()]).optional()
   .transform((v) => (v === null || v === undefined || v === "" ? null : Number(String(v).replace(",", "."))))
   .refine((v) => v === null || Number.isFinite(v), "Número inválido.");
 const digitos = opc.transform((v) => (v ? soDigitos(v) || null : null));
