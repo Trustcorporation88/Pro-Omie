@@ -1,0 +1,59 @@
+import type { Permissao } from "@/lib/auth/permissoes";
+
+export type ItemNav = {
+  titulo: string;
+  href: string;
+  icone: string;
+  permissao?: Permissao;
+  emBreve?: string;
+};
+
+export type GrupoNav = { titulo: string; itens: ItemNav[] };
+
+export const NAVEGACAO: GrupoNav[] = [
+  {
+    titulo: "Visão geral",
+    itens: [{ titulo: "Painel", href: "/", icone: "LayoutDashboard" }],
+  },
+  {
+    titulo: "Financeiro",
+    itens: [
+      { titulo: "Contas a receber", href: "/financeiro/receber", icone: "CircleArrowDown", permissao: "financeiro:ver" },
+      { titulo: "Contas a pagar", href: "/financeiro/pagar", icone: "CircleArrowUp", permissao: "financeiro:ver" },
+      { titulo: "Movimentações", href: "/financeiro/movimentacoes", icone: "Landmark", permissao: "financeiro:ver" },
+      { titulo: "Conciliação bancária", href: "/financeiro/conciliacao", icone: "GitCompareArrows", permissao: "financeiro:ver" },
+      { titulo: "Fluxo de caixa", href: "/financeiro/fluxo-de-caixa", icone: "ChartLine", permissao: "relatorios:ver" },
+      { titulo: "DRE gerencial", href: "/financeiro/dre", icone: "FileChartColumn", permissao: "relatorios:ver" },
+    ],
+  },
+  {
+    titulo: "Cadastros",
+    itens: [
+      { titulo: "Clientes e fornecedores", href: "/cadastros/pessoas", icone: "Users", permissao: "cadastros:ver" },
+      { titulo: "Produtos e serviços", href: "/cadastros/produtos", icone: "Package", permissao: "cadastros:ver" },
+      { titulo: "Categorias financeiras", href: "/cadastros/categorias", icone: "Tags", permissao: "cadastros:ver" },
+      { titulo: "Centros de custo", href: "/cadastros/centros-de-custo", icone: "Target", permissao: "cadastros:ver" },
+      { titulo: "Contas bancárias", href: "/cadastros/contas-bancarias", icone: "Wallet", permissao: "cadastros:ver" },
+      { titulo: "Formas de pagamento", href: "/cadastros/formas-de-pagamento", icone: "CreditCard", permissao: "cadastros:ver" },
+      { titulo: "Condições de pagamento", href: "/cadastros/condicoes-de-pagamento", icone: "CalendarClock", permissao: "cadastros:ver" },
+    ],
+  },
+  {
+    titulo: "Próximas fases",
+    itens: [
+      { titulo: "Vendas e CRM", href: "#", icone: "ShoppingCart", emBreve: "Fase 2" },
+      { titulo: "Estoque e compras", href: "#", icone: "Boxes", emBreve: "Fase 3" },
+      { titulo: "Notas fiscais e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
+      { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
+      { titulo: "Painel do contador", href: "#", icone: "Calculator", emBreve: "Fase 6" },
+    ],
+  },
+  {
+    titulo: "Administração",
+    itens: [
+      { titulo: "Empresa e filiais", href: "/configuracoes/empresa", icone: "Building", permissao: "config:admin" },
+      { titulo: "Usuários", href: "/configuracoes/usuarios", icone: "UserCog", permissao: "config:admin" },
+      { titulo: "Auditoria", href: "/configuracoes/auditoria", icone: "ScrollText", permissao: "config:admin" },
+    ],
+  },
+];
