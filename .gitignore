@@ -1,0 +1,26 @@
+# dependências
+/node_modules
+/.pnp
+.pnp.*
+
+# build
+/.next/
+/out/
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# prisma client gerado
+/src/generated
+
+# ambiente e segredos
+.env
+.env*.local
+.env.production
+!.env.example
+
+# logs e sistema
+npm-debug.log*
+.DS_Store
+*.pem
+.vercel
