@@ -68,8 +68,13 @@ export function FormularioCadastro({
         cidade: d.cidade,
         uf: d.uf,
         codigoMunicipio: d.codigoMunicipio,
+        inscricaoEstadual: d.inscricaoEstadual || s.inscricaoEstadual,
+        indicadorIE:
+          d.contribuinteIcms === true ? "CONTRIBUINTE" : d.contribuinteIcms === false ? "NAO_CONTRIBUINTE" : s.indicadorIE,
       }));
-      toast.success(`Dados da Receita carregados${d.situacao ? ` · ${d.situacao}` : ""}`);
+      toast.success(
+        `Dados carregados (${d.fonte})${d.situacao ? ` · ${d.situacao}` : ""}${d.inscricaoEstadual ? ` · IE ${d.inscricaoEstadual}` : ""}`,
+      );
     });
   }
 

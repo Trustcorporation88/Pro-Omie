@@ -190,9 +190,9 @@ export async function consultarCnpj(cnpj: string, tokenSetup?: string): Promise<
   return executar(async () => {
     await autorizarConsulta(tokenSetup);
     if (!validarCNPJ(cnpj)) throw new ErroAcao("CNPJ inválido.");
-    const dados = await buscarCnpj(cnpj);
-    if (!dados) throw new ErroAcao("CNPJ não encontrado na Receita ou serviço indisponível.");
-    return dados;
+    const r = await buscarCnpj(cnpj);
+    if (!r.ok) throw new ErroAcao(r.motivo);
+    return r.dados;
   });
 }
 

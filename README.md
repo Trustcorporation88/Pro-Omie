@@ -69,6 +69,7 @@ Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 | `AUTH_SECRET` | Segredo da sessão (mínimo 32 caracteres) |
 | `DATABASE_POOL_MAX` | Opcional. Conexões por instância (padrão 3 na Vercel, 8 fora dela) |
 | `SETUP_TOKEN` | Token da configuração inicial |
+| `CNPJ_API_KEY` | Chave do CNPJ Trust ou da CNPJá: consulta de CNPJ com Simples/MEI e inscrição estadual (sem ela, fontes gratuitas) |
 
 ## Roteiro
 
