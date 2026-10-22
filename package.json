@@ -23,6 +23,7 @@
   "dependencies": {
     "@prisma/adapter-pg": "7.10.1",
     "@prisma/client": "7.10.1",
+    "@react-pdf/renderer": "^4.9.0",
     "@vercel/functions": "3.10.2",
     "bcryptjs": "3.0.3",
     "class-variance-authority": "0.7.1",

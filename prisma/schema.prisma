@@ -162,6 +162,9 @@ model Empresa {
   condicoes       CondicaoPagamento[]
   regras          RegraConciliacao[]
 
+  propostas Proposta[]
+  pedidos   Pedido[]
+
   @@map("empresas")
 }
 
@@ -185,6 +188,9 @@ model Usuario {
   updatedAt        DateTime  @updatedAt
 
   auditorias Auditoria[]
+
+  propostasVendedor Proposta[] @relation("VendedorProposta")
+  pedidosVendedor   Pedido[]   @relation("VendedorPedido")
 
   @@map("usuarios")
 }
@@ -243,8 +249,10 @@ model Pessoa {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
 
-  titulos Titulo[]
-  regras  RegraConciliacao[]
+  titulos   Titulo[]
+  regras    RegraConciliacao[]
+  propostas Proposta[]
+  pedidos   Pedido[]
 
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
@@ -252,28 +260,30 @@ model Pessoa {
 }
 
 model Produto {
-  id              String      @id @default(cuid())
+  id              String         @id @default(cuid())
   /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
   empresaId       String
-  empresa         Empresa     @relation(fields: [empresaId], references: [id])
-  tipo            TipoProduto @default(PRODUTO)
+  empresa         Empresa        @relation(fields: [empresaId], references: [id])
+  tipo            TipoProduto    @default(PRODUTO)
   codigo          String
   descricao       String
-  unidade         String      @default("UN")
+  unidade         String         @default("UN")
   gtin            String?
   ncm             String?
   cest            String?
-  origem          Int         @default(0)
+  origem          Int            @default(0)
   codigoServico   String?
-  precoVenda      Decimal     @default(0) @db.Decimal(14, 2)
-  precoCusto      Decimal     @default(0) @db.Decimal(14, 4)
-  controlaEstoque Boolean     @default(true)
-  estoqueMinimo   Decimal?    @db.Decimal(14, 4)
-  estoqueMaximo   Decimal?    @db.Decimal(14, 4)
+  precoVenda      Decimal        @default(0) @db.Decimal(14, 2)
+  precoCusto      Decimal        @default(0) @db.Decimal(14, 4)
+  controlaEstoque Boolean        @default(true)
+  estoqueMinimo   Decimal?       @db.Decimal(14, 4)
+  estoqueMaximo   Decimal?       @db.Decimal(14, 4)
   observacoes     String?
-  ativo           Boolean     @default(true)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  ativo           Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  itensProposta   PropostaItem[]
+  itensPedido     PedidoItem[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, descricao])
@@ -358,23 +368,27 @@ model FormaPagamento {
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
 
-  titulos Titulo[]
-  baixas  Baixa[]
+  titulos   Titulo[]
+  baixas    Baixa[]
+  propostas Proposta[]
+  pedidos   Pedido[]
 
   @@unique([empresaId, nome])
   @@map("formas_pagamento")
 }
 
 model CondicaoPagamento {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
   empresaId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  empresa   Empresa    @relation(fields: [empresaId], references: [id])
   nome      String
   dias      String
-  ativo     Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  ativo     Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  propostas Proposta[]
+  pedidos   Pedido[]
 
   @@unique([empresaId, nome])
   @@map("condicoes_pagamento")
@@ -590,4 +604,150 @@ model Anexo {
 
   @@index([tituloId])
   @@map("anexos")
+}
+
+// ───────────────────────── Vendas (Fase 2) ─────────────────────────
+
+enum StatusProposta {
+  RASCUNHO
+  ENVIADA
+  APROVADA
+  RECUSADA
+  CANCELADA
+}
+
+enum StatusPedido {
+  ABERTO
+  FATURADO
+  CANCELADO
+}
+
+/// Numeração sequencial por estabelecimento (CNPJ) e tipo de documento ("proposta", "pedido").
+model SequenciaDocumento {
+  empresaId String
+  tipo      String
+  ultimo    Int    @default(0)
+
+  @@id([empresaId, tipo])
+  @@map("sequencias_documento")
+}
+
+/// Proposta comercial (orçamento). `empresaId` é o estabelecimento emissor (matriz ou filial); os cadastros
+/// usados (cliente, produtos, condição e forma) são da matriz.
+model Proposta {
+  id                  String             @id @default(cuid())
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  numero              Int
+  status              StatusProposta     @default(RASCUNHO)
+  pessoaId            String
+  pessoa              Pessoa             @relation(fields: [pessoaId], references: [id])
+  vendedorId          String?
+  vendedor            Usuario?           @relation("VendedorProposta", fields: [vendedorId], references: [id])
+  emissao             DateTime           @db.Date
+  validade            DateTime           @db.Date
+  condicaoPagamentoId String?
+  condicaoPagamento   CondicaoPagamento? @relation(fields: [condicaoPagamentoId], references: [id])
+  formaPagamentoId    String?
+  formaPagamento      FormaPagamento?    @relation(fields: [formaPagamentoId], references: [id])
+  /// texto para o cliente (sai no PDF)
+  observacoes         String?
+  /// anotações internas (não saem no PDF)
+  observacoesInternas String?
+  subtotal            Decimal            @default(0) @db.Decimal(14, 2)
+  desconto            Decimal            @default(0) @db.Decimal(14, 2)
+  total               Decimal            @default(0) @db.Decimal(14, 2)
+  motivoRecusa        String?
+  enviadaEm           DateTime?
+  aprovadaEm          DateTime?
+  recusadaEm          DateTime?
+  canceladaEm         DateTime?
+  criadoPorId         String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  itens  PropostaItem[]
+  pedido Pedido?
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, status, emissao])
+  @@index([pessoaId])
+  @@map("propostas")
+}
+
+model PropostaItem {
+  id                 String      @id @default(cuid())
+  propostaId         String
+  proposta           Proposta    @relation(fields: [propostaId], references: [id], onDelete: Cascade)
+  ordem              Int
+  produtoId          String?
+  produto            Produto?    @relation(fields: [produtoId], references: [id])
+  tipo               TipoProduto
+  descricao          String
+  unidade            String
+  quantidade         Decimal     @db.Decimal(14, 3)
+  precoUnitario      Decimal     @db.Decimal(14, 4)
+  descontoPercentual Decimal     @default(0) @db.Decimal(5, 2)
+  total              Decimal     @db.Decimal(14, 2)
+
+  @@index([propostaId, ordem])
+  @@map("proposta_itens")
+}
+
+/// Pedido de venda. Pode nascer de uma proposta aprovada ou direto (venda de recicláveis, por exemplo).
+/// Faturar gera as contas a receber (origem VENDA, origemId = id do pedido).
+model Pedido {
+  id                  String             @id @default(cuid())
+  empresaId           String
+  empresa             Empresa            @relation(fields: [empresaId], references: [id])
+  numero              Int
+  status              StatusPedido       @default(ABERTO)
+  propostaId          String?            @unique
+  proposta            Proposta?          @relation(fields: [propostaId], references: [id])
+  pessoaId            String
+  pessoa              Pessoa             @relation(fields: [pessoaId], references: [id])
+  vendedorId          String?
+  vendedor            Usuario?           @relation("VendedorPedido", fields: [vendedorId], references: [id])
+  emissao             DateTime           @db.Date
+  condicaoPagamentoId String?
+  condicaoPagamento   CondicaoPagamento? @relation(fields: [condicaoPagamentoId], references: [id])
+  formaPagamentoId    String?
+  formaPagamento      FormaPagamento?    @relation(fields: [formaPagamentoId], references: [id])
+  observacoes         String?
+  observacoesInternas String?
+  subtotal            Decimal            @default(0) @db.Decimal(14, 2)
+  desconto            Decimal            @default(0) @db.Decimal(14, 2)
+  total               Decimal            @default(0) @db.Decimal(14, 2)
+  faturadoEm          DateTime?
+  canceladoEm         DateTime?
+  motivoCancelamento  String?
+  criadoPorId         String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  itens PedidoItem[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, status, emissao])
+  @@index([pessoaId])
+  @@map("pedidos")
+}
+
+model PedidoItem {
+  id                 String      @id @default(cuid())
+  pedidoId           String
+  pedido             Pedido      @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  ordem              Int
+  produtoId          String?
+  produto            Produto?    @relation(fields: [produtoId], references: [id])
+  tipo               TipoProduto
+  descricao          String
+  unidade            String
+  quantidade         Decimal     @db.Decimal(14, 3)
+  precoUnitario      Decimal     @db.Decimal(14, 4)
+  descontoPercentual Decimal     @default(0) @db.Decimal(5, 2)
+  total              Decimal     @db.Decimal(14, 2)
+
+  @@index([pedidoId, ordem])
+  @@map("pedido_itens")
 }

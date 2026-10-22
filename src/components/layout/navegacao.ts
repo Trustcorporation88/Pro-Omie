@@ -27,6 +27,13 @@ export const NAVEGACAO: GrupoNav[] = [
     ],
   },
   {
+    titulo: "Vendas",
+    itens: [
+      { titulo: "Propostas", href: "/vendas/propostas", icone: "FileText", permissao: "vendas:ver" },
+      { titulo: "Pedidos de venda", href: "/vendas/pedidos", icone: "ShoppingCart", permissao: "vendas:ver" },
+    ],
+  },
+  {
     titulo: "Cadastros",
     itens: [
       { titulo: "Clientes e fornecedores", href: "/cadastros/pessoas", icone: "Users", permissao: "cadastros:ver" },
@@ -41,7 +48,7 @@ export const NAVEGACAO: GrupoNav[] = [
   {
     titulo: "Próximas fases",
     itens: [
-      { titulo: "Vendas e CRM", href: "#", icone: "ShoppingCart", emBreve: "Fase 2" },
+      { titulo: "CRM e funil", href: "#", icone: "Target", emBreve: "Fase 2" },
       { titulo: "Estoque e compras", href: "#", icone: "Boxes", emBreve: "Fase 3" },
       { titulo: "Notas fiscais e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
       { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
