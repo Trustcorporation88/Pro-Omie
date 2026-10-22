@@ -12,6 +12,7 @@ import { auditar } from "@/lib/auditoria";
 import { fmtDocumento } from "@/lib/format";
 import { esquemaEdicaoUsuario, esquemaEmpresa, esquemaNovoUsuario } from "./esquemas";
 import { gerarSenhaProvisoria } from "./senha";
+import { imagemSaiNoPdf, lerImagemLogo } from "./logotipo";
 import type { TipoEmpresa } from "./tipos";
 
 // Regras desta tela (todas as ações exigem "config:admin"):
@@ -184,6 +185,58 @@ export async function salvarEmpresa(
  * Empresa inativa some do seletor do menu e das seleções, mas o histórico fica. Inativar ou reativar empresa do grupo
  * é com o administrador do grupo (e nunca a última ativa); filiais, com quem administra a matriz.
  */
+/** Empresa (matriz) administrada pelo usuário, para mexer no logotipo. Filial usa o logotipo da matriz. */
+async function matrizParaLogotipo(ctx: ContextoAdmin, empresaId: string) {
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: typeof empresaId === "string" ? empresaId : "" },
+    select: { id: true, matrizId: true, razaoSocial: true, nomeFantasia: true },
+  });
+  if (!empresa) throw new ErroAcao("Empresa não encontrada.");
+  exigirMatrizAdministrada(ctx, empresa.matrizId ?? empresa.id);
+  if (empresa.matrizId) throw new ErroAcao("O logotipo fica na empresa (matriz) e vale também para as filiais.");
+  return empresa;
+}
+
+/**
+ * Grava o logotipo da empresa (data URL PNG ou JPEG, já tratado no navegador).
+ * Antes de gravar, gera um PDF de teste com a imagem: o que entra aqui sai nos PDFs.
+ */
+export async function salvarLogoEmpresa(empresaId: string, dataUrl: string): Promise<Resultado<{ largura: number; altura: number }>> {
+  return executar(async () => {
+    const { u, ctx } = await exigirAdmin();
+    const empresa = await matrizParaLogotipo(ctx, empresaId);
+    const img = lerImagemLogo(dataUrl);
+    if (!(await imagemSaiNoPdf(img))) throw new ErroAcao("Não foi possível ler a imagem. Exporte o logotipo em PNG e tente de novo.");
+    const dados = { imagem: new Uint8Array(img.dados), formato: img.formato, largura: img.largura, altura: img.altura, atualizadoPorId: u.id };
+    await prisma.logoEmpresa.upsert({ where: { empresaId: empresa.id }, create: { empresaId: empresa.id, ...dados }, update: dados });
+    const kb = Math.max(1, Math.round(img.dados.length / 1024));
+    await auditar(
+      "logotipo",
+      "empresa",
+      empresa.id,
+      `Logotipo de ${empresa.nomeFantasia || empresa.razaoSocial} (${img.formato.toUpperCase()}, ${img.largura} × ${img.altura} px, ${kb} KB)`,
+      { formato: img.formato, largura: img.largura, altura: img.altura, bytes: img.dados.length },
+      { empresaId: empresa.id },
+    );
+    revalidar("/configuracoes/empresa");
+    return { largura: img.largura, altura: img.altura };
+  }, "Logotipo salvo. Ele já sai nas propostas e pedidos em PDF.");
+}
+
+export async function removerLogoEmpresa(empresaId: string): Promise<Resultado> {
+  return executar(async () => {
+    const { ctx } = await exigirAdmin();
+    const empresa = await matrizParaLogotipo(ctx, empresaId);
+    const r = await prisma.logoEmpresa.deleteMany({ where: { empresaId: empresa.id } });
+    if (!r.count) throw new ErroAcao("Esta empresa não tem logotipo.");
+    await auditar("remover_logotipo", "empresa", empresa.id, `Logotipo removido: ${empresa.nomeFantasia || empresa.razaoSocial}`, undefined, {
+      empresaId: empresa.id,
+    });
+    revalidar("/configuracoes/empresa");
+    return undefined;
+  }, "Logotipo removido. Os PDFs voltam a sair só com o nome da empresa.");
+}
+
 export async function definirAtivoFilial(id: string, ativo: boolean): Promise<Resultado> {
   const previo = await prisma.empresa.findUnique({ where: { id }, select: { matrizId: true } });
   const rotulo = previo?.matrizId ? "Filial" : "Empresa";

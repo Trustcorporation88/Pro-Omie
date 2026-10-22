@@ -106,8 +106,8 @@ export function Marca({
         <Image
           src="/marca/pro-omie-nome.webp"
           alt="Pro Omie · ERP Trustcorp"
-          width={450}
-          height={185}
+          width={663}
+          height={260}
           unoptimized
           priority
           draggable={false}

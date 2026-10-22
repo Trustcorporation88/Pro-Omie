@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { obterDocumento } from "@/modules/vendas/consultas";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { gerarPdfDocumento } from "@/modules/vendas/pdf";
+import { logoParaPdf } from "@/modules/configuracoes/logotipo";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -21,6 +22,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ tipo
   const emitente = await prisma.empresa.findUnique({
     where: { id: doc.empresaId },
     select: {
+      id: true,
+      matrizId: true,
       razaoSocial: true,
       nomeFantasia: true,
       cnpj: true,
@@ -38,7 +41,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ tipo
   });
   if (!emitente) return Response.json({ erro: "Empresa não encontrada." }, { status: 404 });
 
-  const pdf = await gerarPdfDocumento(doc, emitente);
+  // logotipo da empresa emissora (filial usa o da matriz); sem logotipo, o cabeçalho sai só com o nome
+  const logo = await logoParaPdf(emitente).catch(() => null);
+  const pdf = await gerarPdfDocumento(doc, { ...emitente, logo });
   const arquivo = `${doc.tipo === "proposta" ? "Proposta" : "Pedido"}-${fmtNumeroDoc(doc.numero)}.pdf`;
   const baixar = new URL(request.url).searchParams.get("baixar") === "1";
   return new Response(new Uint8Array(pdf), {
