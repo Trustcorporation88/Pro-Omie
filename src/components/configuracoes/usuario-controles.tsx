@@ -17,7 +17,8 @@ import { definirAtivoUsuario, desbloquearUsuario, redefinirSenhaUsuario } from "
 import type { EmpresaOpcao, SegredoExibido, UsuarioAcao } from "@/modules/configuracoes/tipos";
 
 /** "Novo usuário": abre o formulário e, depois de criar, mostra a senha provisória uma única vez. */
-export function BotaoNovoUsuario({ empresas }: { empresas: EmpresaOpcao[] }) {
+/** Novo usuário nasce com acesso só à empresa ativa (o admin marca "todas" se quiser). */
+export function BotaoNovoUsuario({ empresas, empresaPadraoId }: { empresas: EmpresaOpcao[]; empresaPadraoId?: string }) {
   const [aberto, setAberto] = useState(false);
   const [chave, setChave] = useState(0);
   const [segredo, setSegredo] = useState<SegredoExibido | null>(null);
@@ -38,7 +39,13 @@ export function BotaoNovoUsuario({ empresas }: { empresas: EmpresaOpcao[] }) {
         <FormularioUsuario
           key={chave}
           id={null}
-          iniciais={{ nome: "", email: "", papel: "FINANCEIRO", todasEmpresas: true, empresas: [] }}
+          iniciais={{
+            nome: "",
+            email: "",
+            papel: "FINANCEIRO",
+            todasEmpresas: !empresaPadraoId,
+            empresas: empresaPadraoId ? [empresaPadraoId] : [],
+          }}
           empresasDisponiveis={empresas}
           aberto={aberto}
           onAbertoChange={setAberto}

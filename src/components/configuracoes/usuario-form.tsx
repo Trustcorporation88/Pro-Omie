@@ -48,8 +48,9 @@ export function FormularioUsuario({
   const [todasEmpresas, setTodasEmpresas] = useState(iniciais.todasEmpresas);
   const [empresas, setEmpresas] = useState<string[]>(iniciais.empresas);
   const [erros, setErros] = useState<Record<string, string>>({});
-  // Acesso por empresa só faz sentido com mais de uma empresa no grupo; admin sempre vê todas.
-  const escolheEmpresas = empresasDisponiveis.length > 1 && papel !== "ADMIN";
+  // Admin sempre vê todas. Para os demais a escolha aparece mesmo com uma empresa só:
+  // "todas" inclui as que forem cadastradas depois, então precisa ser uma decisão consciente.
+  const escolheEmpresas = empresasDisponiveis.length > 0 && papel !== "ADMIN";
   const acesso = { todasEmpresas: escolheEmpresas ? todasEmpresas : true, empresas: escolheEmpresas && !todasEmpresas ? empresas : [] };
   const [falhas, setFalhas] = useState(0);
   const [salvando, iniciar] = useTransition();
@@ -223,6 +224,13 @@ export function FormularioUsuario({
               )
             )}
           </div>
+
+          {papel === "ADMIN" && empresasDisponiveis.length > 0 && (
+            <div className="space-y-1">
+              <span className="text-sm leading-none font-medium">Empresas</span>
+              <p className="text-xs text-muted-foreground">Administradores veem todas as empresas do grupo, inclusive as cadastradas depois.</p>
+            </div>
+          )}
 
           {escolheEmpresas && (
             <fieldset className="space-y-2">
