@@ -10,13 +10,15 @@ export type Permissao =
   | "relatorios:ver"
   | "vendas:ver"
   | "vendas:editar"
+  | "crm:ver"
+  | "crm:editar"
   | "config:admin";
 
 const MATRIZ: Record<PapelUsuario, Permissao[]> = {
-  ADMIN: ["financeiro:ver", "financeiro:editar", "cadastros:ver", "cadastros:editar", "relatorios:ver", "vendas:ver", "vendas:editar", "config:admin"],
-  FINANCEIRO: ["financeiro:ver", "financeiro:editar", "cadastros:ver", "cadastros:editar", "relatorios:ver", "vendas:ver", "vendas:editar"],
+  ADMIN: ["financeiro:ver", "financeiro:editar", "cadastros:ver", "cadastros:editar", "relatorios:ver", "vendas:ver", "vendas:editar", "crm:ver", "crm:editar", "config:admin"],
+  FINANCEIRO: ["financeiro:ver", "financeiro:editar", "cadastros:ver", "cadastros:editar", "relatorios:ver", "vendas:ver", "vendas:editar", "crm:ver", "crm:editar"],
   // vendas cria propostas e pedidos; faturar (gerar contas a receber) exige também financeiro:editar
-  VENDAS: ["cadastros:ver", "cadastros:editar", "vendas:ver", "vendas:editar"],
+  VENDAS: ["cadastros:ver", "cadastros:editar", "vendas:ver", "vendas:editar", "crm:ver", "crm:editar"],
   ESTOQUE: ["cadastros:ver", "cadastros:editar", "vendas:ver"],
   CONTADOR: ["financeiro:ver", "cadastros:ver", "relatorios:ver", "vendas:ver"],
 };

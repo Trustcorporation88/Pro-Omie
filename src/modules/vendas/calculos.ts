@@ -1,5 +1,5 @@
 // Cálculos de propostas e pedidos. Seguro para client e server (o servidor sempre recalcula).
-import { arred2 } from "@/lib/format";
+import { arred2, normalizarNumeroBR } from "@/lib/format";
 
 export type ItemCalculo = { quantidade: number; precoUnitario: number; descontoPercentual: number };
 
@@ -23,12 +23,8 @@ export function totaisDocumento(itens: ItemCalculo[]): { subtotal: number; desco
 /** Lê número digitado em português ("1.250,500"), com até `casas` decimais. Vazio ou inválido = NaN. */
 export function lerDecimal(entrada: string | number | null | undefined, casas = 4): number {
   if (typeof entrada === "number") return entrada;
-  let s = String(entrada ?? "").replace(/[^\d,.-]/g, "").trim();
+  const s = normalizarNumeroBR(String(entrada ?? ""));
   if (!s) return Number.NaN;
-  const temVirgula = s.includes(",");
-  const temPonto = s.includes(".");
-  if (temVirgula && temPonto) s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
-  else if (temVirgula) s = s.replace(/\./g, "").replace(",", ".");
   const n = Number(s);
   if (!Number.isFinite(n)) return Number.NaN;
   const f = 10 ** casas;

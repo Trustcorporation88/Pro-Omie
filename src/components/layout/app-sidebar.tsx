@@ -16,11 +16,13 @@ import {
   GitCompareArrows,
   Landmark,
   LayoutDashboard,
+  ListTodo,
   Package,
   Receipt,
   Repeat,
   ScrollText,
   ShoppingCart,
+  SquareKanban,
   Tags,
   Target,
   UserCog,
@@ -60,11 +62,13 @@ const ICONES: Record<string, LucideIcon> = {
   GitCompareArrows,
   Landmark,
   LayoutDashboard,
+  ListTodo,
   Package,
   Receipt,
   Repeat,
   ScrollText,
   ShoppingCart,
+  SquareKanban,
   Tags,
   Target,
   UserCog,
@@ -72,7 +76,18 @@ const ICONES: Record<string, LucideIcon> = {
   Wallet,
 };
 
-export function AppSidebar({ papel, empresa, empresas }: { papel: PapelUsuario; empresa: EmpresaResumo; empresas: EmpresaResumo[] }) {
+export function AppSidebar({
+  papel,
+  empresa,
+  empresas,
+  selos = {},
+}: {
+  papel: PapelUsuario;
+  empresa: EmpresaResumo;
+  empresas: EmpresaResumo[];
+  /** contadores por href (ex.: atividades pendentes de hoje) */
+  selos?: Record<string, number>;
+}) {
   const pathname = usePathname();
   const ativo = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
 
@@ -114,6 +129,11 @@ export function AppSidebar({ papel, empresa, empresas }: { papel: PapelUsuario; 
                           <span>{item.titulo}</span>
                         </Link>
                       </SidebarMenuButton>
+                      {!!selos[item.href] && (
+                        <SidebarMenuBadge className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground" aria-label={`${selos[item.href]} pendentes hoje`}>
+                          {selos[item.href]! > 99 ? "99+" : selos[item.href]}
+                        </SidebarMenuBadge>
+                      )}
                     </SidebarMenuItem>
                   );
                 })}
@@ -123,7 +143,7 @@ export function AppSidebar({ papel, empresa, empresas }: { papel: PapelUsuario; 
         })}
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 text-[11px] opacity-50 group-data-[collapsible=icon]:hidden">
-        Fase 2 em andamento · Vendas
+        Fases 0 a 2 · Financeiro, CRM e vendas
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

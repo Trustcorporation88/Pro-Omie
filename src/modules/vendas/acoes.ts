@@ -12,6 +12,7 @@ import { fmtMoeda } from "@/lib/format";
 import { num } from "@/lib/serial";
 import { parcelasPorCondicao } from "@/modules/financeiro/parcelas";
 import { criarLancamento, excluirTitulo } from "@/modules/financeiro/servicos";
+import { avancarParaProposta, ganharPelaProposta, oportunidadeParaProposta } from "@/modules/crm/servicos";
 import { fmtNumeroDoc, rateioPorTipo, totaisDocumento, totalItem } from "./calculos";
 import {
   esquemaFaturamento,
@@ -104,6 +105,8 @@ export async function salvarProposta(id: string | null, entrada: EntradaProposta
     const escopo = await escopoEmpresa();
     const d = esquemaProposta.parse(entrada);
     const pessoa = await validarReferencias(escopo, d);
+    // proposta aberta a partir do funil: a oportunidade precisa ser desta empresa e estar aberta
+    const oportunidade = !id && d.oportunidadeId ? await oportunidadeParaProposta(escopo.ativa.id, d.oportunidadeId) : null;
     const cab = dadosCabecalho(d, u.id);
     const itens = dadosItens(d);
     const r = await prisma.$transaction(async (tx) => {
@@ -117,9 +120,16 @@ export async function salvarProposta(id: string | null, entrada: EntradaProposta
         return { id: p.id, numero: p.numero, criada: false };
       }
       const numero = await proximoNumero(tx, d.empresaId, "proposta");
-      const p = await tx.proposta.create({ data: { ...cab, validade: isoParaDate(d.validade), numero, criadoPorId: u.id, itens: { create: itens } } });
+      const p = await tx.proposta.create({
+        data: { ...cab, validade: isoParaDate(d.validade), numero, oportunidadeId: oportunidade?.id ?? null, criadoPorId: u.id, itens: { create: itens } },
+      });
       return { id: p.id, numero, criada: true };
     });
+    if (oportunidade) {
+      await avancarParaProposta(oportunidade.id, escopo.ativa.id, fmtNumeroDoc(r.numero));
+      revalidatePath("/crm/funil");
+      revalidatePath(`/crm/oportunidades/${oportunidade.id}`);
+    }
     await auditar(r.criada ? "criar" : "atualizar", "proposta", r.id, `Proposta nº ${fmtNumeroDoc(r.numero)} · ${nome(pessoa)} · ${fmtMoeda(cab.total)}`, {
       ...cab,
       validade: d.validade,
@@ -139,17 +149,28 @@ const TRANSICOES = {
 } as const;
 export type AcaoProposta = keyof typeof TRANSICOES;
 
-/** Muda a situação da proposta (transição atômica: só vale a partir das situações permitidas). */
-export async function alterarSituacaoProposta(id: string, acao: AcaoProposta, motivo?: string | null): Promise<Resultado> {
+/**
+ * Muda a situação da proposta (transição atômica: só vale a partir das situações permitidas).
+ * Aprovar uma proposta que saiu do funil marca a oportunidade como ganha, com o valor da proposta.
+ */
+export async function alterarSituacaoProposta(id: string, acao: AcaoProposta, motivo?: string | null): Promise<Resultado<{ oportunidadeGanha: boolean }>> {
   const t = TRANSICOES[acao];
-  return executar(async () => {
+  const r = await executar(async () => {
     await exigirPermissao("vendas:editar");
     if (!t) throw new ErroAcao("Ação inválida.");
     const escopo = await escopoEmpresa();
     const m = esquemaMotivo.parse(motivo);
     const atual = await prisma.proposta.findFirst({
       where: { id, empresaId: { in: escopo.ids } },
-      select: { id: true, numero: true, status: true, pedido: { select: { id: true } }, pessoa: { select: { nome: true, nomeFantasia: true } } },
+      select: {
+        id: true,
+        numero: true,
+        status: true,
+        total: true,
+        oportunidadeId: true,
+        pedido: { select: { id: true } },
+        pessoa: { select: { nome: true, nomeFantasia: true } },
+      },
     });
     if (!atual) throw new ErroAcao("Proposta não encontrada nesta empresa.");
     if (acao === "cancelar" && atual.pedido) throw new ErroAcao("Esta proposta já virou pedido. Cancele o pedido.");
@@ -160,10 +181,18 @@ export async function alterarSituacaoProposta(id: string, acao: AcaoProposta, mo
     const r = await prisma.proposta.updateMany({ where: { id, status: { in: [...t.de] } }, data });
     if (r.count !== 1) throw new ErroAcao("A proposta mudou de situação. Atualize a página.");
     await auditar(acao, "proposta", id, `Proposta nº ${fmtNumeroDoc(atual.numero)} · ${nome(atual.pessoa)}${m ? ` · ${m}` : ""}`, { de: atual.status, para: t.para });
+    let oportunidadeGanha = false;
+    if (acao === "aprovar" && atual.oportunidadeId) {
+      oportunidadeGanha = await ganharPelaProposta(atual.oportunidadeId, escopo.ativa.id, fmtNumeroDoc(atual.numero), num(atual.total));
+      revalidatePath("/crm/funil");
+      revalidatePath(`/crm/oportunidades/${atual.oportunidadeId}`);
+    }
     revalidarVendas();
     revalidatePath(`/vendas/propostas/${id}`);
-    return undefined;
+    return { oportunidadeGanha };
   }, t?.msg ?? "Situação atualizada.");
+  if (r.ok && r.data?.oportunidadeGanha) r.mensagem = "Proposta aprovada e oportunidade marcada como ganha.";
+  return r;
 }
 
 /** Gera o pedido de venda a partir de uma proposta aprovada (copia itens, condição e observações). */

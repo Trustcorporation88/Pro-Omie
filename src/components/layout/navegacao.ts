@@ -27,6 +27,13 @@ export const NAVEGACAO: GrupoNav[] = [
     ],
   },
   {
+    titulo: "CRM",
+    itens: [
+      { titulo: "Funil de vendas", href: "/crm/funil", icone: "SquareKanban", permissao: "crm:ver" },
+      { titulo: "Atividades", href: "/crm/atividades", icone: "ListTodo", permissao: "crm:ver" },
+    ],
+  },
+  {
     titulo: "Vendas",
     itens: [
       { titulo: "Propostas", href: "/vendas/propostas", icone: "FileText", permissao: "vendas:ver" },
@@ -48,7 +55,6 @@ export const NAVEGACAO: GrupoNav[] = [
   {
     titulo: "Próximas fases",
     itens: [
-      { titulo: "CRM e funil", href: "#", icone: "Target", emBreve: "Fase 2" },
       { titulo: "Estoque e compras", href: "#", icone: "Boxes", emBreve: "Fase 3" },
       { titulo: "Notas fiscais e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
       { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },

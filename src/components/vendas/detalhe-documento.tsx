@@ -27,12 +27,14 @@ export function DetalheDocumento({
   podeEditar,
   podeFaturar,
   podeVerFinanceiro,
+  podeVerCrm = false,
 }: {
   doc: DocumentoVenda;
   opcoes: OpcoesVenda;
   podeEditar: boolean;
   podeFaturar: boolean;
   podeVerFinanceiro: boolean;
+  podeVerCrm?: boolean;
 }) {
   const proposta = doc.tipo === "proposta";
   const base = proposta ? "/vendas/propostas" : "/vendas/pedidos";
@@ -189,6 +191,17 @@ export function DetalheDocumento({
               <Dado rotulo="Condição de pagamento">{doc.condicaoNome ?? "A combinar"}</Dado>
               <Dado rotulo="Forma de pagamento">{doc.formaNome}</Dado>
               <Dado rotulo="Empresa emissora">{doc.empresaNome}</Dado>
+              {doc.oportunidade && (
+                <Dado rotulo="Oportunidade">
+                  {podeVerCrm ? (
+                    <Link href={`/crm/oportunidades/${doc.oportunidade.id}`} className="text-primary hover:underline">
+                      {doc.oportunidade.titulo}
+                    </Link>
+                  ) : (
+                    doc.oportunidade.titulo
+                  )}
+                </Dado>
+              )}
               {doc.vinculo && (
                 <Dado rotulo={proposta ? "Pedido gerado" : "Proposta de origem"}>
                   <Link href={`${proposta ? "/vendas/pedidos" : "/vendas/propostas"}/${doc.vinculo.id}`} className="text-primary hover:underline">

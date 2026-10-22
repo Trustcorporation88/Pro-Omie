@@ -2,7 +2,7 @@
 
 ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vendas, estoque, fiscal, contratos e contabilidade, sem digitar nada duas vezes.
 
-## O que já funciona (Fases 0 e 1, Fase 2 em andamento)
+## O que já funciona (Fases 0, 1 e 2)
 
 **Fundação**
 - Login próprio com perfis (Administrador, Financeiro, Vendas, Estoque, Contador somente leitura), bloqueio após 5 tentativas, troca obrigatória da senha provisória e sessões revogáveis.
@@ -20,7 +20,14 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 - DRE gerencial por competência ou caixa, mês a mês, com margens.
 - Painel com saldos, vencimentos, atrasados e gráficos.
 
-**Vendas (Fase 2, em andamento)**
+**CRM (Fase 2)**
+- Funil de vendas em colunas (Descoberta, Proposta, Negociação): arraste o cartão para mudar de etapa ou solte em Ganhou / Perdeu; no celular, menu Mover para. Chance por etapa (20%, 50%, 80%) e previsão ponderada.
+- Oportunidade com cliente (cadastro rápido na hora, com busca do CNPJ na Receita), contato, valor estimado, previsão de fechamento, responsável e origem do contato. Perda exige motivo; reabrir volta à etapa em que estava. Histórico de cada mudança.
+- Atividades (ligação, WhatsApp, e-mail, reunião, visita, tarefa) com data e hora, ligadas à oportunidade ou ao cliente. Agenda com atrasadas, hoje e próximos 7 dias, selo no menu com as pendências do dia e "agendar próxima" ao concluir. Cartão sem próxima atividade fica sinalizado.
+- Indicadores: em aberto, previsão ponderada, ganho e conversão em 90 dias, ticket médio e motivos de perda.
+- Proposta criada a partir da oportunidade já vem com cliente e responsável, avança a etapa para Proposta e, ao ser aprovada, marca a oportunidade como ganha com o valor da proposta.
+
+**Vendas (Fase 2)**
 - Propostas comerciais: itens de produto ou serviço (do cadastro ou avulsos), quantidade com até 3 casas (venda por kg), preço com até 4, desconto por item, validade, condição e forma de pagamento, observações para o cliente e internas. Situações: rascunho, enviada, aprovada, recusada (com motivo) e cancelada, com reabertura.
 - Pedidos de venda gerados da proposta aprovada ou criados direto. Faturar o pedido gera as contas a receber pela condição de pagamento, com rateio entre as categorias de produtos e de serviços; desfazer o faturamento é possível enquanto não houver recebimento.
 - PDF da proposta e do pedido com os dados da empresa emissora. Numeração própria por empresa. Perfil Vendas cria propostas e pedidos; faturar exige também acesso ao financeiro.
@@ -37,7 +44,7 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 ```
 prisma/                 schema e migrations
 src/app/(auth)          login, configuração inicial, troca de senha
-src/app/(app)           telas do ERP (painel, financeiro, vendas, cadastros, configurações)
+src/app/(app)           telas do ERP (painel, financeiro, CRM, vendas, cadastros, configurações)
 src/modules/<domínio>   regras de negócio, server actions e consultas
 src/components          componentes de interface
 src/lib                 banco, sessão, permissões, auditoria, datas e formatação BR
@@ -83,7 +90,7 @@ Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 
 ## Roteiro
 
-- Fase 2: Vendas e CRM (propostas, pedidos e faturamento prontos; falta o funil do CRM)
+- Fase 2: Vendas e CRM ✔ (funil, atividades, propostas, pedidos e faturamento)
 - Fase 3: Estoque e compras (custo médio, curva ABC, entrada por XML)
 - Fase 4: Fiscal e cobrança (NF-e, NFS-e, boletos e PIX via provedores homologados)
 - Fase 5: Contratos recorrentes e ordens de serviço
