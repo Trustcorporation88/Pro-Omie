@@ -61,12 +61,20 @@ export const DESCRICAO_PAPEL: Record<PapelUsuario, string> = {
 };
 
 /** O que o cliente precisa saber de uma linha da tabela de usuários para montar as ações. */
+/** Empresa (matriz) liberável a um usuário. */
+export type EmpresaOpcao = { id: string; nome: string; cnpj: string };
+
+/** Acesso por empresa de um usuário (admin sempre vê todas). */
+export type AcessoEmpresas = { todasEmpresas: boolean; empresas: string[] };
+
 export type UsuarioAcao = {
   id: string;
   nome: string;
   email: string;
   papel: PapelUsuario;
   ativo: boolean;
+  todasEmpresas: boolean;
+  empresas: string[];
   bloqueado: boolean;
   tentativasFalhas: number;
   /** é o usuário logado */

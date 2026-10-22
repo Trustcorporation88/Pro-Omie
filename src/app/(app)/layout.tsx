@@ -4,14 +4,32 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { BuscaGlobal } from "@/components/layout/busca-global";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
 import { exigirUsuario } from "@/lib/auth/sessao";
-import { prisma } from "@/lib/db";
+import { escopoEmpresa } from "@/lib/auth/empresa";
+import { sair } from "@/modules/auth/acoes";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const u = await exigirUsuario();
-  const matriz = await prisma.empresa.findFirst({ where: { matrizId: null }, select: { nomeFantasia: true, razaoSocial: true } });
+  let escopo;
+  try {
+    escopo = await escopoEmpresa();
+  } catch {
+    return (
+      <main className="flex min-h-svh items-center justify-center p-6">
+        <div className="max-w-md space-y-3 text-center">
+          <h1 className="text-xl font-semibold">Nenhuma empresa liberada</h1>
+          <p className="text-sm text-muted-foreground">
+            Seu usuário ainda não tem acesso a nenhuma empresa. Peça a um administrador para liberar em Configurações › Usuários.
+          </p>
+          <form action={sair}>
+            <button className="text-sm font-medium text-primary underline">Sair</button>
+          </form>
+        </div>
+      </main>
+    );
+  }
   return (
     <SidebarProvider>
-      <AppSidebar papel={u.papel} empresa={matriz?.nomeFantasia || matriz?.razaoSocial || "Trustcorp"} />
+      <AppSidebar papel={u.papel} empresa={escopo.ativa} empresas={escopo.disponiveis} />
       <SidebarInset>
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />

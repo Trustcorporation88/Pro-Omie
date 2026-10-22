@@ -55,10 +55,17 @@ export const PAPEIS_VALIDOS = ["ADMIN", "FINANCEIRO", "VENDAS", "ESTOQUE", "CONT
 const nomeUsuario = z.string("Informe o nome.").trim().min(2, "Informe o nome completo.").max(120, "Nome muito longo.");
 const papelUsuario = z.enum(PAPEIS_VALIDOS, "Selecione o papel.");
 
+/** Acesso por empresa: todas (padrão) ou a lista de matrizes liberadas. Admin sempre vê todas. */
+const acessoEmpresas = {
+  todasEmpresas: z.boolean().optional().default(true),
+  empresas: z.array(z.string().min(1).max(40)).max(100).optional().default([]),
+};
+
 export const esquemaNovoUsuario = z.object({
   nome: nomeUsuario,
   email: z.string("Informe o e-mail.").trim().toLowerCase().max(254, "E-mail muito longo.").pipe(z.email("E-mail inválido.")),
   papel: papelUsuario,
+  ...acessoEmpresas,
 });
 
-export const esquemaEdicaoUsuario = z.object({ nome: nomeUsuario, papel: papelUsuario });
+export const esquemaEdicaoUsuario = z.object({ nome: nomeUsuario, papel: papelUsuario, ...acessoEmpresas });

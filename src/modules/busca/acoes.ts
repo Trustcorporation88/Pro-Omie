@@ -1,5 +1,6 @@
 "use server";
 
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { usuarioAtual } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
@@ -50,8 +51,10 @@ export async function buscaGlobal(termo: string): Promise<ResultadoBusca[]> {
 
   if (pode(u.papel, "financeiro:ver")) {
     const numero = /^\d+$/.test(q) ? Number(q) : null;
+    const escopo = await escopoEmpresa();
     const titulos = await prisma.titulo.findMany({
       where: {
+        empresaId: { in: escopo.ids },
         OR: [
           { descricao: { contains: q, mode: "insensitive" } },
           { documento: { contains: q, mode: "insensitive" } },

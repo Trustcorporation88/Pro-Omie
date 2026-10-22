@@ -1,4 +1,4 @@
-// Pro Omie - schema do banco (Fases 0 e 1: fundação e financeiro)
+// Pro Omie - schema do banco (Fases 0 e 1: fundação e financeiro; multiempresa)
 // Todas as tabelas ficam no schema "erp" do Postgres (fora da Data API do Supabase).
 
 generator client {
@@ -170,6 +170,10 @@ model Usuario {
   ultimoAcesso     DateTime?
   tentativasFalhas Int       @default(0)
   bloqueadoAte     DateTime?
+  /// Enxerga todas as empresas do grupo (admins sempre). Se falso, só as listadas em `empresas`.
+  todasEmpresas    Boolean   @default(true)
+  /// Ids das empresas (matrizes) liberadas quando `todasEmpresas` é falso.
+  empresas         String[]  @default([])
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 

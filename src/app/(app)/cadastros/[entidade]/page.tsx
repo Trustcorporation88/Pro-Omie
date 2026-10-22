@@ -9,7 +9,7 @@ import { ENTIDADES, META, type EntidadeCadastro } from "@/modules/cadastros/camp
 import { listarCadastro, opcoesCadastro } from "@/modules/cadastros/registro";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
-import { prisma } from "@/lib/db";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { hojeISO } from "@/lib/datas";
 
 type Props = { params: Promise<{ entidade: string }>; searchParams: Promise<Record<string, string | undefined>> };
@@ -38,8 +38,8 @@ export default async function CadastroPage({ params, searchParams }: Props) {
 
   let iniciais: Record<string, string> | undefined;
   if (entidade === "contas-bancarias") {
-    const matriz = await prisma.empresa.findFirst({ where: { matrizId: null }, select: { id: true } });
-    iniciais = { empresaId: matriz?.id ?? "", dataSaldoInicial: hojeISO() };
+    const escopo = await escopoEmpresa();
+    iniciais = { empresaId: escopo.ativa.id, dataSaldoInicial: hojeISO() };
   }
 
   return (

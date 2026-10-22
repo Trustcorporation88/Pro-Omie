@@ -9,14 +9,14 @@ import { FormularioEmpresa } from "./empresa-form";
 import { definirAtivoFilial } from "@/modules/configuracoes/acoes";
 import { VALORES_EMPRESA_VAZIOS, type TipoEmpresa, type ValoresEmpresa } from "@/modules/configuracoes/tipos";
 
-/** Botão "Editar matriz" (abre o formulário em Sheet). */
+/** Botão "Editar" de uma empresa do grupo (abre o formulário em Sheet). */
 export function BotaoEditarMatriz({ id, valores }: { id: string; valores: ValoresEmpresa }) {
   const [aberto, setAberto] = useState(false);
   const botao = useRef<HTMLButtonElement>(null);
   return (
     <>
       <Button ref={botao} variant="outline" onClick={() => setAberto(true)}>
-        <Pencil /> Editar matriz
+        <Pencil /> Editar
       </Button>
       {aberto && (
         <FormularioEmpresa
@@ -32,16 +32,21 @@ export function BotaoEditarMatriz({ id, valores }: { id: string; valores: Valore
   );
 }
 
-/** "Nova filial" (ou "Cadastrar matriz", quando ainda não existe nenhuma empresa). */
+/** "Nova empresa" (outra empresa do grupo) ou "Nova filial" (vinculada à matriz informada). */
 export function BotaoNovaEmpresa({
   tipo,
+  matrizId = null,
   regimeInicial,
   variante = "default",
+  rotulo,
 }: {
   tipo: TipoEmpresa;
+  /** matriz da nova filial */
+  matrizId?: string | null;
   /** regime sugerido para a nova filial (o da matriz) */
   regimeInicial?: string;
   variante?: "default" | "outline";
+  rotulo?: string;
 }) {
   const [aberto, setAberto] = useState(false);
   const [chave, setChave] = useState(0);
@@ -56,13 +61,14 @@ export function BotaoNovaEmpresa({
           setAberto(true);
         }}
       >
-        {tipo === "filial" ? <Plus /> : <Building />} {tipo === "filial" ? "Nova filial" : "Cadastrar matriz"}
+        {tipo === "filial" ? <Plus /> : <Building />} {rotulo ?? (tipo === "filial" ? "Nova filial" : "Nova empresa")}
       </Button>
       {aberto && (
         <FormularioEmpresa
           key={chave}
           tipo={tipo}
           id={null}
+          matrizId={tipo === "filial" ? matrizId : null}
           iniciais={{ ...VALORES_EMPRESA_VAZIOS, regimeTributario: regimeInicial ?? VALORES_EMPRESA_VAZIOS.regimeTributario }}
           aberto={aberto}
           onAbertoChange={setAberto}
@@ -73,16 +79,29 @@ export function BotaoNovaEmpresa({
   );
 }
 
-/** Menu de ações de uma filial: editar e ativar/inativar. */
-export function AcoesFilial({ id, nome, ativo, valores }: { id: string; nome: string; ativo: boolean; valores: ValoresEmpresa }) {
+/** Menu de ações de uma empresa ou filial: editar e ativar/inativar. */
+export function AcoesFilial({
+  id,
+  nome,
+  ativo,
+  valores,
+  tipo = "filial",
+}: {
+  id: string;
+  nome: string;
+  ativo: boolean;
+  valores: ValoresEmpresa;
+  tipo?: TipoEmpresa;
+}) {
   const [editar, setEditar] = useState(false);
   const [alternar, setAlternar] = useState(false);
   const gatilho = useRef<HTMLButtonElement>(null);
+  const coisa = tipo === "filial" ? "filial" : "empresa";
   return (
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button ref={gatilho} variant="ghost" size="icon" className="size-8" aria-label={`Ações da filial ${nome}`}>
+          <Button ref={gatilho} variant="ghost" size="icon" className="size-8" aria-label={`Ações da ${coisa} ${nome}`}>
             <Ellipsis />
           </Button>
         </DropdownMenuTrigger>
@@ -97,7 +116,7 @@ export function AcoesFilial({ id, nome, ativo, valores }: { id: string; nome: st
       </DropdownMenu>
       {editar && (
         <FormularioEmpresa
-          tipo="filial"
+          tipo={tipo}
           id={id}
           iniciais={valores}
           aberto={editar}
@@ -108,11 +127,15 @@ export function AcoesFilial({ id, nome, ativo, valores }: { id: string; nome: st
       <ConfirmarAcao
         aberto={alternar}
         onAbertoChange={setAlternar}
-        titulo={ativo ? `Inativar a filial "${nome}"?` : `Reativar a filial "${nome}"?`}
+        titulo={ativo ? `Inativar a ${coisa} "${nome}"?` : `Reativar a ${coisa} "${nome}"?`}
         descricao={
           ativo
-            ? "A filial deixa de aparecer nas seleções, mas o histórico (contas, títulos e movimentações) é mantido."
-            : "A filial volta a aparecer nas seleções."
+            ? tipo === "filial"
+              ? "A filial deixa de aparecer nas seleções, mas o histórico (contas, títulos e movimentações) é mantido."
+              : "A empresa some do seletor do menu e das seleções, mas o histórico (contas, títulos e movimentações) é mantido."
+            : tipo === "filial"
+              ? "A filial volta a aparecer nas seleções."
+              : "A empresa volta ao seletor do menu."
         }
         rotuloConfirmar={ativo ? "Inativar" : "Reativar"}
         acao={() => definirAtivoFilial(id, !ativo)}

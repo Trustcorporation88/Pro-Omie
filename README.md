@@ -8,7 +8,8 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 - Login próprio com perfis (Administrador, Financeiro, Vendas, Estoque, Contador somente leitura), bloqueio após 5 tentativas, troca obrigatória da senha provisória e sessões revogáveis.
 - Configuração inicial protegida por token (`/setup?token=...`): cria a empresa matriz (dados puxados da Receita pelo CNPJ), o administrador e os cadastros padrão (plano de categorias com grupos da DRE, formas e condições de pagamento, centros de custo, conta Caixa).
 - Cadastros: clientes e fornecedores (consulta de CNPJ na Receita e CEP no ViaCEP), produtos e serviços com dados fiscais (NCM, CEST, origem, item da LC 116), categorias financeiras, centros de custo, contas bancárias com saldo, formas e condições de pagamento.
-- Administração: empresa e filiais, usuários (senha provisória exibida uma única vez) e trilha de auditoria com diferenças antes/depois.
+- Multiempresa: várias empresas do grupo (cada uma com CNPJ, filiais, contas bancárias, lançamentos e relatórios próprios), seletor de empresa no menu e acesso por empresa para cada usuário. Clientes, fornecedores, produtos, categorias e centros de custo são compartilhados pelo grupo.
+- Administração: empresas e filiais, usuários (senha provisória exibida uma única vez, acesso a todas as empresas ou só às liberadas) e trilha de auditoria com diferenças antes/depois.
 - Busca global (Ctrl+K), tema claro e escuro.
 
 **Financeiro**

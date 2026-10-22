@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { executar, type Resultado } from "@/lib/acoes";
 import { ErroAcao, exigirPermissao } from "@/lib/auth/sessao";
+import { escopoEmpresa, exigirContaNoEscopo, exigirEmpresaNoEscopo } from "@/lib/auth/empresa";
 import { auditar } from "@/lib/auditoria";
 import { ENTIDADES, type EntidadeCadastro } from "./campos";
 import * as E from "./esquemas";
@@ -52,6 +53,12 @@ export async function salvarCadastro(
     const ent = validarEntidade(entidade);
     const { delegado, esquema, nome, rotulo } = configuracao(ent);
     const dados = esquema.parse(valores);
+    // Conta bancária pertence a uma empresa: só da empresa ativa (matriz ou filiais).
+    if (ent === "contas-bancarias") {
+      const escopo = await escopoEmpresa();
+      exigirEmpresaNoEscopo(escopo, (dados as { empresaId?: string }).empresaId, "Empresa fora do escopo atual. Troque de empresa no menu.");
+      if (id) await exigirContaNoEscopo(escopo, id, "id");
+    }
     if (id) {
       const antes = await delegado.findUnique({ where: { id } });
       if (!antes) throw new ErroAcao("Registro não encontrado.");
@@ -69,6 +76,7 @@ export async function salvarCadastro(
 
 export async function alternarAtivoCadastro(entidade: string, id: string): Promise<Resultado> {
   return executar(async () => {
+    if (validarEntidade(entidade) === "contas-bancarias") await exigirContaNoEscopo(await escopoEmpresa(), id, "id");
     await exigirPermissao("cadastros:editar");
     const ent = validarEntidade(entidade);
     const { delegado, nome, rotulo } = configuracao(ent);

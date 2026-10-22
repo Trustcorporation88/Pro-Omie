@@ -343,13 +343,17 @@ export async function excluirAjuste(tx: Tx, movimentoId: string) {
 
 export type SaldoConta = { id: string; nome: string; tipo: string; saldo: number; empresaId: string };
 
-/** Saldo de cada conta ativa até a data (inclusive). Sem data = saldo atual (todos os movimentos). */
-export async function saldosContas(db: DB = prisma, ate?: string, incluirInativas = false): Promise<SaldoConta[]> {
+/**
+ * Saldo de cada conta ativa até a data (inclusive). Sem data = saldo atual (todos os movimentos).
+ * `empresaIds` restringe às contas da empresa ativa (matriz e filiais); sem ele, todas as empresas.
+ */
+export async function saldosContas(db: DB = prisma, ate?: string, incluirInativas = false, empresaIds?: string[]): Promise<SaldoConta[]> {
+  const porEmpresa = empresaIds ? { empresaId: { in: empresaIds } } : {};
   const [contas, somas] = await Promise.all([
-    db.contaBancaria.findMany({ where: incluirInativas ? {} : { ativo: true }, orderBy: { nome: "asc" } }),
+    db.contaBancaria.findMany({ where: { ...porEmpresa, ...(incluirInativas ? {} : { ativo: true }) }, orderBy: { nome: "asc" } }),
     db.movimento.groupBy({
       by: ["contaBancariaId", "tipo"],
-      where: ate ? { data: { lte: isoParaDate(ate) } } : undefined,
+      where: { ...(ate ? { data: { lte: isoParaDate(ate) } } : {}), ...(empresaIds ? { contaBancaria: { empresaId: { in: empresaIds } } } : {}) },
       _sum: { valor: true },
     }),
   ]);

@@ -14,6 +14,7 @@ import { listarCondicoesPagamento, obterTitulo } from "@/modules/financeiro/cons
 import { carregarOpcoesFinanceiras } from "@/modules/financeiro/opcoes";
 import { exigirUsuario, usuarioAtual } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { diffDias, hojeISO } from "@/lib/datas";
 import { arred2, fmtData, fmtDataHora, fmtDocumento, fmtMoeda, fmtNumero } from "@/lib/format";
@@ -26,7 +27,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const u = await usuarioAtual();
   if (!u || !pode(u.papel, "financeiro:ver")) return { title: "Título" };
-  const t = await prisma.titulo.findUnique({ where: { id }, select: { numero: true, tipo: true } });
+  const escopo = await escopoEmpresa().catch(() => null);
+  const t = escopo ? await prisma.titulo.findFirst({ where: { id, empresaId: { in: escopo.ids } }, select: { numero: true, tipo: true } }) : null;
   return { title: t ? `${t.tipo === "RECEBER" ? "A receber" : "A pagar"} #${t.numero}` : "Título não encontrado" };
 }
 

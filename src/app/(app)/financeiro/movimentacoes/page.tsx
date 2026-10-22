@@ -13,6 +13,8 @@ import type { ExtratoLinha } from "@/components/financeiro/tipos";
 import { extratoConta } from "@/modules/financeiro/consultas";
 import { saldosContas } from "@/modules/financeiro/servicos";
 import { exigirUsuario } from "@/lib/auth/sessao";
+import { escopoEmpresa } from "@/lib/auth/empresa";
+import { prisma } from "@/lib/db";
 import { pode } from "@/lib/auth/permissoes";
 import { addDias, ehISOValido, fimMes, hojeISO, inicioMes } from "@/lib/datas";
 import { fmtData, fmtMoeda } from "@/lib/format";
@@ -78,7 +80,8 @@ export default async function MovimentacoesPage({ searchParams }: Props) {
   let ate = ateUrl ?? fimMes(hoje);
   if (de > ate) [de, ate] = [ate, de];
 
-  const saldos = await saldosContas();
+  const escopo = await escopoEmpresa();
+  const saldos = await saldosContas(prisma, undefined, false, escopo.ids);
   const pedida = ler("conta");
   let extrato = pedida ? await extratoConta(pedida, de, ate) : null;
   if (!extrato && saldos[0]) extrato = await extratoConta(saldos[0].id, de, ate);

@@ -71,15 +71,17 @@ async function garantirCnpjDisponivel(cnpj: string, ignorarId?: string) {
 }
 
 /**
- * Salva a matriz ou uma filial.
+ * Salva uma empresa do grupo (matriz) ou uma filial.
  * - `id` informado: edita (matriz ou filial, conforme o registro).
- * - sem `id` e tipo "filial": cria uma filial vinculada à matriz (o vínculo é decidido aqui, nunca pelo cliente).
- * - sem `id` e tipo "matriz": cadastra a matriz, apenas se ela ainda não existir.
+ * - sem `id` e tipo "filial": cria uma filial vinculada à matriz `matrizId` (conferida aqui).
+ * - sem `id` e tipo "matriz": cadastra uma nova empresa do grupo (First, MEiSHOP…), cada uma com seu CNPJ,
+ *   suas contas e seus lançamentos; a troca entre elas é feita no menu.
  */
 export async function salvarEmpresa(
   id: string | null,
   tipo: TipoEmpresa,
   valores: Record<string, unknown>,
+  matrizId?: string | null,
 ): Promise<Resultado<{ id: string }>> {
   const mensagem =
     tipo === "filial"
@@ -87,8 +89,8 @@ export async function salvarEmpresa(
         ? "Filial atualizada."
         : "Filial criada."
       : id
-        ? "Dados da matriz atualizados."
-        : "Matriz cadastrada.";
+        ? "Dados da empresa atualizados."
+        : "Empresa cadastrada. Ela já aparece no seletor do menu.";
 
   return executar(async () => {
     await exigirPermissao("config:admin");
@@ -102,45 +104,74 @@ export async function salvarEmpresa(
       await garantirCnpjDisponivel(dados.cnpj, id);
       const salva = await gravar(() => prisma.empresa.update({ where: { id }, data: dados }), ERRO_CNPJ_DUPLICADO());
       const antes = Object.fromEntries(Object.keys(dados).map((k) => [k, atual[k as keyof typeof atual]]));
-      await auditar("atualizar", "empresa", id, `${atual.matrizId ? "Filial" : "Matriz"} ${nome} (${fmtDocumento(dados.cnpj)})`, {
+      await auditar("atualizar", "empresa", id, `${atual.matrizId ? "Filial" : "Empresa"} ${nome} (${fmtDocumento(dados.cnpj)})`, {
         antes,
         depois: dados,
       });
-      revalidar("/configuracoes/empresa");
+      revalidar("/configuracoes/empresa", "/");
       return { id: salva.id };
     }
 
-    const matriz = await prisma.empresa.findFirst({ where: { matrizId: null }, orderBy: { createdAt: "asc" }, select: { id: true } });
-    if (tipo === "filial" && !matriz) throw new ErroAcao("Cadastre a matriz antes de criar filiais.");
-    if (tipo === "matriz" && matriz) throw new ErroAcao("A matriz já está cadastrada. Edite os dados dela.");
+    let vinculo: string | null = null;
+    if (tipo === "filial") {
+      const matriz = matrizId
+        ? await prisma.empresa.findFirst({ where: { id: matrizId, matrizId: null }, select: { id: true } })
+        : null;
+      if (!matriz) throw new ErroAcao("Escolha a empresa (matriz) à qual a filial pertence.");
+      vinculo = matriz.id;
+    }
     await garantirCnpjDisponivel(dados.cnpj);
-    const matrizId = tipo === "filial" ? (matriz?.id ?? null) : null;
-    const criada = await gravar(() => prisma.empresa.create({ data: { ...dados, matrizId } }), ERRO_CNPJ_DUPLICADO());
-    await auditar("criar", "empresa", criada.id, `${matrizId ? "Filial" : "Matriz"} ${nome} (${fmtDocumento(dados.cnpj)})`, { ...dados, matrizId });
-    revalidar("/configuracoes/empresa");
+    const criada = await gravar(() => prisma.empresa.create({ data: { ...dados, matrizId: vinculo } }), ERRO_CNPJ_DUPLICADO());
+    await auditar("criar", "empresa", criada.id, `${vinculo ? "Filial" : "Empresa"} ${nome} (${fmtDocumento(dados.cnpj)})`, { ...dados, matrizId: vinculo });
+    revalidar("/configuracoes/empresa", "/");
     return { id: criada.id };
   }, mensagem);
 }
 
-/** Ativa ou inativa uma filial (idempotente). A matriz não pode ser inativada. */
+/**
+ * Ativa ou inativa uma empresa ou filial (idempotente).
+ * Empresa inativa some do seletor do menu e das seleções, mas o histórico fica. A última empresa ativa não pode ser inativada.
+ */
 export async function definirAtivoFilial(id: string, ativo: boolean): Promise<Resultado> {
+  const atual = await prisma.empresa.findUnique({ where: { id }, select: { matrizId: true } });
+  const rotulo = atual?.matrizId ? "Filial" : "Empresa";
   return executar(async () => {
     await exigirPermissao("config:admin");
     const atual = await prisma.empresa.findUnique({ where: { id }, select: { id: true, matrizId: true, ativo: true, razaoSocial: true, nomeFantasia: true } });
-    if (!atual) throw new ErroAcao("Filial não encontrada.");
-    if (!atual.matrizId) throw new ErroAcao("A matriz não pode ser inativada.");
+    if (!atual) throw new ErroAcao("Empresa não encontrada.");
     if (atual.ativo === ativo) return undefined;
+    if (!ativo && !atual.matrizId) {
+      const ativas = await prisma.empresa.count({ where: { matrizId: null, ativo: true } });
+      if (ativas <= 1) throw new ErroAcao("Esta é a única empresa ativa. Cadastre ou reative outra antes de inativá-la.");
+    }
     await gravar(() => prisma.empresa.update({ where: { id }, data: { ativo } }));
-    await auditar(ativo ? "ativar" : "inativar", "empresa", id, `Filial ${atual.nomeFantasia || atual.razaoSocial}`, {
+    await auditar(ativo ? "ativar" : "inativar", "empresa", id, `${rotulo} ${atual.nomeFantasia || atual.razaoSocial}`, {
       antes: { ativo: atual.ativo },
       depois: { ativo },
     });
-    revalidar("/configuracoes/empresa");
+    revalidar("/configuracoes/empresa", "/");
     return undefined;
-  }, ativo ? "Filial reativada." : "Filial inativada.");
+  }, ativo ? `${rotulo} reativada.` : `${rotulo} inativada.`);
 }
 
 // ───────────── Usuários ─────────────
+
+/**
+ * Normaliza o acesso por empresa: admin sempre vê todas; a lista só aceita matrizes existentes;
+ * quem não vê todas precisa ter ao menos uma empresa liberada.
+ */
+async function acessoEmpresasValido(
+  tx: Prisma.TransactionClient | typeof prisma,
+  papel: string,
+  d: { todasEmpresas: boolean; empresas: string[] },
+): Promise<{ todasEmpresas: boolean; empresas: string[] }> {
+  if (papel === "ADMIN" || d.todasEmpresas) return { todasEmpresas: true, empresas: [] };
+  const ids = [...new Set(d.empresas)];
+  const existentes = await tx.empresa.findMany({ where: { id: { in: ids }, matrizId: null }, select: { id: true } });
+  if (existentes.length !== ids.length) throw new ErroAcao("Empresa não encontrada. Recarregue a página.", { empresas: "Empresa não encontrada." });
+  if (!ids.length) throw new ErroAcao("Libere ao menos uma empresa ou marque “todas as empresas”.", { empresas: "Libere ao menos uma empresa." });
+  return { todasEmpresas: false, empresas: ids };
+}
 
 /** Cria o usuário com senha provisória aleatória (hash no banco, trocarSenha = true). A senha só volta nesta resposta. */
 export async function criarUsuario(
@@ -152,13 +183,14 @@ export async function criarUsuario(
     const erroDuplicado = () => new ErroAcao("Já existe um usuário com este e-mail.", { email: "E-mail já cadastrado." });
     const existente = await prisma.usuario.findUnique({ where: { email: d.email }, select: { id: true } });
     if (existente) throw erroDuplicado();
+    const acesso = await acessoEmpresasValido(prisma, d.papel, d);
 
     const senha = gerarSenhaProvisoria();
     const senhaHash = await hashSenha(senha);
     const criado = await gravar(
       () =>
         prisma.usuario.create({
-          data: { nome: d.nome, email: d.email, papel: d.papel, senhaHash, trocarSenha: true },
+          data: { nome: d.nome, email: d.email, papel: d.papel, senhaHash, trocarSenha: true, ...acesso },
           select: { id: true },
         }),
       erroDuplicado(),
@@ -181,7 +213,10 @@ export async function editarUsuario(id: string, valores: Record<string, unknown>
     const d = esquemaEdicaoUsuario.parse(valores);
 
     const { alvo, alterou } = await emTransacao(async (tx) => {
-      const atual = await tx.usuario.findUnique({ where: { id }, select: { id: true, nome: true, email: true, papel: true, ativo: true } });
+      const atual = await tx.usuario.findUnique({
+        where: { id },
+        select: { id: true, nome: true, email: true, papel: true, ativo: true, todasEmpresas: true, empresas: true },
+      });
       if (!atual) throw new ErroAcao("Usuário não encontrado.");
       if (atual.id === eu.id && d.papel !== atual.papel) {
         throw new ErroAcao("Você não pode alterar o seu próprio papel. Peça a outro administrador.", {
@@ -189,15 +224,17 @@ export async function editarUsuario(id: string, valores: Record<string, unknown>
         });
       }
       if (atual.papel === "ADMIN" && atual.ativo && d.papel !== "ADMIN") await exigirOutroAdminAtivo(tx, atual.id);
-      if (atual.nome === d.nome && atual.papel === d.papel) return { alvo: atual, alterou: false };
-      await tx.usuario.update({ where: { id }, data: { nome: d.nome, papel: d.papel } });
-      return { alvo: atual, alterou: true };
+      const acesso = await acessoEmpresasValido(tx, d.papel, d);
+      const mesmoAcesso = atual.todasEmpresas === acesso.todasEmpresas && [...atual.empresas].sort().join() === [...acesso.empresas].sort().join();
+      if (atual.nome === d.nome && atual.papel === d.papel && mesmoAcesso) return { alvo: atual, alterou: false };
+      await tx.usuario.update({ where: { id }, data: { nome: d.nome, papel: d.papel, ...acesso } });
+      return { alvo: { ...atual, acessoNovo: acesso }, alterou: true };
     });
 
     if (alterou) {
       await auditar("atualizar", "usuario", id, `${d.nome} (${alvo.email})`, {
-        antes: { nome: alvo.nome, papel: alvo.papel },
-        depois: { nome: d.nome, papel: d.papel },
+        antes: { nome: alvo.nome, papel: alvo.papel, todasEmpresas: alvo.todasEmpresas, empresas: alvo.empresas },
+        depois: { nome: d.nome, papel: d.papel, ...("acessoNovo" in alvo ? alvo.acessoNovo : {}) },
       });
       revalidar("/configuracoes/usuarios");
     }

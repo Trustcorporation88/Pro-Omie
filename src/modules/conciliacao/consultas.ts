@@ -1,4 +1,5 @@
 // Leituras da tela de conciliação bancária (somente servidor).
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { isoParaDate } from "@/lib/datas";
 import { arred2 } from "@/lib/format";
@@ -21,8 +22,9 @@ function filtroData(p: Periodo) {
 
 /** Contas ativas disponíveis para conciliação. */
 export async function listarContasConciliacao(): Promise<ContaConciliacao[]> {
+  const escopo = await escopoEmpresa();
   const contas = await prisma.contaBancaria.findMany({
-    where: { ativo: true },
+    where: { ativo: true, empresaId: { in: escopo.ids } },
     orderBy: { nome: "asc" },
     select: { id: true, nome: true, tipo: true, bancoCodigo: true, bancoNome: true, agencia: true, numero: true },
   });

@@ -1,4 +1,5 @@
 // Consultas do financeiro (somente servidor). Tudo o que sai daqui é serializável (sem Decimal/Date).
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma, Prisma } from "@/lib/db";
 import { addDias, dateParaISO, ehISOValido, fimMes, hojeISO, inicioMes, isoParaDate } from "@/lib/datas";
 import { arred2 } from "@/lib/format";
@@ -149,7 +150,8 @@ function paraLinha(t: TituloComLinha): TituloLinha {
 /** Lista paginada de títulos de um tipo com os filtros da URL e os contadores das abas. */
 export async function listarTitulos(tipo: TipoTitulo, f: FiltrosTitulos): Promise<ListagemTitulos> {
   const hoje = hojeISO();
-  const base = whereFiltros(tipo, f);
+  const escopo = await escopoEmpresa();
+  const base: Prisma.TituloWhereInput = { AND: [whereFiltros(tipo, f), { empresaId: { in: escopo.ids } }] };
   const where: Prisma.TituloWhereInput = { AND: [base, whereStatus(f.status, hoje)] };
   const desc = f.status === "quitados" || f.status === "cancelados";
   const [rows, total, grupos, vencidos] = await Promise.all([
@@ -178,7 +180,8 @@ export async function listarTitulos(tipo: TipoTitulo, f: FiltrosTitulos): Promis
 /** Cartões de resumo do tipo (independentes de filtros e paginação). */
 export async function resumoTitulos(tipo: TipoTitulo): Promise<ResumoTitulos> {
   const hoje = hojeISO();
-  const abertos: Prisma.TituloWhereInput = { tipo, status: { in: ABERTOS } };
+  const escopo = await escopoEmpresa();
+  const abertos: Prisma.TituloWhereInput = { tipo, status: { in: ABERTOS }, empresaId: { in: escopo.ids } };
   const soma = (where: Prisma.TituloWhereInput) =>
     prisma.titulo
       .aggregate({ where, _sum: { valor: true, valorPago: true }, _count: { _all: true } })
@@ -193,7 +196,7 @@ export async function resumoTitulos(tipo: TipoTitulo): Promise<ResumoTitulos> {
         where: {
           estornada: false,
           data: { gte: isoParaDate(inicioMes(hoje)), lte: isoParaDate(fimMes(hoje)) },
-          titulo: { is: { tipo } },
+          titulo: { is: { tipo, empresaId: { in: escopo.ids } } },
         },
         _sum: { valorTotal: true },
         _count: { _all: true },
@@ -211,8 +214,9 @@ export async function listarCondicoesPagamento(): Promise<CondicaoOpcao[]> {
 
 /** Título completo para a página de detalhe (rateio, baixas, anexos, parcelas do grupo e histórico). */
 export async function obterTitulo(id: string): Promise<TituloDetalhe | null> {
-  const t = await prisma.titulo.findUnique({
-    where: { id },
+  const escopo = await escopoEmpresa();
+  const t = await prisma.titulo.findFirst({
+    where: { id, empresaId: { in: escopo.ids } },
     include: {
       ...incluirLinha,
       pessoa: { select: { nome: true, nomeFantasia: true, documento: true } },
@@ -350,11 +354,12 @@ export async function obterTitulo(id: string): Promise<TituloDetalhe | null> {
 
 /** Extrato de uma conta no período: saldo anterior, movimentos com saldo acumulado e totais. */
 export async function extratoConta(contaId: string, de: string, ate: string): Promise<Extrato | null> {
-  const conta = await prisma.contaBancaria.findUnique({ where: { id: contaId } });
+  const escopo = await escopoEmpresa();
+  const conta = await prisma.contaBancaria.findFirst({ where: { id: contaId, empresaId: { in: escopo.ids } } });
   if (!conta) return null;
   const periodo = { gte: isoParaDate(de), lte: isoParaDate(ate) };
   const [anteriores, movimentos, somas] = await Promise.all([
-    saldosContas(prisma, addDias(de, -1), true),
+    saldosContas(prisma, addDias(de, -1), true, escopo.ids),
     prisma.movimento.findMany({
       where: { contaBancariaId: contaId, data: periodo },
       orderBy: [{ data: "asc" }, { createdAt: "asc" }],
