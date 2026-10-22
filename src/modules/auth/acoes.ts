@@ -154,16 +154,18 @@ export async function configurarInicial(_prev: Resultado | null, formData: FormD
           telefone: vazio(soDigitos(d.telefone)),
         },
       });
+      // primeiro usuário: administrador do grupo (todas as empresas, inclusive as cadastradas depois)
       const usuario = await tx.usuario.create({
-        data: { nome: d.nome, email: d.email, senhaHash, papel: "ADMIN" },
+        data: { nome: d.nome, email: d.email, senhaHash, papel: "ADMIN", todasEmpresas: true },
       });
       await criarDadosPadrao(tx, empresa.id, hoje);
-      return usuario;
+      return { ...usuario, empresaCriadaId: empresa.id };
     });
     usuarioId = u.id;
     await criarSessao(u);
-    await auditar("configuracao_inicial", "empresa", null, "Empresa, administrador e cadastros padrão criados", undefined, {
+    await auditar("configuracao_inicial", "empresa", u.empresaCriadaId, "Empresa, administrador e cadastros padrão criados", undefined, {
       usuarioId: u.id,
+      empresaId: u.empresaCriadaId,
     });
   } catch (e) {
     return tratarErro(e);

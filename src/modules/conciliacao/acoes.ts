@@ -70,23 +70,25 @@ async function vincular(tx: Tx, itemId: string, movimentoId: string) {
   if (mv.count !== 1) throw new ErroAcao("Este movimento já está conciliado com outro lançamento.");
 }
 
+/** Categoria, centro de custo e cadastro precisam ser da empresa (matriz) ativa. */
 async function validarClassificacao(
   tx: Tx,
   d: { categoriaId: string; pessoaId: string | null; centroCustoId: string | null; tipo: TipoLancamento | null },
+  empresaId: string,
 ) {
-  const cat = await tx.categoria.findUnique({ where: { id: d.categoriaId }, select: { tipo: true, ativo: true } });
+  const cat = await tx.categoria.findFirst({ where: { id: d.categoriaId, empresaId }, select: { tipo: true, ativo: true } });
   if (!cat || !cat.ativo) throw new ErroAcao("Categoria inválida ou inativa.", { categoriaId: "Escolha uma categoria ativa." });
   if (d.tipo === "RECEBER" && cat.tipo !== "RECEITA")
     throw new ErroAcao("Para entradas, escolha uma categoria de receita.", { categoriaId: "Escolha uma categoria de receita." });
   if (d.tipo === "PAGAR" && cat.tipo !== "DESPESA")
     throw new ErroAcao("Para saídas, escolha uma categoria de despesa.", { categoriaId: "Escolha uma categoria de despesa." });
   if (d.centroCustoId) {
-    const c = await tx.centroCusto.findUnique({ where: { id: d.centroCustoId }, select: { ativo: true } });
+    const c = await tx.centroCusto.findFirst({ where: { id: d.centroCustoId, empresaId }, select: { ativo: true } });
     if (!c || !c.ativo) throw new ErroAcao("Centro de custo inválido ou inativo.", { centroCustoId: "Escolha um centro de custo ativo." });
   }
   if (d.pessoaId) {
-    const p = await tx.pessoa.findUnique({ where: { id: d.pessoaId }, select: { id: true } });
-    if (!p) throw new ErroAcao("Cliente/fornecedor não encontrado.", { pessoaId: "Cadastro não encontrado." });
+    const p = await tx.pessoa.findFirst({ where: { id: d.pessoaId, empresaId }, select: { id: true } });
+    if (!p) throw new ErroAcao("Cliente/fornecedor não encontrado nesta empresa.", { pessoaId: "Cadastro não encontrado." });
   }
 }
 
@@ -95,10 +97,11 @@ async function gravarRegra(
   tx: Tx,
   d: { termo: string; tipo: TipoLancamento | null; categoriaId: string; pessoaId: string | null; centroCustoId: string | null },
   atualizarExistente: boolean,
+  empresaId: string,
 ): Promise<{ id: string; termo: string; criada: boolean }> {
   const termo = d.termo.replace(/\s+/g, " ").trim();
   const alvo = normalizarTexto(termo);
-  const mesmas = await tx.regraConciliacao.findMany({ where: { tipo: d.tipo }, select: { id: true, termo: true } });
+  const mesmas = await tx.regraConciliacao.findMany({ where: { tipo: d.tipo, empresaId }, select: { id: true, termo: true } });
   const igual = mesmas.find((r) => normalizarTexto(r.termo) === alvo);
   const dados = { termo, categoriaId: d.categoriaId, pessoaId: d.pessoaId, centroCustoId: d.centroCustoId };
   if (igual) {
@@ -106,7 +109,7 @@ async function gravarRegra(
     await tx.regraConciliacao.update({ where: { id: igual.id }, data: { ...dados, ativo: true } });
     return { id: igual.id, termo, criada: false };
   }
-  const r = await tx.regraConciliacao.create({ data: { ...dados, tipo: d.tipo } });
+  const r = await tx.regraConciliacao.create({ data: { ...dados, tipo: d.tipo, empresaId } });
   return { id: r.id, termo, criada: true };
 }
 
@@ -365,7 +368,7 @@ export async function criarLancamentoConciliado(
       const tipo: TipoLancamento = valor > 0 ? "RECEBER" : "PAGAR";
       const conta = await tx.contaBancaria.findUnique({ where: { id: item.contaBancariaId }, select: { id: true, empresaId: true, ativo: true } });
       if (!conta || !conta.ativo) throw new ErroAcao("Conta bancária inválida ou inativa.");
-      await validarClassificacao(tx, { categoriaId: d.categoriaId, pessoaId: d.pessoaId, centroCustoId: d.centroCustoId, tipo });
+      await validarClassificacao(tx, { categoriaId: d.categoriaId, pessoaId: d.pessoaId, centroCustoId: d.centroCustoId, tipo }, escopo.ativa.id);
       const data = isoReq(item.data);
       const [tituloId] = await criarLancamento(
         tx,
@@ -394,7 +397,12 @@ export async function criarLancamentoConciliado(
       if (!baixa?.movimento) throw new ErroAcao("O lançamento não gerou movimento na conta.");
       await vincular(tx, item.id, baixa.movimento.id);
       const regra = d.regra
-        ? await gravarRegra(tx, { termo: d.regra.termo, tipo, categoriaId: d.categoriaId, pessoaId: d.pessoaId, centroCustoId: d.centroCustoId }, true)
+        ? await gravarRegra(
+            tx,
+            { termo: d.regra.termo, tipo, categoriaId: d.categoriaId, pessoaId: d.pessoaId, centroCustoId: d.centroCustoId },
+            true,
+            escopo.ativa.id,
+          )
         : null;
       return { item, tituloId, numero: baixa.titulo.numero, movimentoId: baixa.movimento.id, baixaId: baixa.id, regra, tipo };
     }, OPCOES_TX);
@@ -585,9 +593,10 @@ export async function salvarRegra(entrada: EntradaRegra): Promise<Resultado<{ id
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const d = esquemaRegra.parse(entrada);
+    const escopo = await escopoEmpresa();
     const regra = await prisma.$transaction(async (tx) => {
-      await validarClassificacao(tx, d);
-      return gravarRegra(tx, d, false);
+      await validarClassificacao(tx, d, escopo.ativa.id);
+      return gravarRegra(tx, d, false, escopo.ativa.id);
     }, OPCOES_TX);
     await auditar("criar", "regra_conciliacao", regra.id, regra.termo, d, { usuarioId: u.id });
     revalidatePath("/financeiro/conciliacao");
@@ -598,8 +607,9 @@ export async function salvarRegra(entrada: EntradaRegra): Promise<Resultado<{ id
 export async function alternarRegra(id: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
-    const atual = await prisma.regraConciliacao.findUnique({ where: { id }, select: { ativo: true, termo: true } });
-    if (!atual) throw new ErroAcao("Regra não encontrada.");
+    const escopo = await escopoEmpresa();
+    const atual = await prisma.regraConciliacao.findFirst({ where: { id, empresaId: escopo.ativa.id }, select: { ativo: true, termo: true } });
+    if (!atual) throw new ErroAcao("Regra não encontrada nesta empresa.");
     await prisma.regraConciliacao.update({ where: { id }, data: { ativo: !atual.ativo } });
     await auditar(atual.ativo ? "inativar" : "ativar", "regra_conciliacao", id, atual.termo, undefined, { usuarioId: u.id });
     revalidatePath("/financeiro/conciliacao");
@@ -610,6 +620,9 @@ export async function alternarRegra(id: string): Promise<Resultado> {
 export async function excluirRegra(id: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
+    const escopo = await escopoEmpresa();
+    const existe = await prisma.regraConciliacao.findFirst({ where: { id, empresaId: escopo.ativa.id }, select: { id: true } });
+    if (!existe) throw new ErroAcao("Regra não encontrada nesta empresa.");
     const r = await prisma.regraConciliacao.delete({ where: { id } });
     await auditar("excluir", "regra_conciliacao", id, r.termo, r, { usuarioId: u.id });
     revalidatePath("/financeiro/conciliacao");

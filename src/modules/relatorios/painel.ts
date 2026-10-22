@@ -41,11 +41,11 @@ export type DadosPainel = {
 const ABERTOS: ("ABERTO" | "PARCIAL")[] = ["ABERTO", "PARCIAL"];
 const TOP_CATEGORIAS = 6;
 
-async function primeirosPassos(empresaIds: string[]): Promise<PrimeirosPassos> {
+async function primeirosPassos(empresaIds: string[], matrizId: string): Promise<PrimeirosPassos> {
   const [contaBanco, pessoa, categorias, extrato] = await Promise.all([
     prisma.contaBancaria.findFirst({ where: { tipo: { not: "CAIXA" }, empresaId: { in: empresaIds } }, select: { id: true } }),
-    prisma.pessoa.findFirst({ select: { id: true } }),
-    prisma.categoria.aggregate({ _min: { createdAt: true }, _max: { updatedAt: true } }),
+    prisma.pessoa.findFirst({ where: { empresaId: matrizId }, select: { id: true } }),
+    prisma.categoria.aggregate({ where: { empresaId: matrizId }, _min: { createdAt: true }, _max: { updatedAt: true } }),
     prisma.extratoImportacao.findFirst({ where: { contaBancaria: { empresaId: { in: empresaIds } } }, select: { id: true } }),
   ]);
   const criadas = categorias._min.createdAt?.getTime();
@@ -115,7 +115,7 @@ export async function carregarPainel(hoje: string): Promise<DadosPainel> {
       },
       _sum: { valor: true },
     }),
-    prisma.categoria.findMany({ where: { tipo: "DESPESA" }, select: { id: true, nome: true } }),
+    prisma.categoria.findMany({ where: { tipo: "DESPESA", empresaId: escopo.ativa.id }, select: { id: true, nome: true } }),
     prisma.titulo.findFirst({ where: { empresaId: { in: ids } }, select: { id: true } }),
   ]);
 
@@ -179,6 +179,6 @@ export async function carregarPainel(hoje: string): Promise<DadosPainel> {
       parcial: t.status === "PARCIAL",
     })),
     despesas: { mes: mesIni, total: arred2(ordenadas.reduce((a, d) => a + d.valor, 0)), categorias: top },
-    primeirosPassos: algumTitulo ? null : await primeirosPassos(ids),
+    primeirosPassos: algumTitulo ? null : await primeirosPassos(ids, escopo.ativa.id),
   };
 }

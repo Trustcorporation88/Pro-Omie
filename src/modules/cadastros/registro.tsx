@@ -18,10 +18,14 @@ const pag = (f: FiltroCadastro) => ({ skip: (f.pagina - 1) * f.porPagina, take: 
 const sub = (texto?: string | null) => (texto ? <div className="text-xs text-muted-foreground">{texto}</div> : null);
 
 export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadastro): Promise<Listagem> {
+  // Cadastros pertencem à empresa (matriz) ativa; as filiais usam os da matriz.
+  const escopo = await escopoEmpresa();
+  const daEmpresa = { empresaId: escopo.ativa.id };
   switch (entidade) {
     case "pessoas": {
       const digitos = f.q.replace(/\D/g, "");
       const where: Prisma.PessoaWhereInput = {
+        ...daEmpresa,
         ...statusWhere(f.status),
         ...(f.extra.papel === "clientes" ? { cliente: true } : f.extra.papel === "fornecedores" ? { fornecedor: true } : {}),
         ...(f.q
@@ -82,6 +86,7 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
     }
     case "produtos": {
       const where: Prisma.ProdutoWhereInput = {
+        ...daEmpresa,
         ...statusWhere(f.status),
         ...(f.extra.tipo === "PRODUTO" || f.extra.tipo === "SERVICO" ? { tipo: f.extra.tipo } : {}),
         ...(f.q ? { OR: [{ descricao: ins(f.q) }, { codigo: ins(f.q) }, { ncm: { contains: f.q } }] } : {}),
@@ -128,6 +133,7 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
     }
     case "categorias": {
       const where: Prisma.CategoriaWhereInput = {
+        ...daEmpresa,
         ...statusWhere(f.status),
         ...(f.extra.tipo === "RECEITA" || f.extra.tipo === "DESPESA" ? { tipo: f.extra.tipo } : {}),
         ...(f.q ? { OR: [{ nome: ins(f.q) }, { codigo: { contains: f.q } }] } : {}),
@@ -155,7 +161,7 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
       };
     }
     case "centros-de-custo": {
-      const where: Prisma.CentroCustoWhereInput = { ...statusWhere(f.status), ...(f.q ? { OR: [{ nome: ins(f.q) }, { codigo: { contains: f.q } }] } : {}) };
+      const where: Prisma.CentroCustoWhereInput = { ...daEmpresa, ...statusWhere(f.status), ...(f.q ? { OR: [{ nome: ins(f.q) }, { codigo: { contains: f.q } }] } : {}) };
       const [rows, total] = await Promise.all([prisma.centroCusto.findMany({ where, orderBy: [{ codigo: "asc" }, { nome: "asc" }], ...pag(f) }), prisma.centroCusto.count({ where })]);
       return {
         total,
@@ -170,7 +176,6 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
       };
     }
     case "contas-bancarias": {
-      const escopo = await escopoEmpresa();
       const where: Prisma.ContaBancariaWhereInput = {
         empresaId: { in: escopo.ids },
         ...statusWhere(f.status),
@@ -221,7 +226,7 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
       };
     }
     case "formas-de-pagamento": {
-      const where: Prisma.FormaPagamentoWhereInput = { ...statusWhere(f.status), ...(f.q ? { nome: ins(f.q) } : {}) };
+      const where: Prisma.FormaPagamentoWhereInput = { ...daEmpresa, ...statusWhere(f.status), ...(f.q ? { nome: ins(f.q) } : {}) };
       const [rows, total] = await Promise.all([prisma.formaPagamento.findMany({ where, orderBy: { nome: "asc" }, ...pag(f) }), prisma.formaPagamento.count({ where })]);
       return {
         total,
@@ -236,7 +241,7 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
       };
     }
     case "condicoes-de-pagamento": {
-      const where: Prisma.CondicaoPagamentoWhereInput = { ...statusWhere(f.status), ...(f.q ? { nome: ins(f.q) } : {}) };
+      const where: Prisma.CondicaoPagamentoWhereInput = { ...daEmpresa, ...statusWhere(f.status), ...(f.q ? { nome: ins(f.q) } : {}) };
       const [rows, total] = await Promise.all([prisma.condicaoPagamento.findMany({ where, orderBy: { nome: "asc" }, ...pag(f) }), prisma.condicaoPagamento.count({ where })]);
       return {
         total,

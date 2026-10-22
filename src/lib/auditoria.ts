@@ -1,8 +1,13 @@
 import { headers } from "next/headers";
 import { prisma, Prisma, type DB } from "@/lib/db";
 import { usuarioAtual } from "@/lib/auth/sessao";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 
-type Opcoes = { db?: DB; usuarioId?: string | null };
+/**
+ * `empresaId`: empresa (matriz) do evento. Sem ela, vale a empresa ativa do pedido; `null` marca evento do grupo
+ * (visível só ao administrador do grupo). Nunca chamar dentro de transação sem informar `empresaId`.
+ */
+type Opcoes = { db?: DB; usuarioId?: string | null; empresaId?: string | null };
 
 const SENSIVEIS = /senha|password|token|secret|hash/i;
 
@@ -25,6 +30,8 @@ export async function auditar(
 ) {
   try {
     const usuarioId = opcoes.usuarioId !== undefined ? opcoes.usuarioId : (await usuarioAtual())?.id ?? null;
+    const empresaId =
+      opcoes.empresaId !== undefined ? opcoes.empresaId : await escopoEmpresa().then((e) => e.ativa.id).catch(() => null);
     let ip: string | null = null;
     try {
       const h = await headers();
@@ -38,6 +45,7 @@ export async function auditar(
         acao,
         entidade,
         entidadeId: entidadeId ?? null,
+        empresaId,
         resumo: resumo ?? null,
         dados: dados === undefined ? undefined : (ocultar(JSON.parse(JSON.stringify(dados))) as Prisma.InputJsonValue),
         ip,

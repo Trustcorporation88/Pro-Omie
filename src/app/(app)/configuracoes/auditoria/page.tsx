@@ -7,6 +7,7 @@ import { Selo } from "@/components/selos";
 import { FiltrosAuditoria } from "@/components/configuracoes/auditoria-filtros";
 import { BotaoDetalheAuditoria } from "@/components/configuracoes/auditoria-detalhe";
 import { exigirUsuario } from "@/lib/auth/sessao";
+import { contextoAdmin } from "@/lib/auth/empresa";
 import { POR_PAGINA_AUDITORIA, lerFiltrosAuditoria, listarAuditoria, opcoesFiltroAuditoria } from "@/modules/configuracoes/consultas";
 import { rotuloAcao, rotuloEntidade, tomAcao } from "@/modules/configuracoes/auditoria-util";
 
@@ -15,9 +16,10 @@ export const metadata: Metadata = { title: "Auditoria" };
 type Props = { searchParams: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function AuditoriaPage({ searchParams }: Props) {
-  await exigirUsuario("config:admin");
+  const u = await exigirUsuario("config:admin");
+  const ctx = await contextoAdmin(u.id);
   const filtros = lerFiltrosAuditoria(await searchParams);
-  const [{ registros, total, pagina }, opcoes] = await Promise.all([listarAuditoria(filtros), opcoesFiltroAuditoria()]);
+  const [{ registros, total, pagina }, opcoes] = await Promise.all([listarAuditoria(filtros, ctx), opcoesFiltroAuditoria(ctx)]);
   const filtrando = Boolean(filtros.q || filtros.entidade || filtros.usuario || filtros.de || filtros.ate);
 
   return (

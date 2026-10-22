@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EstadoVazio, PageHeader } from "@/components/page-header";
 import { Selo, SeloAtivo } from "@/components/selos";
-import { escopoEmpresa } from "@/lib/auth/empresa";
+import { contextoAdmin, escopoEmpresa } from "@/lib/auth/empresa";
 import { AcoesFilial, BotaoEditarMatriz, BotaoNovaEmpresa } from "@/components/configuracoes/empresa-controles";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { fmtCep, fmtDocumento, fmtTelefone } from "@/lib/format";
@@ -46,7 +46,7 @@ const plural = (n: number, singular: string, pluralTexto: string) => `${n} ${n =
 
 type EmpresaComFiliais = Empresa & { filiais: Empresa[] };
 
-function CartaoEmpresa({ empresa, ativa }: { empresa: EmpresaComFiliais; ativa: boolean }) {
+function CartaoEmpresa({ empresa, ativa, adminDoGrupo }: { empresa: EmpresaComFiliais; ativa: boolean; adminDoGrupo: boolean }) {
   const filiais = empresa.filiais;
   const ativas = filiais.filter((f) => f.ativo).length;
   const endereco = linhasEndereco(empresa);
@@ -75,7 +75,9 @@ function CartaoEmpresa({ empresa, ativa }: { empresa: EmpresaComFiliais; ativa: 
           </div>
           <div className="flex shrink-0 items-center gap-2 self-start">
             <BotaoEditarMatriz id={empresa.id} valores={empresaParaValores(empresa)} />
-            <AcoesFilial tipo="matriz" id={empresa.id} nome={empresa.nomeFantasia || empresa.razaoSocial} ativo={empresa.ativo} valores={empresaParaValores(empresa)} />
+            {adminDoGrupo && (
+              <AcoesFilial tipo="matriz" id={empresa.id} nome={empresa.nomeFantasia || empresa.razaoSocial} ativo={empresa.ativo} valores={empresaParaValores(empresa)} />
+            )}
           </div>
         </div>
         <CardContent>
@@ -163,15 +165,16 @@ function CartaoEmpresa({ empresa, ativa }: { empresa: EmpresaComFiliais; ativa: 
 }
 
 export default async function EmpresaPage() {
-  await exigirUsuario("config:admin");
-  const empresas = await listarEmpresasDoGrupo();
+  const u = await exigirUsuario("config:admin");
+  const ctx = await contextoAdmin(u.id);
+  const empresas = await listarEmpresasDoGrupo(ctx);
 
   if (empresas.length === 0) {
     return (
       <>
-        <PageHeader titulo="Empresas e filiais" descricao="Empresas do grupo, cada uma com CNPJ, contas e lançamentos próprios." />
-        <EstadoVazio titulo="Nenhuma empresa cadastrada" descricao="Cadastre a primeira empresa para começar.">
-          <BotaoNovaEmpresa tipo="matriz" rotulo="Cadastrar empresa" />
+        <PageHeader titulo="Empresas e filiais" descricao="Empresas do grupo, cada uma com CNPJ, contas, cadastros e lançamentos próprios." />
+        <EstadoVazio titulo="Nenhuma empresa cadastrada" descricao={ctx.adminDoGrupo ? "Cadastre a primeira empresa para começar." : "Nenhuma empresa liberada para você administrar."}>
+          {ctx.adminDoGrupo && <BotaoNovaEmpresa tipo="matriz" rotulo="Cadastrar empresa" />}
         </EstadoVazio>
       </>
     );
@@ -184,14 +187,18 @@ export default async function EmpresaPage() {
     <>
       <PageHeader
         titulo="Empresas e filiais"
-        descricao={`${plural(ativasNoGrupo, "empresa ativa", "empresas ativas")} no grupo. Cada empresa tem CNPJ, contas bancárias e lançamentos próprios; a troca entre elas é feita no seletor do menu. Clientes, fornecedores, produtos e categorias são compartilhados.`}
+        descricao={
+          ctx.adminDoGrupo
+            ? `${plural(ativasNoGrupo, "empresa ativa", "empresas ativas")} no grupo. Cada empresa tem CNPJ, contas bancárias, cadastros e lançamentos próprios; a troca entre elas é feita no seletor do menu.`
+            : "Empresas que você administra, com as filiais delas."
+        }
       >
-        <BotaoNovaEmpresa tipo="matriz" />
+        {ctx.adminDoGrupo && <BotaoNovaEmpresa tipo="matriz" />}
       </PageHeader>
 
       <div className="space-y-6">
         {empresas.map((e) => (
-          <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} />
+          <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} adminDoGrupo={ctx.adminDoGrupo} />
         ))}
       </div>
     </>

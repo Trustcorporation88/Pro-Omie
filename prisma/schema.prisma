@@ -1,4 +1,4 @@
-// Pro Omie - schema do banco (Fases 0 e 1: fundação e financeiro; multiempresa)
+// Pro Omie - schema do banco (Fases 0 e 1: fundação e financeiro; multiempresa com cadastros por empresa)
 // Todas as tabelas ficam no schema "erp" do Postgres (fora da Data API do Supabase).
 
 generator client {
@@ -154,6 +154,13 @@ model Empresa {
 
   contasBancarias ContaBancaria[]
   titulos         Titulo[]
+  pessoas         Pessoa[]
+  produtos        Produto[]
+  categorias      Categoria[]
+  centrosCusto    CentroCusto[]
+  formasPagamento FormaPagamento[]
+  condicoes       CondicaoPagamento[]
+  regras          RegraConciliacao[]
 
   @@map("empresas")
 }
@@ -194,7 +201,11 @@ model Auditoria {
   ip         String?
   createdAt  DateTime @default(now())
 
+  /// Empresa (matriz) do evento; nulo = evento do grupo (usuários com várias empresas, configuração geral).
+  empresaId String?
+
   @@index([entidade, entidadeId])
+  @@index([empresaId, createdAt])
   @@index([createdAt])
   @@map("auditoria")
 }
@@ -203,8 +214,11 @@ model Auditoria {
 
 model Pessoa {
   id                 String      @id @default(cuid())
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId          String
+  empresa            Empresa     @relation(fields: [empresaId], references: [id])
   tipoPessoa         TipoPessoa  @default(JURIDICA)
-  documento          String?     @unique
+  documento          String?
   nome               String
   nomeFantasia       String?
   cliente            Boolean     @default(true)
@@ -232,14 +246,18 @@ model Pessoa {
   titulos Titulo[]
   regras  RegraConciliacao[]
 
-  @@index([nome])
+  @@unique([empresaId, documento])
+  @@index([empresaId, nome])
   @@map("pessoas")
 }
 
 model Produto {
   id              String      @id @default(cuid())
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId       String
+  empresa         Empresa     @relation(fields: [empresaId], references: [id])
   tipo            TipoProduto @default(PRODUTO)
-  codigo          String      @unique
+  codigo          String
   descricao       String
   unidade         String      @default("UN")
   gtin            String?
@@ -257,12 +275,16 @@ model Produto {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  @@index([descricao])
+  @@unique([empresaId, codigo])
+  @@index([empresaId, descricao])
   @@map("produtos")
 }
 
 model Categoria {
   id        String        @id @default(cuid())
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId String
+  empresa   Empresa       @relation(fields: [empresaId], references: [id])
   codigo    String?
   nome      String
   tipo      TipoCategoria
@@ -275,14 +297,17 @@ model Categoria {
   rateios TituloRateio[]
   regras  RegraConciliacao[]
 
-  @@unique([tipo, nome])
+  @@unique([empresaId, tipo, nome])
   @@map("categorias")
 }
 
 model CentroCusto {
   id        String   @id @default(cuid())
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
   codigo    String?
-  nome      String   @unique
+  nome      String
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -291,6 +316,7 @@ model CentroCusto {
   rateios TituloRateio[]
   regras  RegraConciliacao[]
 
+  @@unique([empresaId, nome])
   @@map("centros_custo")
 }
 
@@ -323,7 +349,10 @@ model ContaBancaria {
 
 model FormaPagamento {
   id        String        @id @default(cuid())
-  nome      String        @unique
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId String
+  empresa   Empresa       @relation(fields: [empresaId], references: [id])
+  nome      String
   meio      MeioPagamento @default(OUTRO)
   ativo     Boolean       @default(true)
   createdAt DateTime      @default(now())
@@ -332,17 +361,22 @@ model FormaPagamento {
   titulos Titulo[]
   baixas  Baixa[]
 
+  @@unique([empresaId, nome])
   @@map("formas_pagamento")
 }
 
 model CondicaoPagamento {
   id        String   @id @default(cuid())
-  nome      String   @unique
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id])
+  nome      String
   dias      String
   ativo     Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([empresaId, nome])
   @@map("condicoes_pagamento")
 }
 
@@ -522,6 +556,9 @@ model ExtratoItem {
 
 model RegraConciliacao {
   id            String       @id @default(cuid())
+  /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
+  empresaId     String
+  empresa       Empresa      @relation(fields: [empresaId], references: [id])
   termo         String
   tipo          TipoTitulo?
   categoriaId   String
@@ -534,6 +571,7 @@ model RegraConciliacao {
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
 
+  @@index([empresaId])
   @@map("regras_conciliacao")
 }
 

@@ -15,9 +15,11 @@ export async function buscaGlobal(termo: string): Promise<ResultadoBusca[]> {
   const digitos = soDigitos(q);
   const out: ResultadoBusca[] = [];
 
+  const escopo = await escopoEmpresa();
   if (pode(u.papel, "cadastros:ver")) {
     const pessoas = await prisma.pessoa.findMany({
       where: {
+        empresaId: escopo.ativa.id,
         OR: [
           { nome: { contains: q, mode: "insensitive" } },
           { nomeFantasia: { contains: q, mode: "insensitive" } },
@@ -36,7 +38,10 @@ export async function buscaGlobal(termo: string): Promise<ResultadoBusca[]> {
       });
     }
     const produtos = await prisma.produto.findMany({
-      where: { OR: [{ descricao: { contains: q, mode: "insensitive" } }, { codigo: { contains: q, mode: "insensitive" } }] },
+      where: {
+        empresaId: escopo.ativa.id,
+        OR: [{ descricao: { contains: q, mode: "insensitive" } }, { codigo: { contains: q, mode: "insensitive" } }],
+      },
       take: 4,
     });
     for (const p of produtos) {
@@ -51,7 +56,6 @@ export async function buscaGlobal(termo: string): Promise<ResultadoBusca[]> {
 
   if (pode(u.papel, "financeiro:ver")) {
     const numero = /^\d+$/.test(q) ? Number(q) : null;
-    const escopo = await escopoEmpresa();
     const titulos = await prisma.titulo.findMany({
       where: {
         empresaId: { in: escopo.ids },
@@ -85,8 +89,10 @@ export async function buscarPessoas(termo: string, papel?: "cliente" | "forneced
   if (!u) return [];
   const q = termo.trim();
   const digitos = soDigitos(q);
+  const escopo = await escopoEmpresa();
   const pessoas = await prisma.pessoa.findMany({
     where: {
+      empresaId: escopo.ativa.id,
       ativo: true,
       ...(papel === "cliente" ? { cliente: true } : papel === "fornecedor" ? { fornecedor: true } : {}),
       ...(q

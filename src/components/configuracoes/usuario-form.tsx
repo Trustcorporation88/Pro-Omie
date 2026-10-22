@@ -20,6 +20,7 @@ export function FormularioUsuario({
   id,
   iniciais,
   empresasDisponiveis,
+  podeLiberarTodas,
   papelTravado,
   aberto,
   onAbertoChange,
@@ -29,8 +30,10 @@ export function FormularioUsuario({
   /** null = novo usuário */
   id: string | null;
   iniciais: { nome: string; email: string; papel: PapelUsuario; todasEmpresas: boolean; empresas: string[] };
-  /** empresas (matrizes) do grupo que podem ser liberadas */
+  /** empresas (matrizes) do grupo que podem ser liberadas (para administrador de empresa, só as dele) */
   empresasDisponiveis: EmpresaOpcao[];
+  /** só o administrador do grupo libera "todas as empresas" */
+  podeLiberarTodas: boolean;
   /** motivo pelo qual o papel não pode ser alterado (desabilita a escolha) */
   papelTravado?: string;
   aberto: boolean;
@@ -48,10 +51,14 @@ export function FormularioUsuario({
   const [todasEmpresas, setTodasEmpresas] = useState(iniciais.todasEmpresas);
   const [empresas, setEmpresas] = useState<string[]>(iniciais.empresas);
   const [erros, setErros] = useState<Record<string, string>>({});
-  // Admin sempre vê todas. Para os demais a escolha aparece mesmo com uma empresa só:
-  // "todas" inclui as que forem cadastradas depois, então precisa ser uma decisão consciente.
-  const escolheEmpresas = empresasDisponiveis.length > 0 && papel !== "ADMIN";
-  const acesso = { todasEmpresas: escolheEmpresas ? todasEmpresas : true, empresas: escolheEmpresas && !todasEmpresas ? empresas : [] };
+  // A escolha aparece sempre, para todo papel (inclusive administrador): "todas" inclui as empresas cadastradas
+  // depois e, para administrador, significa administrador do grupo. Só o administrador do grupo libera "todas".
+  const escolheEmpresas = empresasDisponiveis.length > 0;
+  const todasMarcada = podeLiberarTodas && todasEmpresas;
+  const acesso = {
+    todasEmpresas: escolheEmpresas ? todasMarcada : podeLiberarTodas,
+    empresas: escolheEmpresas && !todasMarcada ? empresas : [],
+  };
   const [falhas, setFalhas] = useState(0);
   const [salvando, iniciar] = useTransition();
   const edicao = id !== null;
@@ -225,35 +232,37 @@ export function FormularioUsuario({
             )}
           </div>
 
-          {papel === "ADMIN" && empresasDisponiveis.length > 0 && (
-            <div className="space-y-1">
-              <span className="text-sm leading-none font-medium">Empresas</span>
-              <p className="text-xs text-muted-foreground">Administradores veem todas as empresas do grupo, inclusive as cadastradas depois.</p>
-            </div>
-          )}
-
           {escolheEmpresas && (
             <fieldset className="space-y-2">
               <legend className="flex items-center gap-1 text-sm leading-none font-medium">Empresas</legend>
-              <Label
-                htmlFor={`${uid}-todas`}
-                className="cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal transition-colors hover:bg-accent/40 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
-              >
-                <Checkbox
-                  id={`${uid}-todas`}
-                  checked={todasEmpresas}
-                  onCheckedChange={(v) => {
-                    setTodasEmpresas(v === true);
-                    limparErro("empresas");
-                  }}
-                  className="mt-0.5"
-                />
-                <span className="space-y-1">
-                  <span className="block text-sm leading-none font-medium">Todas as empresas do grupo</span>
-                  <span className="block text-xs leading-snug text-muted-foreground">Inclui as que forem cadastradas depois.</span>
-                </span>
-              </Label>
-              {!todasEmpresas && (
+              {papel === "ADMIN" && (
+                <p className="text-xs text-muted-foreground">
+                  {todasMarcada
+                    ? "Administrador do grupo: administra todas as empresas, cadastra novas e libera qualquer acesso."
+                    : "Administrador da empresa: administra só as empresas marcadas (dados, filiais, usuários e auditoria delas)."}
+                </p>
+              )}
+              {podeLiberarTodas && (
+                <Label
+                  htmlFor={`${uid}-todas`}
+                  className="cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal transition-colors hover:bg-accent/40 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
+                >
+                  <Checkbox
+                    id={`${uid}-todas`}
+                    checked={todasEmpresas}
+                    onCheckedChange={(v) => {
+                      setTodasEmpresas(v === true);
+                      limparErro("empresas");
+                    }}
+                    className="mt-0.5"
+                  />
+                  <span className="space-y-1">
+                    <span className="block text-sm leading-none font-medium">Todas as empresas do grupo</span>
+                    <span className="block text-xs leading-snug text-muted-foreground">Inclui as que forem cadastradas depois.</span>
+                  </span>
+                </Label>
+              )}
+              {!todasMarcada && (
                 <div className="grid gap-2 pl-1" role="group" aria-label="Empresas liberadas" aria-describedby={erros.empresas ? `${uid}-empresas-erro` : undefined}>
                   {empresasDisponiveis.map((e) => {
                     const marcada = empresas.includes(e.id);

@@ -184,10 +184,10 @@ export async function sugerirTitulos(db: DB, contaBancariaId: string, itens: Ite
 
 export type RegraAtiva = SugestaoRegra & { tipo: "RECEBER" | "PAGAR" | null; tipoCategoria: "RECEITA" | "DESPESA"; termoNorm: string };
 
-/** Regras ativas, das mais específicas (termo mais longo, com tipo definido) para as mais genéricas. */
-export async function carregarRegrasAtivas(db: DB): Promise<RegraAtiva[]> {
+/** Regras ativas da empresa (matriz), das mais específicas (termo mais longo, com tipo definido) para as mais genéricas. */
+export async function carregarRegrasAtivas(db: DB, empresaId: string): Promise<RegraAtiva[]> {
   const regras = await db.regraConciliacao.findMany({
-    where: { ativo: true, categoria: { ativo: true } },
+    where: { ativo: true, empresaId, categoria: { ativo: true } },
     include: {
       categoria: { select: { nome: true, codigo: true, tipo: true } },
       pessoa: { select: { nome: true, nomeFantasia: true, ativo: true } },
@@ -246,7 +246,9 @@ export async function calcularSugestoes(db: DB, contaBancariaId: string, itens: 
     contaBancariaId,
     itens.filter((i) => !movimentos.has(i.id)),
   );
-  const regras = await carregarRegrasAtivas(db);
+  // regras da empresa dona da conta (a matriz; conta de filial usa as regras da matriz)
+  const conta = await db.contaBancaria.findUnique({ where: { id: contaBancariaId }, select: { empresa: { select: { id: true, matrizId: true } } } });
+  const regras = conta ? await carregarRegrasAtivas(db, conta.empresa.matrizId ?? conta.empresa.id) : [];
   for (const item of itens) {
     out.set(item.id, {
       movimento: movimentos.get(item.id) ?? null,

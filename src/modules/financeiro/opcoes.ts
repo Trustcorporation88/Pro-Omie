@@ -18,10 +18,10 @@ export type OpcoesFinanceiras = {
 export async function carregarOpcoesFinanceiras(): Promise<OpcoesFinanceiras> {
   const escopo = await escopoEmpresa();
   const [categorias, centros, contas, formas] = await Promise.all([
-    prisma.categoria.findMany({ where: { ativo: true }, orderBy: [{ codigo: "asc" }, { nome: "asc" }] }),
-    prisma.centroCusto.findMany({ where: { ativo: true }, orderBy: [{ codigo: "asc" }, { nome: "asc" }] }),
+    prisma.categoria.findMany({ where: { ativo: true, empresaId: escopo.ativa.id }, orderBy: [{ codigo: "asc" }, { nome: "asc" }] }),
+    prisma.centroCusto.findMany({ where: { ativo: true, empresaId: escopo.ativa.id }, orderBy: [{ codigo: "asc" }, { nome: "asc" }] }),
     prisma.contaBancaria.findMany({ where: { ativo: true, empresaId: { in: escopo.ids } }, orderBy: { nome: "asc" } }),
-    prisma.formaPagamento.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.formaPagamento.findMany({ where: { ativo: true, empresaId: escopo.ativa.id }, orderBy: { nome: "asc" } }),
   ]);
   // Empresa do lançamento: a matriz ativa e as filiais dela (outra empresa do grupo troca-se no menu).
   const empresas = [escopo.ativa, ...escopo.filiais];

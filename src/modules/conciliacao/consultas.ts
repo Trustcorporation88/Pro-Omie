@@ -223,7 +223,9 @@ export async function carregarIgnorados(
 }
 
 export async function carregarRegras(): Promise<RegraResumo[]> {
+  const escopo = await escopoEmpresa();
   const regras = await prisma.regraConciliacao.findMany({
+    where: { empresaId: escopo.ativa.id },
     include: {
       categoria: { select: { nome: true, codigo: true } },
       pessoa: { select: { nome: true, nomeFantasia: true } },

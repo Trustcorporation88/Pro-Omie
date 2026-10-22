@@ -1,5 +1,6 @@
 // Consultas das telas de Administração. Uso exclusivo de servidor (Prisma).
 import type { Empresa } from "@/generated/prisma/client";
+import type { ContextoAdmin } from "@/lib/auth/empresa";
 import { prisma, Prisma } from "@/lib/db";
 import { dateParaISO, ehISOValido, isoParaDate } from "@/lib/datas";
 import { fmtCep, fmtDataHora, fmtDocumento, fmtTelefone } from "@/lib/format";
@@ -10,10 +11,17 @@ import type { FiltrosAuditoria, RegistroAuditoria, ValoresEmpresa } from "./tipo
 
 // ───────────── Empresa e filiais ─────────────
 
-/** Empresas do grupo (matrizes) com suas filiais, ativas primeiro e da mais antiga para a mais nova. */
-export function listarEmpresasDoGrupo() {
+/** Usuários que o administrador gerencia: todos (grupo) ou só os restritos às empresas dele (administrador de empresa). */
+export async function filtroUsuariosAdministrados(ctx: ContextoAdmin): Promise<Prisma.UsuarioWhereInput> {
+  if (ctx.adminDoGrupo) return {};
+  const outras = (await prisma.empresa.findMany({ where: { matrizId: null, id: { notIn: ctx.matrizes } }, select: { id: true } })).map((e) => e.id);
+  return { todasEmpresas: false, empresas: { isEmpty: false }, ...(outras.length ? { NOT: { empresas: { hasSome: outras } } } : {}) };
+}
+
+/** Empresas do grupo (matrizes) com suas filiais, ativas primeiro e da mais antiga para a mais nova. Administrador de empresa vê só as dele. */
+export function listarEmpresasDoGrupo(ctx: ContextoAdmin) {
   return prisma.empresa.findMany({
-    where: { matrizId: null },
+    where: { matrizId: null, ...(ctx.adminDoGrupo ? {} : { id: { in: ctx.matrizes } }) },
     orderBy: [{ ativo: "desc" }, { createdAt: "asc" }],
     include: { filiais: { orderBy: [{ ativo: "desc" }, { razaoSocial: "asc" }] } },
   });
@@ -44,9 +52,11 @@ export function empresaParaValores(e: Empresa): ValoresEmpresa {
 
 // ───────────── Usuários ─────────────
 
-export async function listarUsuarios() {
+export async function listarUsuarios(ctx: ContextoAdmin) {
+  const filtro = await filtroUsuariosAdministrados(ctx);
   const [usuarios, adminsAtivos, matrizes] = await Promise.all([
     prisma.usuario.findMany({
+      where: filtro,
       // senhaHash nunca sai do servidor: nada de selecionar o registro inteiro.
       select: {
         id: true,
@@ -63,9 +73,10 @@ export async function listarUsuarios() {
       },
       orderBy: [{ ativo: "desc" }, { nome: "asc" }],
     }),
-    prisma.usuario.count({ where: { papel: "ADMIN", ativo: true } }),
+    // administradores do grupo ativos (o grupo nunca pode ficar sem nenhum)
+    prisma.usuario.count({ where: { papel: "ADMIN", todasEmpresas: true, ativo: true } }),
     prisma.empresa.findMany({
-      where: { matrizId: null, ativo: true },
+      where: { matrizId: null, ativo: true, ...(ctx.adminDoGrupo ? {} : { id: { in: ctx.matrizes } }) },
       orderBy: { createdAt: "asc" },
       select: { id: true, razaoSocial: true, nomeFantasia: true, cnpj: true },
     }),
@@ -103,10 +114,12 @@ export function lerFiltrosAuditoria(sp: ParametrosBusca): FiltrosAuditoria {
 
 const contem = (q: string) => ({ contains: q, mode: "insensitive" as const });
 
-export async function listarAuditoria(filtros: FiltrosAuditoria) {
+export async function listarAuditoria(filtros: FiltrosAuditoria, ctx: ContextoAdmin) {
   const { q, entidade, usuario, de, ate } = filtros;
   const criadoEm = limitesCriadoEm(de, ate);
   const where: Prisma.AuditoriaWhereInput = {
+    // administrador de empresa vê só os eventos das empresas dele; os do grupo (nulos) ficam com o administrador do grupo
+    ...(ctx.adminDoGrupo ? {} : { empresaId: { in: ctx.matrizes } }),
     ...(q ? { OR: [{ resumo: contem(q) }, { entidade: contem(q) }, { entidadeId: contem(q) }] } : {}),
     ...(entidade ? { entidade } : {}),
     ...(usuario === "sistema" ? { usuarioId: null } : usuario ? { usuarioId: usuario } : {}),
@@ -150,10 +163,18 @@ export async function listarAuditoria(filtros: FiltrosAuditoria) {
 }
 
 /** Opções dos selects de filtro: entidades distintas existentes e usuários. */
-export async function opcoesFiltroAuditoria() {
+export async function opcoesFiltroAuditoria(ctx: ContextoAdmin) {
   const [entidades, usuarios] = await Promise.all([
-    prisma.auditoria.groupBy({ by: ["entidade"], orderBy: { entidade: "asc" } }),
-    prisma.usuario.findMany({ select: { id: true, nome: true, email: true, ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.auditoria.groupBy({
+      by: ["entidade"],
+      where: ctx.adminDoGrupo ? {} : { empresaId: { in: ctx.matrizes } },
+      orderBy: { entidade: "asc" },
+    }),
+    prisma.usuario.findMany({
+      where: await filtroUsuariosAdministrados(ctx),
+      select: { id: true, nome: true, email: true, ativo: true },
+      orderBy: { nome: "asc" },
+    }),
   ]);
   return {
     entidades: entidades.map((e) => ({ valor: e.entidade, rotulo: rotuloEntidade(e.entidade) })),
