@@ -16,20 +16,26 @@ export function fmtNumero(v: number | null | undefined, casas = 2): string {
 }
 
 /** Converte "1.234,56", "1234,56", "1234.56" ou "R$ 1.234,56" em número. */
+/**
+ * Número digitado no padrão brasileiro → texto no padrão JS ("1.234,56" → "1234.56").
+ * Com vírgula e ponto, o último separador é o decimal. Só com ponto: grupos de 3 dígitos são milhar
+ * ("5.400" = 5400, "1.250.000" = 1250000); fora isso o ponto é decimal ("5.4", "6.80", "0.500").
+ */
+export function normalizarNumeroBR(entrada: string): string {
+  let s = entrada.replace(/[^\d,.-]/g, "").trim();
+  const temVirgula = s.includes(",");
+  const temPonto = s.includes(".");
+  if (temVirgula && temPonto) s = s.lastIndexOf(",") > s.lastIndexOf(".") ? s.replace(/\./g, "").replace(",", ".") : s.replace(/,/g, "");
+  else if (temVirgula) s = s.replace(/\./g, "").replace(",", ".");
+  else if (temPonto && /^-?[1-9]\d{0,2}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
+  return s;
+}
+
 export function parseMoeda(input: string | number | null | undefined): number {
   if (typeof input === "number") return input;
   if (!input) return 0;
-  let s = String(input).replace(/[^\d,.-]/g, "").trim();
+  const s = normalizarNumeroBR(String(input));
   if (!s) return 0;
-  const temVirgula = s.includes(",");
-  const temPonto = s.includes(".");
-  if (temVirgula && temPonto) {
-    // o último separador é o decimal
-    if (s.lastIndexOf(",") > s.lastIndexOf(".")) s = s.replace(/\./g, "").replace(",", ".");
-    else s = s.replace(/,/g, "");
-  } else if (temVirgula) {
-    s = s.replace(/\./g, "").replace(",", ".");
-  }
   const n = Number(s);
   return Number.isFinite(n) ? Math.round(n * 100) / 100 : 0;
 }

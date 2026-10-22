@@ -15,6 +15,9 @@ export type LinhaDocumentoForm = {
 };
 
 export type ValoresDocumento = {
+  /** proposta aberta a partir de uma oportunidade do CRM */
+  oportunidadeId: string | null;
+  oportunidadeTitulo: string | null;
   empresaId: string;
   pessoaId: string | null;
   pessoaNome: string | null;
@@ -42,6 +45,8 @@ export const linhaVazia = (): LinhaDocumentoForm => ({
 /** Valores de um documento novo: empresa ativa, hoje, validade de 15 dias e o usuário como responsável. */
 export function valoresNovos(opcoes: OpcoesVenda, hoje: string, vendedorId: string): ValoresDocumento {
   return {
+    oportunidadeId: null,
+    oportunidadeTitulo: null,
     empresaId: opcoes.emitentePadraoId,
     pessoaId: null,
     pessoaNome: null,
@@ -59,6 +64,8 @@ export function valoresNovos(opcoes: OpcoesVenda, hoje: string, vendedorId: stri
 /** Valores para editar (ou duplicar) um documento existente. */
 export function valoresDoDocumento(d: DocumentoVenda, hoje: string): ValoresDocumento {
   return {
+    oportunidadeId: d.oportunidade?.id ?? null,
+    oportunidadeTitulo: d.oportunidade?.titulo ?? null,
     empresaId: d.empresaId,
     pessoaId: d.pessoaId,
     pessoaNome: d.pessoaNome,

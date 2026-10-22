@@ -26,6 +26,7 @@ export default async function Pagina({ params }: Props) {
       podeEditar={pode(u.papel, "vendas:editar")}
       podeFaturar={pode(u.papel, "vendas:editar") && pode(u.papel, "financeiro:editar")}
       podeVerFinanceiro={pode(u.papel, "financeiro:ver")}
+      podeVerCrm={pode(u.papel, "crm:ver")}
     />
   );
 }

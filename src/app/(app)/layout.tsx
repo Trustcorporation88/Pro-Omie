@@ -5,6 +5,8 @@ import { BuscaGlobal } from "@/components/layout/busca-global";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { escopoEmpresa } from "@/lib/auth/empresa";
+import { pode } from "@/lib/auth/permissoes";
+import { contarPendenciasHoje } from "@/modules/crm/consultas";
 import { sair } from "@/modules/auth/acoes";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -27,9 +29,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </main>
     );
   }
+  // selo no menu: atividades minhas atrasadas ou de hoje
+  const pendentes = pode(u.papel, "crm:ver") ? await contarPendenciasHoje(u.id).catch(() => 0) : 0;
   return (
     <SidebarProvider>
-      <AppSidebar papel={u.papel} empresa={escopo.ativa} empresas={escopo.disponiveis} />
+      <AppSidebar papel={u.papel} empresa={escopo.ativa} empresas={escopo.disponiveis} selos={{ "/crm/atividades": pendentes }} />
       <SidebarInset>
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />

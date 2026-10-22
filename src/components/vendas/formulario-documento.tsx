@@ -88,6 +88,7 @@ export function FormularioDocumento({
       vendedorId: v.vendedorId || null,
       emissao: v.emissao,
       ...(proposta ? { validade: v.validade } : {}),
+      ...(proposta && !id && v.oportunidadeId ? { oportunidadeId: v.oportunidadeId } : {}),
       condicaoPagamentoId: v.condicaoPagamentoId || null,
       formaPagamentoId: v.formaPagamentoId || null,
       observacoes: v.observacoes,
@@ -123,7 +124,10 @@ export function FormularioDocumento({
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Dados {proposta ? "da proposta" : "do pedido"}</CardTitle>
-          {numero ? <CardDescription>Nº {String(numero).padStart(4, "0")}</CardDescription> : <CardDescription>O número é gerado ao salvar.</CardDescription>}
+          <CardDescription>
+            {numero ? `Nº ${String(numero).padStart(4, "0")}` : "O número é gerado ao salvar."}
+            {v.oportunidadeTitulo && ` Ligada à oportunidade: ${v.oportunidadeTitulo}.`}
+          </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-6 gap-4">
           <Campo className="col-span-6 md:col-span-3" id="dv-cliente" rotulo="Cliente" obrigatorio erro={erros.pessoaId}>

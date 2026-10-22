@@ -165,6 +165,9 @@ model Empresa {
   propostas Proposta[]
   pedidos   Pedido[]
 
+  oportunidades Oportunidade[]
+  atividades    Atividade[]
+
   @@map("empresas")
 }
 
@@ -191,6 +194,9 @@ model Usuario {
 
   propostasVendedor Proposta[] @relation("VendedorProposta")
   pedidosVendedor   Pedido[]   @relation("VendedorPedido")
+
+  oportunidadesResponsavel Oportunidade[] @relation("ResponsavelOportunidade")
+  atividadesResponsavel    Atividade[]    @relation("ResponsavelAtividade")
 
   @@map("usuarios")
 }
@@ -253,6 +259,9 @@ model Pessoa {
   regras    RegraConciliacao[]
   propostas Proposta[]
   pedidos   Pedido[]
+
+  oportunidades Oportunidade[]
+  atividades    Atividade[]
 
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
@@ -662,6 +671,9 @@ model Proposta {
   aprovadaEm          DateTime?
   recusadaEm          DateTime?
   canceladaEm         DateTime?
+  /// oportunidade do CRM de onde a proposta saiu (aprovar a proposta marca a oportunidade como ganha)
+  oportunidadeId      String?
+  oportunidade        Oportunidade?      @relation(fields: [oportunidadeId], references: [id], onDelete: SetNull)
   criadoPorId         String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
@@ -672,6 +684,7 @@ model Proposta {
   @@unique([empresaId, numero])
   @@index([empresaId, status, emissao])
   @@index([pessoaId])
+  @@index([oportunidadeId])
   @@map("propostas")
 }
 
@@ -750,4 +763,93 @@ model PedidoItem {
 
   @@index([pedidoId, ordem])
   @@map("pedido_itens")
+}
+
+// ───────────────────────── CRM (Fase 2) ─────────────────────────
+
+/// Etapas do funil. GANHA e PERDIDA fecham a oportunidade.
+enum EtapaOportunidade {
+  DESCOBERTA
+  PROPOSTA
+  NEGOCIACAO
+  GANHA
+  PERDIDA
+}
+
+enum TipoAtividade {
+  LIGACAO
+  WHATSAPP
+  EMAIL
+  REUNIAO
+  VISITA
+  TAREFA
+}
+
+/// Negócio em andamento com um cliente (ou lead). Pertence à empresa (matriz) ativa.
+model Oportunidade {
+  id                 String             @id @default(cuid())
+  empresaId          String
+  empresa            Empresa            @relation(fields: [empresaId], references: [id])
+  titulo             String
+  pessoaId           String
+  pessoa             Pessoa             @relation(fields: [pessoaId], references: [id])
+  /// com quem se fala no cliente (nome, cargo, telefone)
+  contato            String?
+  responsavelId      String?
+  responsavel        Usuario?           @relation("ResponsavelOportunidade", fields: [responsavelId], references: [id], onDelete: SetNull)
+  etapa              EtapaOportunidade  @default(DESCOBERTA)
+  /// quando entrou na etapa atual (dias parados na etapa)
+  etapaDesde         DateTime           @default(now())
+  /// etapa em que estava ao ser ganha ou perdida (para reabrir no mesmo ponto)
+  etapaAntesFechar   EtapaOportunidade?
+  valor              Decimal            @default(0) @db.Decimal(14, 2)
+  previsaoFechamento DateTime?          @db.Date
+  /// código da origem do lead (lista fixa no módulo crm)
+  origem             String?
+  /// código do motivo de perda (lista fixa no módulo crm)
+  motivoPerda        String?
+  detalhePerda       String?
+  observacoes        String?
+  ganhaEm            DateTime?
+  perdidaEm          DateTime?
+  criadoPorId        String?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  atividades Atividade[]
+  propostas  Proposta[]
+
+  @@index([empresaId, etapa])
+  @@index([pessoaId])
+  @@index([responsavelId])
+  @@map("oportunidades")
+}
+
+/// Ligação, reunião, tarefa etc. Pode estar ligada a uma oportunidade e/ou a um cliente.
+model Atividade {
+  id             String        @id @default(cuid())
+  empresaId      String
+  empresa        Empresa       @relation(fields: [empresaId], references: [id])
+  tipo           TipoAtividade @default(TAREFA)
+  assunto        String
+  descricao      String?
+  data           DateTime      @db.Date
+  /// "HH:MM" opcional
+  hora           String?
+  responsavelId  String?
+  responsavel    Usuario?      @relation("ResponsavelAtividade", fields: [responsavelId], references: [id], onDelete: SetNull)
+  oportunidadeId String?
+  oportunidade   Oportunidade? @relation(fields: [oportunidadeId], references: [id], onDelete: Cascade)
+  pessoaId       String?
+  pessoa         Pessoa?       @relation(fields: [pessoaId], references: [id], onDelete: SetNull)
+  concluidaEm    DateTime?
+  criadoPorId    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([empresaId, concluidaEm, data])
+  @@index([responsavelId, concluidaEm, data])
+  @@index([oportunidadeId])
+  @@index([pessoaId])
+  @@map("atividades")
 }

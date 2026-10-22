@@ -63,7 +63,8 @@ const base = {
 };
 
 export const esquemaProposta = z
-  .object({ ...base, validade: dataISO("Informe a validade.") })
+  // oportunidadeId: só vale na criação (proposta aberta a partir do funil)
+  .object({ ...base, validade: dataISO("Informe a validade."), oportunidadeId: idOpc })
   .refine((d) => d.validade >= d.emissao, { message: "A validade não pode ser anterior à emissão.", path: ["validade"] });
 
 export const esquemaPedido = z.object(base);

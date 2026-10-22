@@ -46,6 +46,8 @@ export type DocumentoVenda = {
   itens: ItemDocumento[];
   /** proposta: pedido gerado a partir dela; pedido: proposta de origem */
   vinculo: { id: string; numero: number } | null;
+  /** proposta: oportunidade do CRM de onde saiu */
+  oportunidade: { id: string; titulo: string } | null;
   /** pedido faturado: títulos gerados */
   titulos: { id: string; numero: number; vencimento: string; valor: number; status: string }[];
   criadoEm: string;

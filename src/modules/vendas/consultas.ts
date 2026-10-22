@@ -190,10 +190,10 @@ export async function obterDocumento(tipo: TipoDocumentoVenda, id: string): Prom
   if (tipo === "proposta") {
     const d = await prisma.proposta.findFirst({
       where: { id, empresaId: { in: escopo.ids } },
-      include: { ...incluirDetalhe, itens, pedido: { select: { id: true, numero: true } } },
+      include: { ...incluirDetalhe, itens, pedido: { select: { id: true, numero: true } }, oportunidade: { select: { id: true, titulo: true } } },
     });
     if (!d) return null;
-    return { ...comum(d), tipo, validade: isoReq(d.validade), motivo: d.motivoRecusa, vinculo: d.pedido, titulos: [] };
+    return { ...comum(d), tipo, validade: isoReq(d.validade), motivo: d.motivoRecusa, vinculo: d.pedido, oportunidade: d.oportunidade, titulos: [] };
   }
   const d = await prisma.pedido.findFirst({
     where: { id, empresaId: { in: escopo.ids } },
@@ -211,6 +211,7 @@ export async function obterDocumento(tipo: TipoDocumentoVenda, id: string): Prom
     validade: null,
     motivo: d.motivoCancelamento,
     vinculo: d.proposta,
+    oportunidade: null,
     titulos: titulos.map((t) => ({ id: t.id, numero: t.numero, vencimento: isoReq(t.vencimento), valor: num(t.valor), status: t.status })),
   };
 }
