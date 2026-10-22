@@ -40,7 +40,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { MarcaIcone } from "@/components/marca";
+import { MarcaIcone, NomeMarca } from "@/components/marca";
 import { NAVEGACAO } from "./navegacao";
 import { pode, type PapelUsuario } from "@/lib/auth/permissoes";
 
@@ -80,9 +80,9 @@ export function AppSidebar({ papel, empresa }: { papel: PapelUsuario; empresa: s
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link href="/">
-                <MarcaIcone className="size-8" />
+                <MarcaIcone className="size-8 rounded-md" />
                 <div className="grid flex-1 text-left leading-tight">
-                  <span className="truncate font-semibold text-white">Pro Omie</span>
+                  <NomeMarca tom="escuro" className="text-white" />
                   <span className="truncate text-xs opacity-70">{empresa}</span>
                 </div>
               </Link>
@@ -103,9 +103,9 @@ export function AppSidebar({ papel, empresa }: { papel: PapelUsuario; empresa: s
                   if (item.emBreve) {
                     return (
                       <SidebarMenuItem key={item.titulo}>
-                        <SidebarMenuButton tooltip={`${item.titulo} (${item.emBreve})`} className="opacity-50" aria-disabled>
+                        <SidebarMenuButton tooltip={`${item.titulo} (${item.emBreve})`} className="pr-12 opacity-50" aria-disabled>
                           <Icone />
-                          <span>{item.titulo}</span>
+                          <span title={item.titulo}>{item.titulo}</span>
                         </SidebarMenuButton>
                         <SidebarMenuBadge className="text-[10px] opacity-60">{item.emBreve}</SidebarMenuBadge>
                       </SidebarMenuItem>

@@ -13,7 +13,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             backgroundSize: "44px 44px",
           }}
         />
-        <Marca className="relative text-white" />
+        <Marca grande className="relative text-white" />
         <div className="relative max-w-md space-y-5">
           <h1 className="text-3xl font-semibold leading-tight tracking-tight text-white">
             Financeiro, vendas, estoque e fiscal no mesmo lugar, sem digitar nada duas vezes.

@@ -24,3 +24,9 @@ npm-debug.log*
 .DS_Store
 *.pem
 .vercel
+
+# marca: recriada a partir de marca/*.b64 por scripts/gerar-marca.mjs
+/public/marca/
+/src/app/icon.png
+/src/app/apple-icon.png
+/src/app/favicon.ico

@@ -1,4 +1,4 @@
-// Build na Vercel: gera o Prisma Client, aplica as migrations SÓ em produção e compila o Next.
+// Build na Vercel: recria logotipo e ícones (marca/*.b64), gera o Prisma Client, aplica as migrations SÓ em produção e compila o Next.
 // Previews nunca alteram o banco de produção.
 import { execSync } from "node:child_process";
 
@@ -9,6 +9,7 @@ const executar = (comando) => {
 
 const ambiente = process.env.VERCEL_ENV ?? "local";
 
+executar("node scripts/gerar-marca.mjs");
 executar("npx prisma generate");
 
 if (ambiente === "production") {
