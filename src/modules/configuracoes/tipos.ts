@@ -54,10 +54,10 @@ export const PAPEIS: readonly PapelUsuario[] = ["ADMIN", "FINANCEIRO", "VENDAS",
 /** Descrição curta do que cada papel pode fazer (espelha a matriz de src/lib/auth/permissoes.ts). */
 export const DESCRICAO_PAPEL: Record<PapelUsuario, string> = {
   ADMIN: "Tudo, inclusive usuários e configurações.",
-  FINANCEIRO: "Financeiro, cadastros e relatórios.",
-  VENDAS: "Cadastros.",
-  ESTOQUE: "Cadastros.",
-  CONTADOR: "Somente leitura do financeiro e relatórios (consulta também os cadastros).",
+  FINANCEIRO: "Financeiro, vendas, cadastros e relatórios.",
+  VENDAS: "Propostas, pedidos de venda e cadastros.",
+  ESTOQUE: "Cadastros; consulta pedidos de venda.",
+  CONTADOR: "Somente leitura do financeiro, das vendas e dos relatórios (consulta também os cadastros).",
 };
 
 /** O que o cliente precisa saber de uma linha da tabela de usuários para montar as ações. */

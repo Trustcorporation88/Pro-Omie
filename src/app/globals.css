@@ -129,4 +129,11 @@
   .tabular {
     font-variant-numeric: tabular-nums;
   }
+  /* o cabeçalho fixo tem 3.5rem: campo focado (Tab ou erro de validação) não fica escondido atrás dele */
+  input,
+  select,
+  textarea,
+  button {
+    scroll-margin-top: 5rem;
+  }
 }

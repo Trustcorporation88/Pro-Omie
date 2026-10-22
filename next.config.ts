@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  serverExternalPackages: ["pg", "@prisma/adapter-pg"],
+  serverExternalPackages: ["pg", "@prisma/adapter-pg", "@react-pdf/renderer"],
   experimental: {
     serverActions: {
       // anexos (até 4 MB) e arquivos OFX; a Vercel aceita até 4,5 MB por requisição

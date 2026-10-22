@@ -12,6 +12,7 @@ import {
   CircleArrowUp,
   CreditCard,
   FileChartColumn,
+  FileText,
   GitCompareArrows,
   Landmark,
   LayoutDashboard,
@@ -55,6 +56,7 @@ const ICONES: Record<string, LucideIcon> = {
   CircleArrowUp,
   CreditCard,
   FileChartColumn,
+  FileText,
   GitCompareArrows,
   Landmark,
   LayoutDashboard,
@@ -121,7 +123,7 @@ export function AppSidebar({ papel, empresa, empresas }: { papel: PapelUsuario; 
         })}
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 text-[11px] opacity-50 group-data-[collapsible=icon]:hidden">
-        Fases 0 e 1 · Fundação e Financeiro
+        Fase 2 em andamento · Vendas
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

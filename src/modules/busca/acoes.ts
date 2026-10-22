@@ -114,3 +114,24 @@ export async function buscarPessoas(termo: string, papel?: "cliente" | "forneced
     detalhe: [fmtDocumento(p.documento), p.cidade && `${p.cidade}/${p.uf ?? ""}`].filter(Boolean).join(" · "),
   }));
 }
+
+export type ProdutoResumo = { id: string; codigo: string; descricao: string; tipo: "PRODUTO" | "SERVICO"; unidade: string; precoVenda: number };
+
+/** Busca de produtos e serviços ativos da empresa ativa, para os itens de propostas e pedidos. */
+export async function buscarProdutos(termo: string): Promise<ProdutoResumo[]> {
+  const u = await usuarioAtual();
+  if (!u) return [];
+  const q = termo.trim();
+  const escopo = await escopoEmpresa();
+  const produtos = await prisma.produto.findMany({
+    where: {
+      empresaId: escopo.ativa.id,
+      ativo: true,
+      ...(q ? { OR: [{ descricao: { contains: q, mode: "insensitive" } }, { codigo: { contains: q, mode: "insensitive" } }] } : {}),
+    },
+    orderBy: { descricao: "asc" },
+    take: 20,
+  });
+  return produtos.map((p) => ({ id: p.id, codigo: p.codigo, descricao: p.descricao, tipo: p.tipo, unidade: p.unidade, precoVenda: Number(p.precoVenda) }));
+}
+
