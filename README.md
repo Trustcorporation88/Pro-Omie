@@ -40,6 +40,10 @@ scripts/vercel-build.mjs  build da Vercel (migrations só em produção)
 
 Regras de negócio do financeiro ficam em `src/modules/financeiro/servicos.ts` e são reutilizadas pela conciliação e, nas próximas fases, por vendas, compras, notas e contratos.
 
+## Marca
+
+Logotipo e ícones ficam em `marca/` como texto base64, porque a integração usada para publicar no GitHub só envia arquivos de texto. O `scripts/gerar-marca.mjs` recria os arquivos binários (`public/marca/*.webp`, `src/app/icon.png`, `apple-icon.png` e `favicon.ico`) antes de `npm run dev`, `npm run build` e do build da Vercel. Para trocar o logotipo, substitua esses arquivos e rode `npm run marca:codificar`.
+
 ## Desenvolvimento
 
 ```bash
