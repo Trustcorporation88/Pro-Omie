@@ -7,11 +7,13 @@ import { EstadoVazio, PageHeader } from "@/components/page-header";
 import { Selo, SeloAtivo } from "@/components/selos";
 import { contextoAdmin, escopoEmpresa } from "@/lib/auth/empresa";
 import { AcoesFilial, BotaoEditarMatriz, BotaoNovaEmpresa } from "@/components/configuracoes/empresa-controles";
+import { LogotipoEmpresa, type LogoAtual } from "@/components/configuracoes/logotipo-empresa";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { fmtCep, fmtDocumento, fmtTelefone } from "@/lib/format";
 import { ROTULOS } from "@/lib/rotulos";
 import { empresaParaValores, listarEmpresasDoGrupo } from "@/modules/configuracoes/consultas";
 import { fmtCnae } from "@/modules/configuracoes/formatos";
+import { logosComoDataUrl } from "@/modules/configuracoes/logotipo";
 
 export const metadata: Metadata = { title: "Empresas e filiais" };
 
@@ -46,7 +48,17 @@ const plural = (n: number, singular: string, pluralTexto: string) => `${n} ${n =
 
 type EmpresaComFiliais = Empresa & { filiais: Empresa[] };
 
-function CartaoEmpresa({ empresa, ativa, adminDoGrupo }: { empresa: EmpresaComFiliais; ativa: boolean; adminDoGrupo: boolean }) {
+function CartaoEmpresa({
+  empresa,
+  ativa,
+  adminDoGrupo,
+  logo,
+}: {
+  empresa: EmpresaComFiliais;
+  ativa: boolean;
+  adminDoGrupo: boolean;
+  logo: LogoAtual | null;
+}) {
   const filiais = empresa.filiais;
   const ativas = filiais.filter((f) => f.ativo).length;
   const endereco = linhasEndereco(empresa);
@@ -105,6 +117,14 @@ function CartaoEmpresa({ empresa, ativa, adminDoGrupo }: { empresa: EmpresaComFi
               <Dado rotulo="Telefone">{fmtTelefone(empresa.telefone)}</Dado>
             </Grupo>
           </div>
+
+          <LogotipoEmpresa
+            empresaId={empresa.id}
+            nome={empresa.nomeFantasia || empresa.razaoSocial}
+            razaoSocial={empresa.razaoSocial}
+            cnpj={fmtDocumento(empresa.cnpj)}
+            logo={logo}
+          />
 
           <div className="mt-6 border-t pt-5">
             <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
@@ -180,7 +200,7 @@ export default async function EmpresaPage() {
     );
   }
 
-  const escopo = await escopoEmpresa().catch(() => null);
+  const [escopo, logos] = await Promise.all([escopoEmpresa().catch(() => null), logosComoDataUrl(empresas.map((e) => e.id))]);
   const ativasNoGrupo = empresas.filter((e) => e.ativo).length;
 
   return (
@@ -198,7 +218,7 @@ export default async function EmpresaPage() {
 
       <div className="space-y-6">
         {empresas.map((e) => (
-          <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} adminDoGrupo={ctx.adminDoGrupo} />
+          <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} adminDoGrupo={ctx.adminDoGrupo} logo={logos[e.id] ?? null} />
         ))}
       </div>
     </>

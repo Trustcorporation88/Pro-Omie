@@ -1,5 +1,5 @@
 import "server-only";
-import { Document, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { Document, Image, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
 import { fmtCep, fmtData, fmtDocumento, fmtMoeda, fmtTelefone } from "@/lib/format";
 import { fmtDecimal, fmtNumeroDoc, fmtPrecoUnitario } from "./calculos";
 import type { DocumentoVenda } from "./tipos";
@@ -18,7 +18,15 @@ export type EmitentePdf = {
   cep: string | null;
   email: string | null;
   telefone: string | null;
+  /** logotipo da empresa (PNG ou JPEG); sem ele, o cabeçalho destaca o nome */
+  logo?: { dados: Buffer; formato: "png" | "jpeg"; largura: number; altura: number } | null;
 };
+
+/** O logotipo cabe numa área de 170 x 56 pt, mantendo a proporção. */
+function tamanhoLogo(l: { largura: number; altura: number }) {
+  const escala = Math.min(170 / l.largura, 56 / l.altura);
+  return { width: l.largura * escala, height: l.altura * escala };
+}
 
 const AZUL = "#1e3a8a";
 const CINZA = "#64748b";
@@ -29,6 +37,7 @@ const s = StyleSheet.create({
   topo: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", borderBottomWidth: 2, borderBottomColor: AZUL, paddingBottom: 12 },
   empresa: { maxWidth: 320 },
   empresaNome: { fontSize: 13, fontFamily: "Helvetica-Bold", color: AZUL },
+  empresaRazao: { fontSize: 9.5, fontFamily: "Helvetica-Bold", marginTop: 7 },
   miudo: { fontSize: 8, color: CINZA, marginTop: 2 },
   caixa: { borderWidth: 1, borderColor: AZUL, borderRadius: 4, padding: 8, minWidth: 150, alignItems: "flex-end" },
   caixaTitulo: { fontSize: 10, fontFamily: "Helvetica-Bold", color: AZUL, letterSpacing: 0.5 },
@@ -74,8 +83,18 @@ function DocumentoVendaPdf({ doc, emitente }: { doc: DocumentoVenda; emitente: E
       <Page size="A4" style={s.pagina}>
         <View style={s.topo}>
           <View style={s.empresa}>
-            <Text style={s.empresaNome}>{emitente.nomeFantasia || emitente.razaoSocial}</Text>
-            {emitente.nomeFantasia ? <Text style={s.miudo}>{emitente.razaoSocial}</Text> : null}
+            {emitente.logo ? (
+              <>
+                {/* eslint-disable-next-line jsx-a11y/alt-text -- Image do react-pdf não tem alt */}
+                <Image src={{ data: emitente.logo.dados, format: emitente.logo.formato === "jpeg" ? "jpg" : "png" }} style={tamanhoLogo(emitente.logo)} />
+                <Text style={s.empresaRazao}>{emitente.razaoSocial}</Text>
+              </>
+            ) : (
+              <>
+                <Text style={s.empresaNome}>{emitente.nomeFantasia || emitente.razaoSocial}</Text>
+                {emitente.nomeFantasia ? <Text style={s.miudo}>{emitente.razaoSocial}</Text> : null}
+              </>
+            )}
             <Text style={s.miudo}>
               CNPJ {fmtDocumento(emitente.cnpj)}
               {emitente.inscricaoEstadual ? ` · IE ${emitente.inscricaoEstadual}` : ""}

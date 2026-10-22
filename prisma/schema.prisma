@@ -168,6 +168,8 @@ model Empresa {
   oportunidades Oportunidade[]
   atividades    Atividade[]
 
+  logo LogoEmpresa?
+
   @@map("empresas")
 }
 
@@ -852,4 +854,22 @@ model Atividade {
   @@index([oportunidadeId])
   @@index([pessoaId])
   @@map("atividades")
+}
+
+/// Logotipo da empresa (matriz): sai no cabeçalho dos PDFs dela e das filiais.
+/// Fica numa tabela à parte para as consultas de empresa não carregarem a imagem.
+model LogoEmpresa {
+  empresaId       String   @id
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  /// PNG ou JPEG já tratado no navegador (margens cortadas, até 1200 x 600 px)
+  imagem          Bytes
+  /// "png" ou "jpeg"
+  formato         String
+  largura         Int
+  altura          Int
+  atualizadoPorId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("logos_empresa")
 }

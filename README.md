@@ -9,7 +9,7 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 - Configuração inicial protegida por token (`/setup?token=...`): cria a empresa matriz (dados puxados da Receita pelo CNPJ), o administrador e os cadastros padrão (plano de categorias com grupos da DRE, formas e condições de pagamento, centros de custo, conta Caixa).
 - Cadastros: clientes e fornecedores (consulta de CNPJ na Receita e CEP no ViaCEP), produtos e serviços com dados fiscais (NCM, CEST, origem, item da LC 116), categorias financeiras, centros de custo, contas bancárias com saldo, formas e condições de pagamento.
 - Multiempresa: várias empresas do grupo, cada uma com CNPJ, filiais, contas bancárias, cadastros (clientes e fornecedores, produtos, categorias, centros de custo, formas e condições de pagamento, regras de conciliação), lançamentos e relatórios próprios. Seletor de empresa no menu; empresa nova nasce com o plano de contas padrão e a conta Caixa.
-- Administração: empresas e filiais, usuários (senha provisória exibida uma única vez) e trilha de auditoria com diferenças antes/depois. Administrador do grupo (todas as empresas) cria empresas e libera qualquer acesso; administrador de empresa administra só as empresas liberadas a ele (dados, filiais, usuários restritos a elas e auditoria delas).
+- Administração: empresas e filiais (com logotipo próprio, que sai no cabeçalho dos PDFs da empresa e das filiais), usuários (senha provisória exibida uma única vez) e trilha de auditoria com diferenças antes/depois. Administrador do grupo (todas as empresas) cria empresas e libera qualquer acesso; administrador de empresa administra só as empresas liberadas a ele (dados, filiais, usuários restritos a elas e auditoria delas).
 - Busca global (Ctrl+K), tema claro e escuro.
 
 **Financeiro**
@@ -55,7 +55,9 @@ Regras de negócio do financeiro ficam em `src/modules/financeiro/servicos.ts` e
 
 ## Marca
 
-Logotipo e ícones ficam em `marca/` como texto base64, porque a integração usada para publicar no GitHub só envia arquivos de texto. O `scripts/gerar-marca.mjs` recria os arquivos binários (`public/marca/*.webp`, `src/app/icon.png`, `apple-icon.png` e `favicon.ico`) antes de `npm run dev`, `npm run build` e do build da Vercel. Para trocar o logotipo, substitua esses arquivos e rode `npm run marca:codificar`.
+Logotipo e ícones ficam em `marca/` como texto base64, porque a integração usada para publicar no GitHub só envia arquivos de texto. O `scripts/gerar-marca.mjs` recria os arquivos binários (`public/marca/*.webp`, `src/app/icon.png`, `apple-icon.png` e `favicon.ico`) antes de `npm run dev`, `npm run build` e do build da Vercel. Para trocar o logotipo, substitua esses arquivos e rode `npm run marca:codificar`. Os atuais foram recortados da arte de 2400 px (ícone de 256 px, nome de 663 × 260 px).
+
+O logotipo de cada empresa (o que sai nas propostas e pedidos) é outra coisa: o administrador envia em Configurações › Empresas e filiais. O navegador corta as margens vazias, reduz para até 1200 × 600 px e converte para PNG (ou JPEG, se ficar pesado); o servidor aceita até 700 KB, confere o formato e gera um PDF de teste antes de gravar (`src/modules/configuracoes/logotipo.ts`).
 
 ## Desenvolvimento
 
