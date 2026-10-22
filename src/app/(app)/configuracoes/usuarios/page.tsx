@@ -8,6 +8,7 @@ import { exigirUsuario } from "@/lib/auth/sessao";
 import { ROTULO_PAPEL, type PapelUsuario } from "@/lib/auth/permissoes";
 import { fmtDataHora } from "@/lib/format";
 import { listarUsuarios } from "@/modules/configuracoes/consultas";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 
 export const metadata: Metadata = { title: "Usuários" };
 
@@ -21,18 +22,18 @@ const TOM_PAPEL: Record<PapelUsuario, "roxo" | "info" | "neutro"> = {
 
 export default async function UsuariosPage() {
   const eu = await exigirUsuario("config:admin");
-  const { usuarios, adminsAtivos, empresas } = await listarUsuarios();
+  const [{ usuarios, adminsAtivos, empresas }, escopo] = await Promise.all([listarUsuarios(), escopoEmpresa()]);
   const agora = new Date();
 
   return (
     <>
       <PageHeader titulo="Usuários" descricao="Quem acessa o Pro Omie, com qual papel, em quais empresas e em que situação.">
-        <BotaoNovoUsuario empresas={empresas} />
+        <BotaoNovoUsuario empresas={empresas} empresaPadraoId={escopo.ativa.id} />
       </PageHeader>
 
       {usuarios.length === 0 ? (
         <EstadoVazio titulo="Nenhum usuário cadastrado" descricao="Crie o primeiro usuário para liberar o acesso ao sistema.">
-          <BotaoNovoUsuario empresas={empresas} />
+          <BotaoNovoUsuario empresas={empresas} empresaPadraoId={escopo.ativa.id} />
         </EstadoVazio>
       ) : (
         <Card className="gap-0 overflow-hidden py-0">
