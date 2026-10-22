@@ -5,8 +5,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["pg", "@prisma/adapter-pg"],
   experimental: {
     serverActions: {
-      // anexos (até 5 MB) e arquivos OFX
-      bodySizeLimit: "6mb",
+      // anexos (até 4 MB) e arquivos OFX; a Vercel aceita até 4,5 MB por requisição
+      bodySizeLimit: "4.5mb",
     },
   },
   async headers() {
