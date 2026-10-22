@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma, Prisma } from "@/lib/db";
 import { executar, type Resultado } from "@/lib/acoes";
-import { ErroAcao, exigirPermissao, hashSenha } from "@/lib/auth/sessao";
+import { ErroAcao, hashSenha } from "@/lib/auth/sessao";
+import { exigirAdmin, exigirAdminDoGrupo, exigirMatrizAdministrada, type ContextoAdmin } from "@/lib/auth/empresa";
+import { hojeDate } from "@/lib/datas";
+import { criarDadosPadrao } from "@/modules/setup/dados-padrao";
 import { ROTULO_PAPEL } from "@/lib/auth/permissoes";
 import { auditar } from "@/lib/auditoria";
 import { fmtDocumento } from "@/lib/format";
@@ -13,8 +16,10 @@ import type { TipoEmpresa } from "./tipos";
 
 // Regras desta tela (todas as ações exigem "config:admin"):
 //  • senhas provisórias (e hashes) NUNCA vão para a auditoria nem para logs;
-//  • o usuário não inativa a si mesmo nem altera o próprio papel;
-//  • sempre sobra ao menos um ADMIN ativo (verificado dentro de transação serializável).
+//  • o usuário não inativa a si mesmo nem altera o próprio papel ou o próprio acesso;
+//  • administrador do grupo (todas as empresas) faz tudo; administrador de empresa só mexe nas empresas dele,
+//    nas filiais delas e nos usuários restritos a elas, e só libera acesso a essas empresas;
+//  • sempre sobra ao menos um administrador do grupo ativo (verificado dentro de transação serializável).
 
 function revalidar(...caminhos: string[]) {
   for (const c of caminhos) revalidatePath(c);
@@ -50,15 +55,6 @@ async function emTransacao<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>):
   }
 }
 
-async function exigirOutroAdminAtivo(tx: Prisma.TransactionClient, id: string) {
-  const outros = await tx.usuario.count({ where: { papel: "ADMIN", ativo: true, id: { not: id } } });
-  if (outros < 1) {
-    throw new ErroAcao("O sistema precisa de pelo menos um administrador ativo. Promova outro usuário a administrador antes de continuar.");
-  }
-}
-
-// ───────────── Empresa e filiais ─────────────
-
 const ERRO_CNPJ_DUPLICADO = () =>
   new ErroAcao("Já existe uma empresa cadastrada com este CNPJ.", { cnpj: "CNPJ já cadastrado." });
 
@@ -70,12 +66,36 @@ async function garantirCnpjDisponivel(cnpj: string, ignorarId?: string) {
   if (existente) throw ERRO_CNPJ_DUPLICADO();
 }
 
+/** O grupo nunca fica sem administrador do grupo (papel ADMIN com todas as empresas) ativo. */
+async function exigirOutroAdminDoGrupo(tx: Prisma.TransactionClient, id: string) {
+  const outros = await tx.usuario.count({ where: { papel: "ADMIN", todasEmpresas: true, ativo: true, id: { not: id } } });
+  if (outros < 1) {
+    throw new ErroAcao(
+      "O grupo precisa de pelo menos um administrador do grupo ativo (administrador com todas as empresas). Promova outro usuário antes de continuar.",
+    );
+  }
+}
+
+const ehAdminDoGrupo = (u: { papel: string; todasEmpresas: boolean }) => u.papel === "ADMIN" && u.todasEmpresas;
+
+/** Empresa do evento de auditoria de um usuário: a única empresa dele, ou nulo (evento do grupo). */
+const empresaDoUsuario = (a: { todasEmpresas: boolean; empresas: string[] }) =>
+  !a.todasEmpresas && a.empresas.length === 1 ? a.empresas[0] : null;
+
+/** O administrador gerencia este usuário? Grupo: todos. Empresa: só quem tem acesso restrito às empresas dele. */
+function administraUsuario(ctx: ContextoAdmin, alvo: { todasEmpresas: boolean; empresas: string[] }) {
+  if (ctx.adminDoGrupo) return true;
+  return !alvo.todasEmpresas && alvo.empresas.length > 0 && alvo.empresas.every((e) => ctx.matrizes.includes(e));
+}
+
+// ───────────── Empresa e filiais ─────────────
+
 /**
  * Salva uma empresa do grupo (matriz) ou uma filial.
- * - `id` informado: edita (matriz ou filial, conforme o registro).
- * - sem `id` e tipo "filial": cria uma filial vinculada à matriz `matrizId` (conferida aqui).
- * - sem `id` e tipo "matriz": cadastra uma nova empresa do grupo (First, MEiSHOP…), cada uma com seu CNPJ,
- *   suas contas e seus lançamentos; a troca entre elas é feita no menu.
+ * - `id` informado: edita (matriz ou filial), se a empresa estiver entre as administradas.
+ * - sem `id` e tipo "filial": cria uma filial vinculada à matriz `matrizId` (administrada).
+ * - sem `id` e tipo "matriz": nova empresa do grupo (só o administrador do grupo). Nasce com o plano padrão
+ *   (categorias, centros de custo, formas e condições de pagamento) e a conta Caixa.
  */
 export async function salvarEmpresa(
   id: string | null,
@@ -90,10 +110,10 @@ export async function salvarEmpresa(
         : "Filial criada."
       : id
         ? "Dados da empresa atualizados."
-        : "Empresa cadastrada. Ela já aparece no seletor do menu.";
+        : "Empresa cadastrada com o plano de contas padrão. Ela já aparece no seletor do menu.";
 
   return executar(async () => {
-    await exigirPermissao("config:admin");
+    const { ctx } = await exigirAdmin();
     if (tipo !== "matriz" && tipo !== "filial") throw new ErroAcao("Tipo de empresa inválido.");
     const dados = esquemaEmpresa.parse(valores);
     const nome = dados.nomeFantasia || dados.razaoSocial;
@@ -101,28 +121,59 @@ export async function salvarEmpresa(
     if (id) {
       const atual = await prisma.empresa.findUnique({ where: { id } });
       if (!atual) throw new ErroAcao("Empresa não encontrada.");
+      const matrizDoRegistro = atual.matrizId ?? atual.id;
+      exigirMatrizAdministrada(ctx, matrizDoRegistro);
       await garantirCnpjDisponivel(dados.cnpj, id);
       const salva = await gravar(() => prisma.empresa.update({ where: { id }, data: dados }), ERRO_CNPJ_DUPLICADO());
       const antes = Object.fromEntries(Object.keys(dados).map((k) => [k, atual[k as keyof typeof atual]]));
-      await auditar("atualizar", "empresa", id, `${atual.matrizId ? "Filial" : "Empresa"} ${nome} (${fmtDocumento(dados.cnpj)})`, {
-        antes,
-        depois: dados,
-      });
+      await auditar(
+        "atualizar",
+        "empresa",
+        id,
+        `${atual.matrizId ? "Filial" : "Empresa"} ${nome} (${fmtDocumento(dados.cnpj)})`,
+        { antes, depois: dados },
+        { empresaId: matrizDoRegistro },
+      );
       revalidar("/configuracoes/empresa", "/");
       return { id: salva.id };
     }
 
-    let vinculo: string | null = null;
-    if (tipo === "filial") {
-      const matriz = matrizId
-        ? await prisma.empresa.findFirst({ where: { id: matrizId, matrizId: null }, select: { id: true } })
-        : null;
-      if (!matriz) throw new ErroAcao("Escolha a empresa (matriz) à qual a filial pertence.");
-      vinculo = matriz.id;
-    }
     await garantirCnpjDisponivel(dados.cnpj);
-    const criada = await gravar(() => prisma.empresa.create({ data: { ...dados, matrizId: vinculo } }), ERRO_CNPJ_DUPLICADO());
-    await auditar("criar", "empresa", criada.id, `${vinculo ? "Filial" : "Empresa"} ${nome} (${fmtDocumento(dados.cnpj)})`, { ...dados, matrizId: vinculo });
+    if (tipo === "filial") {
+      const matriz = matrizId ? await prisma.empresa.findFirst({ where: { id: matrizId, matrizId: null }, select: { id: true } }) : null;
+      if (!matriz) throw new ErroAcao("Escolha a empresa (matriz) à qual a filial pertence.");
+      exigirMatrizAdministrada(ctx, matriz.id, "Você só cria filiais das empresas que administra.");
+      const criada = await gravar(() => prisma.empresa.create({ data: { ...dados, matrizId: matriz.id } }), ERRO_CNPJ_DUPLICADO());
+      await auditar(
+        "criar",
+        "empresa",
+        criada.id,
+        `Filial ${nome} (${fmtDocumento(dados.cnpj)})`,
+        { ...dados, matrizId: matriz.id },
+        { empresaId: matriz.id },
+      );
+      revalidar("/configuracoes/empresa", "/");
+      return { id: criada.id };
+    }
+
+    exigirAdminDoGrupo(ctx, "Só o administrador do grupo cadastra novas empresas.");
+    const criada = await gravar(
+      () =>
+        prisma.$transaction(async (tx) => {
+          const e = await tx.empresa.create({ data: { ...dados, matrizId: null } });
+          await criarDadosPadrao(tx, e.id, hojeDate());
+          return e;
+        }),
+      ERRO_CNPJ_DUPLICADO(),
+    );
+    await auditar(
+      "criar",
+      "empresa",
+      criada.id,
+      `Empresa ${nome} (${fmtDocumento(dados.cnpj)})`,
+      { ...dados, matrizId: null },
+      { empresaId: criada.id },
+    );
     revalidar("/configuracoes/empresa", "/");
     return { id: criada.id };
   }, mensagem);
@@ -130,25 +181,35 @@ export async function salvarEmpresa(
 
 /**
  * Ativa ou inativa uma empresa ou filial (idempotente).
- * Empresa inativa some do seletor do menu e das seleções, mas o histórico fica. A última empresa ativa não pode ser inativada.
+ * Empresa inativa some do seletor do menu e das seleções, mas o histórico fica. Inativar ou reativar empresa do grupo
+ * é com o administrador do grupo (e nunca a última ativa); filiais, com quem administra a matriz.
  */
 export async function definirAtivoFilial(id: string, ativo: boolean): Promise<Resultado> {
-  const atual = await prisma.empresa.findUnique({ where: { id }, select: { matrizId: true } });
-  const rotulo = atual?.matrizId ? "Filial" : "Empresa";
+  const previo = await prisma.empresa.findUnique({ where: { id }, select: { matrizId: true } });
+  const rotulo = previo?.matrizId ? "Filial" : "Empresa";
   return executar(async () => {
-    await exigirPermissao("config:admin");
-    const atual = await prisma.empresa.findUnique({ where: { id }, select: { id: true, matrizId: true, ativo: true, razaoSocial: true, nomeFantasia: true } });
+    const { ctx } = await exigirAdmin();
+    const atual = await prisma.empresa.findUnique({
+      where: { id },
+      select: { id: true, matrizId: true, ativo: true, razaoSocial: true, nomeFantasia: true },
+    });
     if (!atual) throw new ErroAcao("Empresa não encontrada.");
+    if (atual.matrizId) exigirMatrizAdministrada(ctx, atual.matrizId, "Empresa não encontrada.");
+    else exigirAdminDoGrupo(ctx, "Só o administrador do grupo inativa ou reativa empresas.");
     if (atual.ativo === ativo) return undefined;
     if (!ativo && !atual.matrizId) {
       const ativas = await prisma.empresa.count({ where: { matrizId: null, ativo: true } });
       if (ativas <= 1) throw new ErroAcao("Esta é a única empresa ativa. Cadastre ou reative outra antes de inativá-la.");
     }
     await gravar(() => prisma.empresa.update({ where: { id }, data: { ativo } }));
-    await auditar(ativo ? "ativar" : "inativar", "empresa", id, `${rotulo} ${atual.nomeFantasia || atual.razaoSocial}`, {
-      antes: { ativo: atual.ativo },
-      depois: { ativo },
-    });
+    await auditar(
+      ativo ? "ativar" : "inativar",
+      "empresa",
+      id,
+      `${rotulo} ${atual.nomeFantasia || atual.razaoSocial}`,
+      { antes: { ativo: atual.ativo }, depois: { ativo } },
+      { empresaId: atual.matrizId ?? atual.id },
+    );
     revalidar("/configuracoes/empresa", "/");
     return undefined;
   }, ativo ? `${rotulo} reativada.` : `${rotulo} inativada.`);
@@ -157,20 +218,38 @@ export async function definirAtivoFilial(id: string, ativo: boolean): Promise<Re
 // ───────────── Usuários ─────────────
 
 /**
- * Normaliza o acesso por empresa: admin sempre vê todas; a lista só aceita matrizes existentes;
- * quem não vê todas precisa ter ao menos uma empresa liberada.
+ * Normaliza e confere o acesso por empresa:
+ * - "todas as empresas" só o administrador do grupo libera;
+ * - a lista aceita só matrizes existentes e, para administrador de empresa, só as que ele administra;
+ * - quem não tem "todas" precisa de ao menos uma empresa.
  */
 async function acessoEmpresasValido(
   tx: Prisma.TransactionClient | typeof prisma,
-  papel: string,
   d: { todasEmpresas: boolean; empresas: string[] },
+  ctx: ContextoAdmin,
 ): Promise<{ todasEmpresas: boolean; empresas: string[] }> {
-  if (papel === "ADMIN" || d.todasEmpresas) return { todasEmpresas: true, empresas: [] };
+  if (d.todasEmpresas) {
+    exigirAdminDoGrupo(ctx, "Só o administrador do grupo libera todas as empresas.");
+    return { todasEmpresas: true, empresas: [] };
+  }
   const ids = [...new Set(d.empresas)];
+  if (!ids.length) throw new ErroAcao("Libere ao menos uma empresa ou marque “todas as empresas”.", { empresas: "Libere ao menos uma empresa." });
   const existentes = await tx.empresa.findMany({ where: { id: { in: ids }, matrizId: null }, select: { id: true } });
   if (existentes.length !== ids.length) throw new ErroAcao("Empresa não encontrada. Recarregue a página.", { empresas: "Empresa não encontrada." });
-  if (!ids.length) throw new ErroAcao("Libere ao menos uma empresa ou marque “todas as empresas”.", { empresas: "Libere ao menos uma empresa." });
+  if (!ctx.adminDoGrupo && ids.some((e) => !ctx.matrizes.includes(e))) {
+    throw new ErroAcao("Você só pode liberar as empresas que administra.", { empresas: "Empresa fora das que você administra." });
+  }
   return { todasEmpresas: false, empresas: ids };
+}
+
+/** Usuário que o administrador gerencia (fora dele, responde como se não existisse). */
+async function usuarioAdministrado(tx: Prisma.TransactionClient | typeof prisma, ctx: ContextoAdmin, id: string) {
+  const alvo = await tx.usuario.findUnique({
+    where: { id },
+    select: { id: true, nome: true, email: true, papel: true, ativo: true, todasEmpresas: true, empresas: true },
+  });
+  if (!alvo || !administraUsuario(ctx, alvo)) throw new ErroAcao("Usuário não encontrado.");
+  return alvo;
 }
 
 /** Cria o usuário com senha provisória aleatória (hash no banco, trocarSenha = true). A senha só volta nesta resposta. */
@@ -178,12 +257,12 @@ export async function criarUsuario(
   valores: Record<string, unknown>,
 ): Promise<Resultado<{ id: string; nome: string; email: string; senhaProvisoria: string }>> {
   return executar(async () => {
-    await exigirPermissao("config:admin");
+    const { ctx } = await exigirAdmin();
     const d = esquemaNovoUsuario.parse(valores);
     const erroDuplicado = () => new ErroAcao("Já existe um usuário com este e-mail.", { email: "E-mail já cadastrado." });
     const existente = await prisma.usuario.findUnique({ where: { email: d.email }, select: { id: true } });
     if (existente) throw erroDuplicado();
-    const acesso = await acessoEmpresasValido(prisma, d.papel, d);
+    const acesso = await acessoEmpresasValido(prisma, d, ctx);
 
     const senha = gerarSenhaProvisoria();
     const senhaHash = await hashSenha(senha);
@@ -196,46 +275,58 @@ export async function criarUsuario(
       erroDuplicado(),
     );
     // Auditoria SEM senha e SEM hash.
-    await auditar("criar", "usuario", criado.id, `${d.nome} (${d.email}) · ${ROTULO_PAPEL[d.papel]}`, {
-      nome: d.nome,
-      email: d.email,
-      papel: d.papel,
-    });
+    await auditar(
+      "criar",
+      "usuario",
+      criado.id,
+      `${d.nome} (${d.email}) · ${ROTULO_PAPEL[d.papel]}${d.papel === "ADMIN" && acesso.todasEmpresas ? " do grupo" : ""}`,
+      { nome: d.nome, email: d.email, papel: d.papel, ...acesso },
+      { empresaId: empresaDoUsuario(acesso) },
+    );
     revalidar("/configuracoes/usuarios");
     return { id: criado.id, nome: d.nome, email: d.email, senhaProvisoria: senha };
   }, "Usuário criado.");
 }
 
-/** Edita nome e papel. Ninguém altera o próprio papel e o último administrador ativo não pode ser rebaixado. */
 export async function editarUsuario(id: string, valores: Record<string, unknown>): Promise<Resultado> {
   return executar(async () => {
-    const eu = await exigirPermissao("config:admin");
+    const { u: eu, ctx } = await exigirAdmin();
     const d = esquemaEdicaoUsuario.parse(valores);
 
-    const { alvo, alterou } = await emTransacao(async (tx) => {
-      const atual = await tx.usuario.findUnique({
-        where: { id },
-        select: { id: true, nome: true, email: true, papel: true, ativo: true, todasEmpresas: true, empresas: true },
-      });
-      if (!atual) throw new ErroAcao("Usuário não encontrado.");
+    const { alvo, alterou, acesso } = await emTransacao(async (tx) => {
+      const atual = await usuarioAdministrado(tx, ctx, id);
+      const acesso = await acessoEmpresasValido(tx, d, ctx);
+      const mesmoAcesso =
+        atual.todasEmpresas === acesso.todasEmpresas && [...atual.empresas].sort().join() === [...acesso.empresas].sort().join();
       if (atual.id === eu.id && d.papel !== atual.papel) {
         throw new ErroAcao("Você não pode alterar o seu próprio papel. Peça a outro administrador.", {
           papel: "Não é possível alterar o próprio papel.",
         });
       }
-      if (atual.papel === "ADMIN" && atual.ativo && d.papel !== "ADMIN") await exigirOutroAdminAtivo(tx, atual.id);
-      const acesso = await acessoEmpresasValido(tx, d.papel, d);
-      const mesmoAcesso = atual.todasEmpresas === acesso.todasEmpresas && [...atual.empresas].sort().join() === [...acesso.empresas].sort().join();
-      if (atual.nome === d.nome && atual.papel === d.papel && mesmoAcesso) return { alvo: atual, alterou: false };
+      if (atual.id === eu.id && !mesmoAcesso) {
+        throw new ErroAcao("Você não pode alterar o seu próprio acesso às empresas. Peça ao administrador do grupo.", {
+          empresas: "Não é possível alterar o próprio acesso.",
+        });
+      }
+      const deixaDeSerAdminDoGrupo = ehAdminDoGrupo(atual) && !(d.papel === "ADMIN" && acesso.todasEmpresas);
+      if (deixaDeSerAdminDoGrupo && atual.ativo) await exigirOutroAdminDoGrupo(tx, atual.id);
+      if (atual.nome === d.nome && atual.papel === d.papel && mesmoAcesso) return { alvo: atual, alterou: false, acesso };
       await tx.usuario.update({ where: { id }, data: { nome: d.nome, papel: d.papel, ...acesso } });
-      return { alvo: { ...atual, acessoNovo: acesso }, alterou: true };
+      return { alvo: atual, alterou: true, acesso };
     });
 
     if (alterou) {
-      await auditar("atualizar", "usuario", id, `${d.nome} (${alvo.email})`, {
-        antes: { nome: alvo.nome, papel: alvo.papel, todasEmpresas: alvo.todasEmpresas, empresas: alvo.empresas },
-        depois: { nome: d.nome, papel: d.papel, ...("acessoNovo" in alvo ? alvo.acessoNovo : {}) },
-      });
+      await auditar(
+        "atualizar",
+        "usuario",
+        id,
+        `${d.nome} (${alvo.email})`,
+        {
+          antes: { nome: alvo.nome, papel: alvo.papel, todasEmpresas: alvo.todasEmpresas, empresas: alvo.empresas },
+          depois: { nome: d.nome, papel: d.papel, ...acesso },
+        },
+        { empresaId: empresaDoUsuario(acesso) },
+      );
       revalidar("/configuracoes/usuarios");
     }
     return undefined;
@@ -243,20 +334,19 @@ export async function editarUsuario(id: string, valores: Record<string, unknown>
 }
 
 /**
- * Gera nova senha provisória: exige troca no próximo acesso, derruba as sessões abertas (versaoSessao + 1)
- * e zera tentativas falhas e bloqueio. A senha só volta nesta resposta; a auditoria não a registra.
+ * Gera nova senha provisória: invalida as sessões abertas (versaoSessao + 1), força a troca no próximo acesso
+ * e zera o bloqueio. A senha só volta nesta resposta.
  */
 export async function redefinirSenhaUsuario(
   id: string,
 ): Promise<Resultado<{ nome: string; email: string; senhaProvisoria: string }>> {
   return executar(async () => {
-    const eu = await exigirPermissao("config:admin");
+    const { u: eu, ctx } = await exigirAdmin();
     if (id === eu.id) {
       // Redefinir a própria senha derrubaria a sessão atual antes de ela ser anotada.
       throw new ErroAcao("Para trocar a sua própria senha, use “Trocar senha” no menu do seu perfil.");
     }
-    const alvo = await prisma.usuario.findUnique({ where: { id }, select: { id: true, nome: true, email: true } });
-    if (!alvo) throw new ErroAcao("Usuário não encontrado.");
+    const alvo = await usuarioAdministrado(prisma, ctx, id);
 
     const senha = gerarSenhaProvisoria();
     const senhaHash = await hashSenha(senha);
@@ -266,39 +356,34 @@ export async function redefinirSenhaUsuario(
         data: { senhaHash, trocarSenha: true, versaoSessao: { increment: 1 }, tentativasFalhas: 0, bloqueadoAte: null },
       }),
     );
-    await auditar("redefinir_senha", "usuario", id, `Senha redefinida: ${alvo.nome} (${alvo.email})`);
+    await auditar("redefinir_senha", "usuario", id, `Senha redefinida: ${alvo.nome} (${alvo.email})`, undefined, {
+      empresaId: empresaDoUsuario(alvo),
+    });
     revalidar("/configuracoes/usuarios");
     return { nome: alvo.nome, email: alvo.email, senhaProvisoria: senha };
   }, "Senha redefinida.");
 }
 
-/** Zera as tentativas falhas e o bloqueio temporário de login. */
 export async function desbloquearUsuario(id: string): Promise<Resultado> {
   return executar(async () => {
-    await exigirPermissao("config:admin");
-    const alvo = await prisma.usuario.findUnique({ where: { id }, select: { id: true, nome: true, email: true } });
-    if (!alvo) throw new ErroAcao("Usuário não encontrado.");
+    const { ctx } = await exigirAdmin();
+    const alvo = await usuarioAdministrado(prisma, ctx, id);
     await gravar(() => prisma.usuario.update({ where: { id }, data: { tentativasFalhas: 0, bloqueadoAte: null } }));
-    await auditar("desbloquear", "usuario", id, `${alvo.nome} (${alvo.email})`);
+    await auditar("desbloquear", "usuario", id, `${alvo.nome} (${alvo.email})`, undefined, { empresaId: empresaDoUsuario(alvo) });
     revalidar("/configuracoes/usuarios");
     return undefined;
   }, "Usuário desbloqueado.");
 }
 
-/**
- * Ativa ou inativa um usuário (idempotente). Inativar derruba as sessões (versaoSessao + 1);
- * ninguém inativa a si mesmo e o último administrador ativo não pode ser inativado.
- */
 export async function definirAtivoUsuario(id: string, ativo: boolean): Promise<Resultado> {
   return executar(async () => {
-    const eu = await exigirPermissao("config:admin");
+    const { u: eu, ctx } = await exigirAdmin();
     if (!ativo && id === eu.id) throw new ErroAcao("Você não pode inativar o seu próprio usuário.");
 
     const { alvo, alterou } = await emTransacao(async (tx) => {
-      const atual = await tx.usuario.findUnique({ where: { id }, select: { id: true, nome: true, email: true, papel: true, ativo: true } });
-      if (!atual) throw new ErroAcao("Usuário não encontrado.");
+      const atual = await usuarioAdministrado(tx, ctx, id);
       if (atual.ativo === ativo) return { alvo: atual, alterou: false };
-      if (!ativo && atual.papel === "ADMIN") await exigirOutroAdminAtivo(tx, atual.id);
+      if (!ativo && ehAdminDoGrupo(atual)) await exigirOutroAdminDoGrupo(tx, atual.id);
       await tx.usuario.update({
         where: { id },
         data: ativo ? { ativo: true } : { ativo: false, versaoSessao: { increment: 1 } },
@@ -307,10 +392,14 @@ export async function definirAtivoUsuario(id: string, ativo: boolean): Promise<R
     });
 
     if (alterou) {
-      await auditar(ativo ? "ativar" : "inativar", "usuario", id, `${alvo.nome} (${alvo.email})`, {
-        antes: { ativo: alvo.ativo },
-        depois: { ativo },
-      });
+      await auditar(
+        ativo ? "ativar" : "inativar",
+        "usuario",
+        id,
+        `${alvo.nome} (${alvo.email})`,
+        { antes: { ativo: alvo.ativo }, depois: { ativo } },
+        { empresaId: empresaDoUsuario(alvo) },
+      );
       revalidar("/configuracoes/usuarios");
     }
     return undefined;

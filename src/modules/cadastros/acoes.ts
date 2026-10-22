@@ -15,6 +15,7 @@ type Delegado = {
   update(a: { where: { id: string }; data: Record<string, unknown> }): Promise<Registro>;
   delete(a: { where: { id: string } }): Promise<Registro>;
   findUnique(a: { where: { id: string } }): Promise<Registro | null>;
+  findFirst(a: { where: Record<string, unknown> }): Promise<Registro | null>;
 };
 type Esquema = { parse(v: unknown): Record<string, unknown> };
 
@@ -43,6 +44,20 @@ function validarEntidade(entidade: string): EntidadeCadastro {
   return entidade as EntidadeCadastro;
 }
 
+/**
+ * Confere que o registro pertence à empresa ativa e devolve o registro.
+ * Contas bancárias pertencem à matriz ou a uma filial; os demais cadastros, à matriz.
+ */
+async function registroDaEmpresa(ent: EntidadeCadastro, id: string, delegado: Delegado): Promise<Registro> {
+  const escopo = await escopoEmpresa();
+  if (ent === "contas-bancarias") await exigirContaNoEscopo(escopo, id, "id");
+  const atual = await delegado.findFirst({
+    where: ent === "contas-bancarias" ? { id, empresaId: { in: escopo.ids } } : { id, empresaId: escopo.ativa.id },
+  });
+  if (!atual) throw new ErroAcao("Registro não encontrado nesta empresa.");
+  return atual;
+}
+
 export async function salvarCadastro(
   entidade: string,
   id: string | null,
@@ -53,15 +68,16 @@ export async function salvarCadastro(
     const ent = validarEntidade(entidade);
     const { delegado, esquema, nome, rotulo } = configuracao(ent);
     const dados = esquema.parse(valores);
-    // Conta bancária pertence a uma empresa: só da empresa ativa (matriz ou filiais).
+    const escopo = await escopoEmpresa();
     if (ent === "contas-bancarias") {
-      const escopo = await escopoEmpresa();
+      // conta da matriz ou de uma filial dela, escolhida no formulário
       exigirEmpresaNoEscopo(escopo, (dados as { empresaId?: string }).empresaId, "Empresa fora do escopo atual. Troque de empresa no menu.");
-      if (id) await exigirContaNoEscopo(escopo, id, "id");
+    } else {
+      // demais cadastros pertencem à empresa (matriz) ativa; o formulário não escolhe
+      dados.empresaId = escopo.ativa.id;
     }
     if (id) {
-      const antes = await delegado.findUnique({ where: { id } });
-      if (!antes) throw new ErroAcao("Registro não encontrado.");
+      const antes = await registroDaEmpresa(ent, id, delegado);
       const r = await delegado.update({ where: { id }, data: dados });
       await auditar("atualizar", nome, id, rotulo(r), { antes, depois: dados });
       revalidatePath(`/cadastros/${ent}`);
@@ -76,12 +92,10 @@ export async function salvarCadastro(
 
 export async function alternarAtivoCadastro(entidade: string, id: string): Promise<Resultado> {
   return executar(async () => {
-    if (validarEntidade(entidade) === "contas-bancarias") await exigirContaNoEscopo(await escopoEmpresa(), id, "id");
     await exigirPermissao("cadastros:editar");
     const ent = validarEntidade(entidade);
     const { delegado, nome, rotulo } = configuracao(ent);
-    const atual = await delegado.findUnique({ where: { id } });
-    if (!atual) throw new ErroAcao("Registro não encontrado.");
+    const atual = await registroDaEmpresa(ent, id, delegado);
     const r = await delegado.update({ where: { id }, data: { ativo: !atual.ativo } });
     await auditar(r.ativo ? "ativar" : "inativar", nome, id, rotulo(r));
     revalidatePath(`/cadastros/${ent}`);
@@ -94,6 +108,7 @@ export async function excluirCadastro(entidade: string, id: string): Promise<Res
     await exigirPermissao("cadastros:editar");
     const ent = validarEntidade(entidade);
     const { delegado, nome, rotulo } = configuracao(ent);
+    await registroDaEmpresa(ent, id, delegado);
     const r = await delegado.delete({ where: { id } });
     await auditar("excluir", nome, id, rotulo(r), r);
     revalidatePath(`/cadastros/${ent}`);

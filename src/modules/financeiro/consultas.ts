@@ -208,7 +208,8 @@ export async function resumoTitulos(tipo: TipoTitulo): Promise<ResumoTitulos> {
 
 /** Condições de pagamento ativas (para o parcelamento no formulário). */
 export async function listarCondicoesPagamento(): Promise<CondicaoOpcao[]> {
-  const rows = await prisma.condicaoPagamento.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } });
+  const escopo = await escopoEmpresa();
+  const rows = await prisma.condicaoPagamento.findMany({ where: { ativo: true, empresaId: escopo.ativa.id }, orderBy: { nome: "asc" } });
   return rows.map((c) => ({ id: c.id, nome: c.nome, dias: c.dias }));
 }
 

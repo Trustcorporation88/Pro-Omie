@@ -18,7 +18,16 @@ import type { EmpresaOpcao, SegredoExibido, UsuarioAcao } from "@/modules/config
 
 /** "Novo usuário": abre o formulário e, depois de criar, mostra a senha provisória uma única vez. */
 /** Novo usuário nasce com acesso só à empresa ativa (o admin marca "todas" se quiser). */
-export function BotaoNovoUsuario({ empresas, empresaPadraoId }: { empresas: EmpresaOpcao[]; empresaPadraoId?: string }) {
+export function BotaoNovoUsuario({
+  empresas,
+  empresaPadraoId,
+  podeLiberarTodas,
+}: {
+  empresas: EmpresaOpcao[];
+  empresaPadraoId?: string;
+  /** só o administrador do grupo libera "todas as empresas" */
+  podeLiberarTodas: boolean;
+}) {
   const [aberto, setAberto] = useState(false);
   const [chave, setChave] = useState(0);
   const [segredo, setSegredo] = useState<SegredoExibido | null>(null);
@@ -47,6 +56,7 @@ export function BotaoNovoUsuario({ empresas, empresaPadraoId }: { empresas: Empr
             empresas: empresaPadraoId ? [empresaPadraoId] : [],
           }}
           empresasDisponiveis={empresas}
+          podeLiberarTodas={podeLiberarTodas}
           aberto={aberto}
           onAbertoChange={setAberto}
           aoCriar={setSegredo}
@@ -63,7 +73,7 @@ function Dica({ children }: { children: React.ReactNode }) {
 }
 
 /** Menu de ações da linha: editar, redefinir senha, desbloquear e inativar/reativar. */
-export function AcoesUsuario({ usuario: u, empresas }: { usuario: UsuarioAcao; empresas: EmpresaOpcao[] }) {
+export function AcoesUsuario({ usuario: u, empresas, podeLiberarTodas }: { usuario: UsuarioAcao; empresas: EmpresaOpcao[]; podeLiberarTodas: boolean }) {
   const [editar, setEditar] = useState(false);
   const [redefinir, setRedefinir] = useState(false);
   const [desbloquear, setDesbloquear] = useState(false);
@@ -74,11 +84,11 @@ export function AcoesUsuario({ usuario: u, empresas }: { usuario: UsuarioAcao; e
 
   const podeDesbloquear = u.bloqueado || u.tentativasFalhas > 0;
   // O servidor aplica as mesmas regras; aqui só evitamos oferecer ações que seriam recusadas.
-  const motivoNaoInativar = u.ativo ? (u.souEu ? "você" : u.ultimoAdminAtivo ? "único admin" : null) : null;
+  const motivoNaoInativar = u.ativo ? (u.souEu ? "você" : u.ultimoAdminAtivo ? "único admin do grupo" : null) : null;
   const papelTravado = u.souEu
     ? "Você não pode alterar o seu próprio papel."
     : u.ultimoAdminAtivo
-      ? "É o único administrador ativo. Promova outro usuário a administrador antes de alterar este papel."
+      ? "É o único administrador do grupo ativo. Promova outro usuário a administrador do grupo antes de alterar este papel."
       : undefined;
 
   return (
@@ -113,6 +123,7 @@ export function AcoesUsuario({ usuario: u, empresas }: { usuario: UsuarioAcao; e
           id={u.id}
           iniciais={{ nome: u.nome, email: u.email, papel: u.papel, todasEmpresas: u.todasEmpresas, empresas: u.empresas }}
           empresasDisponiveis={empresas}
+          podeLiberarTodas={podeLiberarTodas}
           papelTravado={papelTravado}
           aberto={editar}
           onAbertoChange={setEditar}

@@ -1,7 +1,7 @@
 import { cache } from "react";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
-import { ErroAcao, usuarioAtual, type UsuarioSessao } from "./sessao";
+import { ErroAcao, exigirPermissao, usuarioAtual, type UsuarioSessao } from "./sessao";
 
 /** Cookie com a empresa (matriz) escolhida no seletor do menu. Só uma preferência: o acesso é conferido a cada pedido. */
 export const COOKIE_EMPRESA = "pro_omie_empresa";
@@ -26,7 +26,7 @@ const resumo = (e: { id: string; razaoSocial: string; nomeFantasia: string | nul
   cnpj: e.cnpj,
 });
 
-/** Matrizes ativas que o usuário pode ver (admin e quem tem `todasEmpresas` veem todas). */
+/** Matrizes ativas que o usuário pode ver (quem tem `todasEmpresas` vê todas; os demais, as liberadas). */
 export async function matrizesAcessiveis(usuarioId: string): Promise<EmpresaResumo[]> {
   const [u, matrizes] = await Promise.all([
     prisma.usuario.findUnique({ where: { id: usuarioId }, select: { papel: true, todasEmpresas: true, empresas: true } }),
@@ -37,8 +37,41 @@ export async function matrizesAcessiveis(usuarioId: string): Promise<EmpresaResu
     }),
   ]);
   if (!u) return [];
-  const todas = u.papel === "ADMIN" || u.todasEmpresas;
-  return matrizes.filter((m) => todas || u.empresas.includes(m.id)).map(resumo);
+  return matrizes.filter((m) => u.todasEmpresas || u.empresas.includes(m.id)).map(resumo);
+}
+
+/**
+ * Quem administra o quê.
+ * - Administrador do grupo: papel ADMIN com todas as empresas. Cria empresas e libera qualquer acesso.
+ * - Administrador de empresa: papel ADMIN com empresas específicas. Administra só elas (dados, filiais,
+ *   usuários restritos a elas e auditoria delas).
+ */
+export type ContextoAdmin = { adminDoGrupo: boolean; matrizes: string[] };
+
+export async function contextoAdmin(usuarioId: string): Promise<ContextoAdmin> {
+  const u = await prisma.usuario.findUnique({ where: { id: usuarioId }, select: { papel: true, todasEmpresas: true, empresas: true } });
+  if (!u || u.papel !== "ADMIN") return { adminDoGrupo: false, matrizes: [] };
+  const matrizes = await prisma.empresa.findMany({
+    where: { matrizId: null, ...(u.todasEmpresas ? {} : { id: { in: u.empresas }, ativo: true }) },
+    select: { id: true },
+  });
+  return { adminDoGrupo: u.todasEmpresas, matrizes: matrizes.map((m) => m.id) };
+}
+
+/** Exige papel de administrador (do grupo ou de empresa) e devolve o que ele administra. */
+export async function exigirAdmin() {
+  const u = await exigirPermissao("config:admin");
+  return { u, ctx: await contextoAdmin(u.id) };
+}
+
+/** Exige o administrador do grupo (criar empresas, liberar "todas as empresas", promover a administrador do grupo). */
+export function exigirAdminDoGrupo(ctx: ContextoAdmin, mensagem = "Só o administrador do grupo pode fazer isso.") {
+  if (!ctx.adminDoGrupo) throw new ErroAcao(mensagem);
+}
+
+/** Exige que a empresa (matriz) esteja entre as administradas. */
+export function exigirMatrizAdministrada(ctx: ContextoAdmin, matrizId: string | null | undefined, mensagem = "Empresa não encontrada.") {
+  if (!matrizId || !ctx.matrizes.includes(matrizId)) throw new ErroAcao(mensagem);
 }
 
 /**

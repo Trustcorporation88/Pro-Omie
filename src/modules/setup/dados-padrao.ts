@@ -52,19 +52,19 @@ const CONDICOES: [string, string][] = [
   ["Entrada + 30/60", "0,30,60"],
 ];
 
-/** Plano de categorias, formas e condições de pagamento, centros de custo e conta Caixa. */
+/** Plano de categorias, formas e condições de pagamento, centros de custo e conta Caixa de uma empresa (matriz). */
 export async function criarDadosPadrao(tx: Prisma.TransactionClient, empresaId: string, hoje: Date) {
   await tx.categoria.createMany({
-    data: CATEGORIAS.map(([nome, tipo, grupoDre, codigo]) => ({ nome, tipo, grupoDre, codigo })),
+    data: CATEGORIAS.map(([nome, tipo, grupoDre, codigo]) => ({ empresaId, nome, tipo, grupoDre, codigo })),
     skipDuplicates: true,
   });
-  await tx.formaPagamento.createMany({ data: FORMAS.map(([nome, meio]) => ({ nome, meio })), skipDuplicates: true });
-  await tx.condicaoPagamento.createMany({ data: CONDICOES.map(([nome, dias]) => ({ nome, dias })), skipDuplicates: true });
+  await tx.formaPagamento.createMany({ data: FORMAS.map(([nome, meio]) => ({ empresaId, nome, meio })), skipDuplicates: true });
+  await tx.condicaoPagamento.createMany({ data: CONDICOES.map(([nome, dias]) => ({ empresaId, nome, dias })), skipDuplicates: true });
   await tx.centroCusto.createMany({
     data: [
-      { nome: "Administrativo", codigo: "01" },
-      { nome: "Comercial", codigo: "02" },
-      { nome: "Operacional", codigo: "03" },
+      { empresaId, nome: "Administrativo", codigo: "01" },
+      { empresaId, nome: "Comercial", codigo: "02" },
+      { empresaId, nome: "Operacional", codigo: "03" },
     ],
     skipDuplicates: true,
   });

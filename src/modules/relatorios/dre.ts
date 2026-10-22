@@ -141,8 +141,12 @@ export async function consultarDre(filtrosLidos: FiltrosDre): Promise<DadosDre> 
   const avisos: string[] = [];
   const escopo = await escopoEmpresa();
   const [categorias, centros] = await Promise.all([
-    prisma.categoria.findMany({ select: { id: true, nome: true, codigo: true, grupoDre: true } }),
-    prisma.centroCusto.findMany({ orderBy: [{ codigo: "asc" }, { nome: "asc" }], select: { id: true, nome: true, ativo: true } }),
+    prisma.categoria.findMany({ where: { empresaId: escopo.ativa.id }, select: { id: true, nome: true, codigo: true, grupoDre: true } }),
+    prisma.centroCusto.findMany({
+      where: { empresaId: escopo.ativa.id },
+      orderBy: [{ codigo: "asc" }, { nome: "asc" }],
+      select: { id: true, nome: true, ativo: true },
+    }),
   ]);
   // Filtro de empresa: a matriz ativa e as filiais dela. Outras empresas do grupo trocam-se no menu.
   const empresas = [escopo.ativa, ...escopo.filiais];

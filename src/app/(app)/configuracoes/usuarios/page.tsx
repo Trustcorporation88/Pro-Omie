@@ -8,7 +8,7 @@ import { exigirUsuario } from "@/lib/auth/sessao";
 import { ROTULO_PAPEL, type PapelUsuario } from "@/lib/auth/permissoes";
 import { fmtDataHora } from "@/lib/format";
 import { listarUsuarios } from "@/modules/configuracoes/consultas";
-import { escopoEmpresa } from "@/lib/auth/empresa";
+import { contextoAdmin, escopoEmpresa } from "@/lib/auth/empresa";
 
 export const metadata: Metadata = { title: "Usuários" };
 
@@ -22,18 +22,19 @@ const TOM_PAPEL: Record<PapelUsuario, "roxo" | "info" | "neutro"> = {
 
 export default async function UsuariosPage() {
   const eu = await exigirUsuario("config:admin");
-  const [{ usuarios, adminsAtivos, empresas }, escopo] = await Promise.all([listarUsuarios(), escopoEmpresa()]);
+  const ctx = await contextoAdmin(eu.id);
+  const [{ usuarios, adminsAtivos, empresas }, escopo] = await Promise.all([listarUsuarios(ctx), escopoEmpresa()]);
   const agora = new Date();
 
   return (
     <>
       <PageHeader titulo="Usuários" descricao="Quem acessa o Pro Omie, com qual papel, em quais empresas e em que situação.">
-        <BotaoNovoUsuario empresas={empresas} empresaPadraoId={escopo.ativa.id} />
+        <BotaoNovoUsuario empresas={empresas} empresaPadraoId={escopo.ativa.id} podeLiberarTodas={ctx.adminDoGrupo} />
       </PageHeader>
 
       {usuarios.length === 0 ? (
         <EstadoVazio titulo="Nenhum usuário cadastrado" descricao="Crie o primeiro usuário para liberar o acesso ao sistema.">
-          <BotaoNovoUsuario empresas={empresas} empresaPadraoId={escopo.ativa.id} />
+          <BotaoNovoUsuario empresas={empresas} empresaPadraoId={escopo.ativa.id} podeLiberarTodas={ctx.adminDoGrupo} />
         </EstadoVazio>
       ) : (
         <Card className="gap-0 overflow-hidden py-0">
@@ -64,10 +65,12 @@ export default async function UsuariosPage() {
                     </TableCell>
                     <TableCell className="text-sm">{u.email}</TableCell>
                     <TableCell>
-                      <Selo tom={TOM_PAPEL[u.papel]}>{ROTULO_PAPEL[u.papel]}</Selo>
+                      <Selo tom={TOM_PAPEL[u.papel]}>
+                        {u.papel === "ADMIN" ? (u.todasEmpresas ? "Administrador do grupo" : "Administrador da empresa") : ROTULO_PAPEL[u.papel]}
+                      </Selo>
                     </TableCell>
                     <TableCell className="text-sm">
-                      {u.papel === "ADMIN" || u.todasEmpresas ? (
+                      {u.todasEmpresas ? (
                         <span className="text-muted-foreground">Todas</span>
                       ) : (
                         <span className="flex flex-wrap gap-1">
@@ -96,6 +99,7 @@ export default async function UsuariosPage() {
                     <TableCell>
                       <AcoesUsuario
                         empresas={empresas}
+                        podeLiberarTodas={ctx.adminDoGrupo}
                         usuario={{
                           id: u.id,
                           nome: u.nome,
@@ -107,7 +111,7 @@ export default async function UsuariosPage() {
                           bloqueado,
                           tentativasFalhas: u.tentativasFalhas,
                           souEu,
-                          ultimoAdminAtivo: u.papel === "ADMIN" && u.ativo && adminsAtivos <= 1,
+                          ultimoAdminAtivo: u.papel === "ADMIN" && u.todasEmpresas && u.ativo && adminsAtivos <= 1,
                         }}
                       />
                     </TableCell>

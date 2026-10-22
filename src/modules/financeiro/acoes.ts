@@ -70,6 +70,13 @@ async function tituloNoEscopo(tx: Tx | typeof prisma, tituloId: string, escopo: 
   if (!t) throw new ErroAcao("Título não encontrado nesta empresa.");
 }
 
+/** Forma de pagamento informada na baixa: precisa ser da empresa ativa. */
+async function exigirFormaDaEmpresa(escopo: EscopoEmpresa, formaPagamentoId?: string | null) {
+  if (!formaPagamentoId) return;
+  const f = await prisma.formaPagamento.findFirst({ where: { id: formaPagamentoId, empresaId: escopo.ativa.id }, select: { id: true } });
+  if (!f) throw new ErroAcao("Forma de pagamento não encontrada nesta empresa.", { formaPagamentoId: "Forma de pagamento não encontrada nesta empresa." });
+}
+
 /** Confere se categorias, centros, conta, forma, pessoa e empresa existem (mensagens claras em vez de erro de FK). */
 async function validarReferencias(
   tx: Tx,
@@ -86,23 +93,27 @@ async function validarReferencias(
   const categoriaIds = [...new Set(d.rateios.map((r) => r.categoriaId))];
   const centroIds = [...new Set(d.rateios.map((r) => r.centroCustoId).filter((x): x is string => !!x))];
   const [categorias, centros, conta, forma, pessoa, empresa] = await Promise.all([
-    tx.categoria.findMany({ where: { id: { in: categoriaIds } }, select: { id: true, tipo: true } }),
-    centroIds.length ? tx.centroCusto.findMany({ where: { id: { in: centroIds } }, select: { id: true } }) : Promise.resolve([]),
+    tx.categoria.findMany({ where: { id: { in: categoriaIds }, empresaId: escopo.ativa.id }, select: { id: true, tipo: true } }),
+    centroIds.length
+      ? tx.centroCusto.findMany({ where: { id: { in: centroIds }, empresaId: escopo.ativa.id }, select: { id: true } })
+      : Promise.resolve([]),
     d.contaBancariaId
       ? tx.contaBancaria.findFirst({ where: { id: d.contaBancariaId, empresaId: { in: escopo.ids } }, select: { id: true } })
       : Promise.resolve(true),
-    d.formaPagamentoId ? tx.formaPagamento.findUnique({ where: { id: d.formaPagamentoId }, select: { id: true } }) : Promise.resolve(true),
-    d.pessoaId ? tx.pessoa.findUnique({ where: { id: d.pessoaId }, select: { id: true } }) : Promise.resolve(true),
+    d.formaPagamentoId
+      ? tx.formaPagamento.findFirst({ where: { id: d.formaPagamentoId, empresaId: escopo.ativa.id }, select: { id: true } })
+      : Promise.resolve(true),
+    d.pessoaId ? tx.pessoa.findFirst({ where: { id: d.pessoaId, empresaId: escopo.ativa.id }, select: { id: true } }) : Promise.resolve(true),
     d.empresaId ? tx.empresa.findFirst({ where: { id: d.empresaId, AND: { id: { in: escopo.ids } } }, select: { id: true } }) : Promise.resolve(true),
   ]);
   const tipoCategoria = d.tipo === "RECEBER" ? "RECEITA" : "DESPESA";
-  if (categorias.length !== categoriaIds.length) throw new ErroAcao("Categoria não encontrada. Recarregue a página.");
+  if (categorias.length !== categoriaIds.length) throw new ErroAcao("Categoria não encontrada nesta empresa. Recarregue a página.");
   if (categorias.some((c) => c.tipo !== tipoCategoria))
     throw new ErroAcao(`Use categorias de ${tipoCategoria === "RECEITA" ? "receita" : "despesa"} neste lançamento.`);
-  if (centros.length !== centroIds.length) throw new ErroAcao("Centro de custo não encontrado. Recarregue a página.");
+  if (centros.length !== centroIds.length) throw new ErroAcao("Centro de custo não encontrado nesta empresa. Recarregue a página.");
   if (!conta) throw new ErroAcao("Conta bancária não encontrada nesta empresa.");
-  if (!forma) throw new ErroAcao("Forma de pagamento não encontrada.");
-  if (!pessoa) throw new ErroAcao("Cliente/fornecedor não encontrado.");
+  if (!forma) throw new ErroAcao("Forma de pagamento não encontrada nesta empresa.");
+  if (!pessoa) throw new ErroAcao("Cliente/fornecedor não encontrado nesta empresa.");
   if (!empresa) throw new ErroAcao("Empresa fora do escopo atual. Troque de empresa no menu.", { empresaId: "Empresa fora do escopo atual." });
 }
 
@@ -204,6 +215,7 @@ export async function baixarTituloAcao(entrada: EntradaBaixa): Promise<Resultado
     const d = esquemaBaixa.parse(entrada);
     const escopo = await escopoEmpresa();
     await exigirContaNoEscopo(escopo, d.contaBancariaId);
+    await exigirFormaDaEmpresa(escopo, d.formaPagamentoId);
     const { baixa, titulo } = await prisma.$transaction(async (tx) => {
       await tituloNoEscopo(tx, d.tituloId, escopo);
       await travarTitulo(tx, d.tituloId);
@@ -235,6 +247,7 @@ export async function baixarEmLoteAcao(entrada: EntradaBaixaLote): Promise<Resul
     const ids = [...new Set(d.tituloIds)].sort();
     const escopo = await escopoEmpresa();
     await exigirContaNoEscopo(escopo, d.contaBancariaId);
+    await exigirFormaDaEmpresa(escopo, d.formaPagamentoId);
     const feitas = await prisma.$transaction(async (tx) => {
       const out: { baixaId: string; tituloId: string; numero: number; tipo: TipoTitulo; valor: number }[] = [];
       for (const tituloId of ids) {
