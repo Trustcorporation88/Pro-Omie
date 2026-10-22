@@ -38,7 +38,7 @@ export function SecaoAnexos({ tituloId, anexos, podeEditar }: { tituloId: string
         return false;
       }
       if (f.size > ANEXO_TAMANHO_MAX) {
-        toast.error(`${f.name}: o arquivo passa de 5 MB.`);
+        toast.error(`${f.name}: o arquivo passa de 4 MB.`);
         return false;
       }
       if (f.size === 0) {
@@ -93,7 +93,7 @@ export function SecaoAnexos({ tituloId, anexos, podeEditar }: { tituloId: string
           <Paperclip className="size-4 text-muted-foreground" /> Anexos
           {anexos.length > 0 && <span className="text-sm font-normal text-muted-foreground">({anexos.length})</span>}
         </CardTitle>
-        <CardDescription>PDF, imagens, XML, OFX, CSV, XLSX ou DOCX · até 5 MB</CardDescription>
+        <CardDescription>PDF, imagens, XML, OFX, CSV, XLSX ou DOCX · até 4 MB</CardDescription>
         {podeEditar && (
           <CardAction>
             <input

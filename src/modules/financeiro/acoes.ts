@@ -380,7 +380,7 @@ export async function anexarArquivoAcao(formData: FormData): Promise<Resultado<{
     const tituloId = esquemaId.parse(formData.get("tituloId"));
     const arquivo = formData.get("arquivo");
     if (!(arquivo instanceof File) || arquivo.size === 0) throw new ErroAcao("Selecione um arquivo.");
-    if (arquivo.size > ANEXO_TAMANHO_MAX) throw new ErroAcao("O arquivo passa de 5 MB.");
+    if (arquivo.size > ANEXO_TAMANHO_MAX) throw new ErroAcao("O arquivo passa de 4 MB.");
     const nome = limparNomeArquivo(arquivo.name);
     const ext = extensaoArquivo(nome);
     const mimeType = ANEXO_TIPOS[ext];

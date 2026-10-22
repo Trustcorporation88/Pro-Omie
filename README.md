@@ -24,7 +24,7 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 - Next.js 16 (App Router, Server Actions) + React 19 + TypeScript
 - Prisma 7 com `@prisma/adapter-pg` → Postgres no Supabase (schema `erp`, fora da Data API)
 - Tailwind CSS 4 + shadcn/ui + Recharts
-- Deploy na Railway (migrations aplicadas automaticamente antes de cada deploy)
+- Deploy na Vercel, região São Paulo (`gru1`); migrations aplicadas no build de produção
 
 ## Estrutura
 
@@ -35,6 +35,7 @@ src/app/(app)           telas do ERP (painel, financeiro, cadastros, configuraç
 src/modules/<domínio>   regras de negócio, server actions e consultas
 src/components          componentes de interface
 src/lib                 banco, sessão, permissões, auditoria, datas e formatação BR
+scripts/vercel-build.mjs  build da Vercel (migrations só em produção)
 ```
 
 Regras de negócio do financeiro ficam em `src/modules/financeiro/servicos.ts` e são reutilizadas pela conciliação e, nas próximas fases, por vendas, compras, notas e contratos.
@@ -50,6 +51,15 @@ npm run dev
 
 Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 
+## Deploy (Vercel)
+
+- `vercel.json` fixa a região `gru1` (São Paulo, perto do Supabase `sa-east-1`) e usa `scripts/vercel-build.mjs` como comando de build.
+- O build aplica `prisma migrate deploy` apenas quando `VERCEL_ENV=production`; previews nunca alteram o banco.
+- Commits em branches diferentes de `main` não geram build (Ignored Build Step).
+- Variáveis de ambiente ficam só no ambiente Production da Vercel.
+- Anexos: até 4 MB (as funções da Vercel aceitam até 4,5 MB por requisição).
+- Uso comercial (caso deste ERP) exige o plano Pro da Vercel; o Hobby é só para uso pessoal.
+
 ## Variáveis de ambiente
 
 | Variável | Uso |
@@ -57,6 +67,7 @@ Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 | `DATABASE_URL` | Pooler do Supabase em modo transação (porta 6543), usado pelo app |
 | `DIRECT_URL` | Pooler em modo sessão (porta 5432) com `?schema=erp`, usado nas migrations |
 | `AUTH_SECRET` | Segredo da sessão (mínimo 32 caracteres) |
+| `DATABASE_POOL_MAX` | Opcional. Conexões por instância (padrão 3 na Vercel, 8 fora dela) |
 | `SETUP_TOKEN` | Token da configuração inicial |
 
 ## Roteiro

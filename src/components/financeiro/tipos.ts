@@ -276,7 +276,8 @@ export function valoresDeTitulo(t: TituloLinha, modo: "editar" | "duplicar", hoj
 
 // ───────────── Anexos ─────────────
 
-export const ANEXO_TAMANHO_MAX = 5 * 1024 * 1024;
+/** 4 MB: as funções da Vercel aceitam no máximo 4,5 MB por requisição. */
+export const ANEXO_TAMANHO_MAX = 4 * 1024 * 1024;
 
 /** Extensões aceitas e o Content-Type gravado (não confiamos no tipo informado pelo navegador). */
 export const ANEXO_TIPOS: Record<string, string> = {
