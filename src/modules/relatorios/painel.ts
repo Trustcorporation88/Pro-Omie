@@ -1,5 +1,6 @@
 import "server-only";
 // Dados do painel inicial (widgets financeiros). Todas as consultas rodam em paralelo.
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { addDias, addMeses, fimMes, inicioMes, isoParaDate, mesesEntre } from "@/lib/datas";
 import { arred2, fmtMesAno } from "@/lib/format";
@@ -40,12 +41,12 @@ export type DadosPainel = {
 const ABERTOS: ("ABERTO" | "PARCIAL")[] = ["ABERTO", "PARCIAL"];
 const TOP_CATEGORIAS = 6;
 
-async function primeirosPassos(): Promise<PrimeirosPassos> {
+async function primeirosPassos(empresaIds: string[]): Promise<PrimeirosPassos> {
   const [contaBanco, pessoa, categorias, extrato] = await Promise.all([
-    prisma.contaBancaria.findFirst({ where: { tipo: { not: "CAIXA" } }, select: { id: true } }),
+    prisma.contaBancaria.findFirst({ where: { tipo: { not: "CAIXA" }, empresaId: { in: empresaIds } }, select: { id: true } }),
     prisma.pessoa.findFirst({ select: { id: true } }),
     prisma.categoria.aggregate({ _min: { createdAt: true }, _max: { updatedAt: true } }),
-    prisma.extratoImportacao.findFirst({ select: { id: true } }),
+    prisma.extratoImportacao.findFirst({ where: { contaBancaria: { empresaId: { in: empresaIds } } }, select: { id: true } }),
   ]);
   const criadas = categorias._min.createdAt?.getTime();
   const alteradas = categorias._max.updatedAt?.getTime();
@@ -64,23 +65,29 @@ export async function carregarPainel(hoje: string): Promise<DadosPainel> {
   const inicio6 = inicioMes(addMeses(hoje, -5));
   const fim6 = fimMes(hoje);
   const mesIni = inicioMes(hoje);
+  const escopo = await escopoEmpresa();
+  const ids = escopo.ids;
 
   const [saldos, janela, atrasados, movimentos, proximos, despesas, categorias, algumTitulo] = await Promise.all([
-    saldosContas(prisma),
+    saldosContas(prisma, undefined, false, ids),
     prisma.titulo.groupBy({
       by: ["tipo", "vencimento"],
-      where: { status: { in: ABERTOS }, vencimento: { gte: isoParaDate(hoje), lte: isoParaDate(ate7) } },
+      where: { status: { in: ABERTOS }, empresaId: { in: ids }, vencimento: { gte: isoParaDate(hoje), lte: isoParaDate(ate7) } },
       _sum: { valor: true, valorPago: true },
       _count: { _all: true },
     }),
-    atrasadosPorTipo(hoje),
+    atrasadosPorTipo(hoje, ids),
     prisma.movimento.groupBy({
       by: ["data", "tipo"],
-      where: { data: { gte: isoParaDate(inicio6), lte: isoParaDate(fim6) }, origem: { not: "TRANSFERENCIA" } },
+      where: {
+        data: { gte: isoParaDate(inicio6), lte: isoParaDate(fim6) },
+        origem: { not: "TRANSFERENCIA" },
+        contaBancaria: { empresaId: { in: ids } },
+      },
       _sum: { valor: true },
     }),
     prisma.titulo.findMany({
-      where: { status: { in: ABERTOS }, vencimento: { gte: isoParaDate(hoje) } },
+      where: { status: { in: ABERTOS }, empresaId: { in: ids }, vencimento: { gte: isoParaDate(hoje) } },
       orderBy: [{ vencimento: "asc" }, { numero: "asc" }],
       take: 10,
       select: {
@@ -98,13 +105,18 @@ export async function carregarPainel(hoje: string): Promise<DadosPainel> {
     prisma.tituloRateio.groupBy({
       by: ["categoriaId"],
       where: {
-        titulo: { tipo: "PAGAR", status: { not: "CANCELADO" }, competencia: { gte: isoParaDate(mesIni), lte: isoParaDate(fimMes(hoje)) } },
+        titulo: {
+          tipo: "PAGAR",
+          status: { not: "CANCELADO" },
+          empresaId: { in: ids },
+          competencia: { gte: isoParaDate(mesIni), lte: isoParaDate(fimMes(hoje)) },
+        },
         categoria: { tipo: "DESPESA", grupoDre: { not: "NAO_OPERACIONAL" } },
       },
       _sum: { valor: true },
     }),
     prisma.categoria.findMany({ where: { tipo: "DESPESA" }, select: { id: true, nome: true } }),
-    prisma.titulo.findFirst({ select: { id: true } }),
+    prisma.titulo.findFirst({ where: { empresaId: { in: ids } }, select: { id: true } }),
   ]);
 
   // A receber / a pagar de hoje até hoje + 7
@@ -167,6 +179,6 @@ export async function carregarPainel(hoje: string): Promise<DadosPainel> {
       parcial: t.status === "PARCIAL",
     })),
     despesas: { mes: mesIni, total: arred2(ordenadas.reduce((a, d) => a + d.valor, 0)), categorias: top },
-    primeirosPassos: algumTitulo ? null : await primeirosPassos(),
+    primeirosPassos: algumTitulo ? null : await primeirosPassos(ids),
   };
 }

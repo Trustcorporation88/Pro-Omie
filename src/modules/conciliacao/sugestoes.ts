@@ -106,10 +106,13 @@ export async function sugerirTitulos(db: DB, contaBancariaId: string, itens: Ite
 
   const tipos = new Set<"RECEBER" | "PAGAR">(validos.map((i) => (i.valor > 0 ? "RECEBER" : "PAGAR")));
   const menorValor = Math.min(...validos.map((i) => Math.abs(i.valor)));
+  const conta = await db.contaBancaria.findUnique({ where: { id: contaBancariaId }, select: { empresaId: true } });
   const titulos = await db.titulo.findMany({
     where: {
       status: { in: ["ABERTO", "PARCIAL"] },
       tipo: { in: Array.from(tipos) },
+      // mesma empresa da conta (matriz ou filial dela)
+      ...(conta ? { empresa: { OR: [{ id: conta.empresaId }, { matrizId: conta.empresaId }, { filiais: { some: { id: conta.empresaId } } }] } } : {}),
       vencimento: faixaDatas(validos, JANELA_TITULO),
       valor: { gte: decimal(Math.max(0, Math.round(menorValor * 100) - 1)) },
     },

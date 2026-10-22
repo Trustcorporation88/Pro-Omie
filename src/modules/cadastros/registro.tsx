@@ -1,3 +1,4 @@
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma, Prisma } from "@/lib/db";
 import { Selo, SeloAtivo } from "@/components/selos";
 import { fmtCep, fmtDocumento, fmtMoeda, fmtNumero, fmtTelefone } from "@/lib/format";
@@ -169,11 +170,16 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
       };
     }
     case "contas-bancarias": {
-      const where: Prisma.ContaBancariaWhereInput = { ...statusWhere(f.status), ...(f.q ? { OR: [{ nome: ins(f.q) }, { bancoNome: ins(f.q) }] } : {}) };
+      const escopo = await escopoEmpresa();
+      const where: Prisma.ContaBancariaWhereInput = {
+        empresaId: { in: escopo.ids },
+        ...statusWhere(f.status),
+        ...(f.q ? { OR: [{ nome: ins(f.q) }, { bancoNome: ins(f.q) }] } : {}),
+      };
       const [rows, total, somas] = await Promise.all([
         prisma.contaBancaria.findMany({ where, orderBy: { nome: "asc" }, include: { empresa: { select: { razaoSocial: true, nomeFantasia: true, cnpj: true } } }, ...pag(f) }),
         prisma.contaBancaria.count({ where }),
-        prisma.movimento.groupBy({ by: ["contaBancariaId", "tipo"], _sum: { valor: true } }),
+        prisma.movimento.groupBy({ by: ["contaBancariaId", "tipo"], where: { contaBancaria: { empresaId: { in: escopo.ids } } }, _sum: { valor: true } }),
       ]);
       const saldo = (id: string, inicial: number) =>
         somas.reduce((acc, s) => (s.contaBancariaId !== id ? acc : acc + (s.tipo === "CREDITO" ? 1 : -1) * num(s._sum.valor)), inicial);
@@ -255,8 +261,9 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
 /** Opções carregadas do banco para selects dos formulários. */
 export async function opcoesCadastro(entidade: EntidadeCadastro): Promise<Record<string, Opcao[]>> {
   if (entidade !== "contas-bancarias") return {};
-  const empresas = await prisma.empresa.findMany({ where: { ativo: true }, orderBy: { createdAt: "asc" } });
+  // Só a empresa ativa e as filiais dela: outra empresa do grupo troca-se no menu.
+  const escopo = await escopoEmpresa();
   return {
-    empresas: empresas.map((e) => ({ valor: e.id, rotulo: `${e.nomeFantasia || e.razaoSocial} · ${fmtDocumento(e.cnpj)}${e.matrizId ? "" : " (matriz)"}` })),
+    empresas: [escopo.ativa, ...escopo.filiais].map((e, i) => ({ valor: e.id, rotulo: `${e.nome} · ${fmtDocumento(e.cnpj)}${i === 0 ? " (matriz)" : ""}` })),
   };
 }

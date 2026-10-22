@@ -21,18 +21,18 @@ const TOM_PAPEL: Record<PapelUsuario, "roxo" | "info" | "neutro"> = {
 
 export default async function UsuariosPage() {
   const eu = await exigirUsuario("config:admin");
-  const { usuarios, adminsAtivos } = await listarUsuarios();
+  const { usuarios, adminsAtivos, empresas } = await listarUsuarios();
   const agora = new Date();
 
   return (
     <>
-      <PageHeader titulo="Usuários" descricao="Quem acessa o Pro Omie, com qual papel e em que situação.">
-        <BotaoNovoUsuario />
+      <PageHeader titulo="Usuários" descricao="Quem acessa o Pro Omie, com qual papel, em quais empresas e em que situação.">
+        <BotaoNovoUsuario empresas={empresas} />
       </PageHeader>
 
       {usuarios.length === 0 ? (
         <EstadoVazio titulo="Nenhum usuário cadastrado" descricao="Crie o primeiro usuário para liberar o acesso ao sistema.">
-          <BotaoNovoUsuario />
+          <BotaoNovoUsuario empresas={empresas} />
         </EstadoVazio>
       ) : (
         <Card className="gap-0 overflow-hidden py-0">
@@ -43,6 +43,7 @@ export default async function UsuariosPage() {
                 <TableHead>Nome</TableHead>
                 <TableHead>E-mail</TableHead>
                 <TableHead>Papel</TableHead>
+                <TableHead>Empresas</TableHead>
                 <TableHead>Situação</TableHead>
                 <TableHead>Último acesso</TableHead>
                 <TableHead className="w-10">
@@ -64,6 +65,23 @@ export default async function UsuariosPage() {
                     <TableCell>
                       <Selo tom={TOM_PAPEL[u.papel]}>{ROTULO_PAPEL[u.papel]}</Selo>
                     </TableCell>
+                    <TableCell className="text-sm">
+                      {u.papel === "ADMIN" || u.todasEmpresas ? (
+                        <span className="text-muted-foreground">Todas</span>
+                      ) : (
+                        <span className="flex flex-wrap gap-1">
+                          {u.empresas.map((id) => {
+                            const e = empresas.find((x) => x.id === id);
+                            return e ? (
+                              <Selo key={id} tom="neutro">
+                                {e.nome}
+                              </Selo>
+                            ) : null;
+                          })}
+                          {u.empresas.length === 0 && <span className="text-destructive">Nenhuma</span>}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-col items-start gap-1">
                         <SeloAtivo ativo={u.ativo} />
@@ -76,12 +94,15 @@ export default async function UsuariosPage() {
                     </TableCell>
                     <TableCell>
                       <AcoesUsuario
+                        empresas={empresas}
                         usuario={{
                           id: u.id,
                           nome: u.nome,
                           email: u.email,
                           papel: u.papel,
                           ativo: u.ativo,
+                          todasEmpresas: u.todasEmpresas,
+                          empresas: u.empresas,
                           bloqueado,
                           tentativasFalhas: u.tentativasFalhas,
                           souEu,

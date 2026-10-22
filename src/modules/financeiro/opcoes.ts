@@ -1,3 +1,4 @@
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { fmtDocumento } from "@/lib/format";
 import { ROTULOS, type Opcao } from "@/lib/rotulos";
@@ -9,19 +10,21 @@ export type OpcoesFinanceiras = {
   contas: Opcao[];
   formas: Opcao[];
   empresas: Opcao[];
-  /** id da empresa matriz (padrão dos lançamentos) */
+  /** id da empresa ativa (padrão dos lançamentos) */
   empresaPadraoId: string;
 };
 
 /** Opções ativas usadas nos formulários financeiros (selects). */
 export async function carregarOpcoesFinanceiras(): Promise<OpcoesFinanceiras> {
-  const [categorias, centros, contas, formas, empresas] = await Promise.all([
+  const escopo = await escopoEmpresa();
+  const [categorias, centros, contas, formas] = await Promise.all([
     prisma.categoria.findMany({ where: { ativo: true }, orderBy: [{ codigo: "asc" }, { nome: "asc" }] }),
     prisma.centroCusto.findMany({ where: { ativo: true }, orderBy: [{ codigo: "asc" }, { nome: "asc" }] }),
-    prisma.contaBancaria.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.contaBancaria.findMany({ where: { ativo: true, empresaId: { in: escopo.ids } }, orderBy: { nome: "asc" } }),
     prisma.formaPagamento.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
-    prisma.empresa.findMany({ where: { ativo: true }, orderBy: { createdAt: "asc" } }),
   ]);
+  // Empresa do lançamento: a matriz ativa e as filiais dela (outra empresa do grupo troca-se no menu).
+  const empresas = [escopo.ativa, ...escopo.filiais];
   const cat = (tipo: "RECEITA" | "DESPESA") =>
     categorias
       .filter((c) => c.tipo === tipo)
@@ -32,7 +35,7 @@ export async function carregarOpcoesFinanceiras(): Promise<OpcoesFinanceiras> {
     centros: centros.map((c) => ({ valor: c.id, rotulo: c.nome })),
     contas: contas.map((c) => ({ valor: c.id, rotulo: `${c.nome} (${ROTULOS.tipoConta[c.tipo]})` })),
     formas: formas.map((f) => ({ valor: f.id, rotulo: f.nome })),
-    empresas: empresas.map((e) => ({ valor: e.id, rotulo: `${e.nomeFantasia || e.razaoSocial} · ${fmtDocumento(e.cnpj)}` })),
-    empresaPadraoId: empresas.find((e) => !e.matrizId)?.id ?? empresas[0]?.id ?? "",
+    empresas: empresas.map((e) => ({ valor: e.id, rotulo: `${e.nome} · ${fmtDocumento(e.cnpj)}` })),
+    empresaPadraoId: escopo.ativa.id,
   };
 }

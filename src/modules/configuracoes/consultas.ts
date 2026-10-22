@@ -10,13 +10,13 @@ import type { FiltrosAuditoria, RegistroAuditoria, ValoresEmpresa } from "./tipo
 
 // ───────────── Empresa e filiais ─────────────
 
-/** A matriz é a empresa sem `matrizId` (a mais antiga, se houver mais de uma). */
-export function obterMatriz() {
-  return prisma.empresa.findFirst({ where: { matrizId: null }, orderBy: { createdAt: "asc" } });
-}
-
-export function listarFiliais(matrizId: string) {
-  return prisma.empresa.findMany({ where: { matrizId }, orderBy: [{ ativo: "desc" }, { razaoSocial: "asc" }] });
+/** Empresas do grupo (matrizes) com suas filiais, ativas primeiro e da mais antiga para a mais nova. */
+export function listarEmpresasDoGrupo() {
+  return prisma.empresa.findMany({
+    where: { matrizId: null },
+    orderBy: [{ ativo: "desc" }, { createdAt: "asc" }],
+    include: { filiais: { orderBy: [{ ativo: "desc" }, { razaoSocial: "asc" }] } },
+  });
 }
 
 /** Converte a empresa do banco em valores de formulário (texto formatado, sem Date). */
@@ -45,7 +45,7 @@ export function empresaParaValores(e: Empresa): ValoresEmpresa {
 // ───────────── Usuários ─────────────
 
 export async function listarUsuarios() {
-  const [usuarios, adminsAtivos] = await Promise.all([
+  const [usuarios, adminsAtivos, matrizes] = await Promise.all([
     prisma.usuario.findMany({
       // senhaHash nunca sai do servidor: nada de selecionar o registro inteiro.
       select: {
@@ -58,12 +58,20 @@ export async function listarUsuarios() {
         ultimoAcesso: true,
         tentativasFalhas: true,
         bloqueadoAte: true,
+        todasEmpresas: true,
+        empresas: true,
       },
       orderBy: [{ ativo: "desc" }, { nome: "asc" }],
     }),
     prisma.usuario.count({ where: { papel: "ADMIN", ativo: true } }),
+    prisma.empresa.findMany({
+      where: { matrizId: null, ativo: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, razaoSocial: true, nomeFantasia: true, cnpj: true },
+    }),
   ]);
-  return { usuarios, adminsAtivos };
+  const empresas = matrizes.map((m) => ({ id: m.id, nome: m.nomeFantasia || m.razaoSocial, cnpj: m.cnpj }));
+  return { usuarios, adminsAtivos, empresas };
 }
 
 // ───────────── Auditoria ─────────────

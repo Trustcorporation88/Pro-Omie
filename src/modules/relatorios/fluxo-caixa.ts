@@ -1,6 +1,7 @@
 import "server-only";
 // Consultas do fluxo de caixa. Agregações feitas no banco (groupBy por dia); o agrupamento em
 // semanas/meses e o saldo acumulado ficam em calcularFluxo (função pura).
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { addDias, diffDias, hojeISO, isoParaDate } from "@/lib/datas";
 import { arred2, fmtData } from "@/lib/format";
@@ -62,12 +63,14 @@ export function lerFiltrosFluxo(sp: SearchParams, hoje = hojeISO()): FiltrosFlux
 const ABERTOS: ("ABERTO" | "PARCIAL")[] = ["ABERTO", "PARCIAL"];
 
 /** Movimentos do período por dia. Todas as contas: ignora transferências (são internas). */
-async function realizadoPorDia(de: string, ate: string, conta: string | null) {
+async function realizadoPorDia(de: string, ate: string, conta: string | null, empresaIds: string[]) {
   const grupos = await prisma.movimento.groupBy({
     by: ["data", "tipo"],
     where: {
       data: { gte: isoParaDate(de), lte: isoParaDate(ate) },
-      ...(conta ? { contaBancariaId: conta } : { contaBancaria: { ativo: true }, origem: { not: "TRANSFERENCIA" } }),
+      ...(conta
+        ? { contaBancariaId: conta }
+        : { contaBancaria: { ativo: true, empresaId: { in: empresaIds } }, origem: { not: "TRANSFERENCIA" } }),
     },
     _sum: { valor: true },
   });
@@ -78,7 +81,7 @@ async function realizadoPorDia(de: string, ate: string, conta: string | null) {
 }
 
 /** Saldo em aberto (valor − valor pago) dos títulos por vencimento, de hoje até "ate". */
-async function previstoPorDia(hoje: string, ate: string, conta: string | null) {
+async function previstoPorDia(hoje: string, ate: string, conta: string | null, empresaIds: string[]) {
   const entradas: ValorDia[] = [];
   const saidas: ValorDia[] = [];
   if (ate < hoje) return { entradas, saidas };
@@ -86,6 +89,7 @@ async function previstoPorDia(hoje: string, ate: string, conta: string | null) {
     by: ["vencimento", "tipo"],
     where: {
       status: { in: ABERTOS },
+      empresaId: { in: empresaIds },
       vencimento: { gte: isoParaDate(hoje), lte: isoParaDate(ate) },
       ...(conta ? { contaBancariaId: conta } : {}),
     },
@@ -99,10 +103,15 @@ async function previstoPorDia(hoje: string, ate: string, conta: string | null) {
 }
 
 /** Títulos em aberto com vencimento anterior a hoje. */
-export async function atrasadosPorTipo(hoje: string, conta: string | null = null): Promise<Atrasados> {
+export async function atrasadosPorTipo(hoje: string, empresaIds: string[], conta: string | null = null): Promise<Atrasados> {
   const grupos = await prisma.titulo.groupBy({
     by: ["tipo"],
-    where: { status: { in: ABERTOS }, vencimento: { lt: isoParaDate(hoje) }, ...(conta ? { contaBancariaId: conta } : {}) },
+    where: {
+      status: { in: ABERTOS },
+      empresaId: { in: empresaIds },
+      vencimento: { lt: isoParaDate(hoje) },
+      ...(conta ? { contaBancariaId: conta } : {}),
+    },
     _sum: { valor: true, valorPago: true },
     _count: { _all: true },
   });
@@ -123,8 +132,9 @@ export async function atrasadosPorTipo(hoje: string, conta: string | null = null
 export async function consultarFluxo(filtrosLidos: FiltrosFluxo): Promise<DadosFluxo> {
   const filtros: FiltrosFluxo = { ...filtrosLidos, avisos: [...filtrosLidos.avisos] };
   const { de, ate, hoje } = filtros;
+  const escopo = await escopoEmpresa();
   const contas = await prisma.contaBancaria.findMany({
-    where: { ativo: true },
+    where: { ativo: true, empresaId: { in: escopo.ids } },
     orderBy: { nome: "asc" },
     select: { id: true, nome: true, saldoInicial: true, dataSaldoInicial: true },
   });
@@ -135,10 +145,10 @@ export async function consultarFluxo(filtrosLidos: FiltrosFluxo): Promise<DadosF
   const conta = filtros.conta;
 
   const [saldos, realizado, previsto, atrasados] = await Promise.all([
-    saldosContas(prisma, addDias(de, -1)),
-    realizadoPorDia(de, ate, conta),
-    previstoPorDia(hoje, ate, conta),
-    atrasadosPorTipo(hoje, conta),
+    saldosContas(prisma, addDias(de, -1), false, escopo.ids),
+    realizadoPorDia(de, ate, conta, escopo.ids),
+    previstoPorDia(hoje, ate, conta, escopo.ids),
+    atrasadosPorTipo(hoje, escopo.ids, conta),
   ]);
 
   const daConta = <T extends { id: string }>(c: T) => !conta || c.id === conta;

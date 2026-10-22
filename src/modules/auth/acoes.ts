@@ -4,20 +4,13 @@ import { timingSafeEqual } from "node:crypto";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
+import { gravarCookieEmpresa, matrizesAcessiveis } from "@/lib/auth/empresa";
 import { executar, tratarErro, type Resultado } from "@/lib/acoes";
 import { auditar } from "@/lib/auditoria";
 import { hojeDate } from "@/lib/datas";
 import { soDigitos, validarCNPJ } from "@/lib/format";
 import { buscarCep, buscarCnpj, type DadosCep, type DadosCnpj } from "@/lib/consultas-externas";
-import {
-  ErroAcao,
-  conferirSenha,
-  criarSessao,
-  encerrarSessao,
-  exigirUsuario,
-  hashSenha,
-  usuarioAtual,
-} from "@/lib/auth/sessao";
+import { ErroAcao, conferirSenha, criarSessao, encerrarSessao, exigirPermissao, exigirUsuario, hashSenha, usuarioAtual } from "@/lib/auth/sessao";
 import { criarDadosPadrao } from "@/modules/setup/dados-padrao";
 
 const HASH_FALSO = "$2b$11$C6UzMDM.H6dfI/f/IKcEeO4cG9r3bXQe0Lr1yH1x8XcZr3QfQz1aW";
@@ -224,6 +217,22 @@ export async function trocarSenha(_prev: Resultado | null, formData: FormData): 
     });
     await criarSessao(atualizado);
     await auditar("trocar_senha", "usuario", u.id);
+  } catch (e) {
+    return tratarErro(e);
+  }
+  redirect("/");
+}
+
+/**
+ * Troca a empresa ativa (seletor do menu). Confere o acesso, grava a preferência e volta ao painel,
+ * para a pessoa não continuar numa tela de detalhe da empresa anterior.
+ */
+export async function trocarEmpresa(empresaId: string): Promise<Resultado> {
+  try {
+    const u = await exigirPermissao();
+    const acessiveis = await matrizesAcessiveis(u.id);
+    if (!acessiveis.some((e) => e.id === empresaId)) throw new ErroAcao("Você não tem acesso a esta empresa.");
+    await gravarCookieEmpresa(empresaId);
   } catch (e) {
     return tratarErro(e);
   }

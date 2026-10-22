@@ -9,14 +9,17 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ROTULO_PAPEL, type PapelUsuario } from "@/lib/auth/permissoes";
+import { fmtDocumento } from "@/lib/format";
 import { criarUsuario, editarUsuario } from "@/modules/configuracoes/acoes";
-import { DESCRICAO_PAPEL, PAPEIS, type SegredoExibido } from "@/modules/configuracoes/tipos";
+import { DESCRICAO_PAPEL, PAPEIS, type EmpresaOpcao, type SegredoExibido } from "@/modules/configuracoes/tipos";
 
 /** Formulário (Dialog) para criar ou editar usuário. Na criação, a senha provisória volta por `aoCriar`. */
 export function FormularioUsuario({
   id,
   iniciais,
+  empresasDisponiveis,
   papelTravado,
   aberto,
   onAbertoChange,
@@ -25,7 +28,9 @@ export function FormularioUsuario({
 }: {
   /** null = novo usuário */
   id: string | null;
-  iniciais: { nome: string; email: string; papel: PapelUsuario };
+  iniciais: { nome: string; email: string; papel: PapelUsuario; todasEmpresas: boolean; empresas: string[] };
+  /** empresas (matrizes) do grupo que podem ser liberadas */
+  empresasDisponiveis: EmpresaOpcao[];
   /** motivo pelo qual o papel não pode ser alterado (desabilita a escolha) */
   papelTravado?: string;
   aberto: boolean;
@@ -40,7 +45,12 @@ export function FormularioUsuario({
   const [nome, setNome] = useState(iniciais.nome);
   const [email, setEmail] = useState(iniciais.email);
   const [papel, setPapel] = useState<string>(iniciais.papel);
+  const [todasEmpresas, setTodasEmpresas] = useState(iniciais.todasEmpresas);
+  const [empresas, setEmpresas] = useState<string[]>(iniciais.empresas);
   const [erros, setErros] = useState<Record<string, string>>({});
+  // Acesso por empresa só faz sentido com mais de uma empresa no grupo; admin sempre vê todas.
+  const escolheEmpresas = empresasDisponiveis.length > 1 && papel !== "ADMIN";
+  const acesso = { todasEmpresas: escolheEmpresas ? todasEmpresas : true, empresas: escolheEmpresas && !todasEmpresas ? empresas : [] };
   const [falhas, setFalhas] = useState(0);
   const [salvando, iniciar] = useTransition();
   const edicao = id !== null;
@@ -68,14 +78,14 @@ export function FormularioUsuario({
     e.preventDefault();
     iniciar(async () => {
       if (id !== null) {
-        const r = await editarUsuario(id, { nome, papel });
+        const r = await editarUsuario(id, { nome, papel, ...acesso });
         if (!r.ok) return falhar(r.campos, r.erro);
         toast.success(r.mensagem ?? "Alterações salvas.");
         onAbertoChange(false);
         router.refresh();
         return;
       }
-      const r = await criarUsuario({ nome, email, papel });
+      const r = await criarUsuario({ nome, email, papel, ...acesso });
       if (!r.ok) return falhar(r.campos, r.erro);
       toast.success(r.mensagem ?? "Usuário criado.");
       onAbertoChange(false);
@@ -213,6 +223,57 @@ export function FormularioUsuario({
               )
             )}
           </div>
+
+          {escolheEmpresas && (
+            <fieldset className="space-y-2">
+              <legend className="flex items-center gap-1 text-sm leading-none font-medium">Empresas</legend>
+              <Label
+                htmlFor={`${uid}-todas`}
+                className="cursor-pointer items-start gap-3 rounded-lg border p-3 font-normal transition-colors hover:bg-accent/40 has-data-[state=checked]:border-primary has-data-[state=checked]:bg-primary/5"
+              >
+                <Checkbox
+                  id={`${uid}-todas`}
+                  checked={todasEmpresas}
+                  onCheckedChange={(v) => {
+                    setTodasEmpresas(v === true);
+                    limparErro("empresas");
+                  }}
+                  className="mt-0.5"
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm leading-none font-medium">Todas as empresas do grupo</span>
+                  <span className="block text-xs leading-snug text-muted-foreground">Inclui as que forem cadastradas depois.</span>
+                </span>
+              </Label>
+              {!todasEmpresas && (
+                <div className="grid gap-2 pl-1" role="group" aria-label="Empresas liberadas" aria-describedby={erros.empresas ? `${uid}-empresas-erro` : undefined}>
+                  {empresasDisponiveis.map((e) => {
+                    const marcada = empresas.includes(e.id);
+                    return (
+                      <Label key={e.id} htmlFor={`${uid}-emp-${e.id}`} className="cursor-pointer items-center gap-3 font-normal">
+                        <Checkbox
+                          id={`${uid}-emp-${e.id}`}
+                          checked={marcada}
+                          onCheckedChange={(v) => {
+                            setEmpresas((atual) => (v === true ? [...new Set([...atual, e.id])] : atual.filter((x) => x !== e.id)));
+                            limparErro("empresas");
+                          }}
+                        />
+                        <span className="text-sm">
+                          {e.nome} <span className="text-xs text-muted-foreground">· {fmtDocumento(e.cnpj)}</span>
+                        </span>
+                      </Label>
+                    );
+                  })}
+                </div>
+              )}
+              {erros.empresas && (
+                <p id={`${uid}-empresas-erro`} className="text-xs text-destructive">
+                  {erros.empresas}
+                </p>
+              )}
+            </fieldset>
+          )}
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onAbertoChange(false)} disabled={salvando}>

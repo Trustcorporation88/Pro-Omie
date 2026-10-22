@@ -5,6 +5,7 @@ import { z } from "zod";
 import { prisma, type Prisma } from "@/lib/db";
 import { executar, type Resultado } from "@/lib/acoes";
 import { ErroAcao, exigirPermissao } from "@/lib/auth/sessao";
+import { escopoEmpresa, exigirContaNoEscopo, type EscopoEmpresa } from "@/lib/auth/empresa";
 import { auditar } from "@/lib/auditoria";
 import { addDias, diffDias, isoParaDate } from "@/lib/datas";
 import { fmtData, fmtMoeda } from "@/lib/format";
@@ -33,15 +34,30 @@ function revalidar(financeiro: boolean, tituloId?: string) {
   }
 }
 
-type ItemDb = { id: string; contaBancariaId: string; data: Date; valor: Prisma.Decimal; descricao: string; documento: string | null; status: string };
+type ItemDb = {
+  id: string;
+  contaBancariaId: string;
+  data: Date;
+  valor: Prisma.Decimal;
+  descricao: string;
+  documento: string | null;
+  status: string;
+  movimentoId: string | null;
+};
 
 function resumoItem(i: Pick<ItemDb, "data" | "valor" | "descricao">): string {
   return `${fmtData(i.data)} · ${fmtMoeda(num(i.valor))} · ${i.descricao}`.slice(0, 250);
 }
 
-async function itemPendente(tx: Tx, id: string): Promise<ItemDb> {
-  const item = await tx.extratoItem.findUnique({ where: { id } });
-  if (!item) throw new ErroAcao("Lançamento do extrato não encontrado.");
+/** Item do extrato de uma conta da empresa ativa. Fora dela, responde como se não existisse. */
+async function itemNoEscopo(tx: Tx | typeof prisma, id: string, escopo: EscopoEmpresa): Promise<ItemDb> {
+  const item = await tx.extratoItem.findFirst({ where: { id, contaBancaria: { empresaId: { in: escopo.ids } } } });
+  if (!item) throw new ErroAcao("Lançamento do extrato não encontrado nesta empresa.");
+  return item;
+}
+
+async function itemPendente(tx: Tx, id: string, escopo: EscopoEmpresa): Promise<ItemDb> {
+  const item = await itemNoEscopo(tx, id, escopo);
   if (item.status !== "PENDENTE") throw new ErroAcao("Este lançamento do extrato já foi tratado. Atualize a página.");
   return item;
 }
@@ -146,6 +162,8 @@ export async function importarOfx(formData: FormData): Promise<Resultado<Resulta
     const nome = (arquivo.name || "extrato.ofx").slice(0, 200);
     if (!/\.(ofx|qfx|ofc)$/i.test(nome)) throw new ErroAcao("Envie um arquivo com extensão .ofx.");
 
+    const escopo = await escopoEmpresa();
+    await exigirContaNoEscopo(escopo, contaBancariaId);
     const conta = await prisma.contaBancaria.findUnique({ where: { id: contaBancariaId } });
     if (!conta || !conta.ativo) throw new ErroAcao("Conta bancária inválida ou inativa.");
 
@@ -254,8 +272,9 @@ export async function importarOfx(formData: FormData): Promise<Resultado<Resulta
 export async function conciliarItem(itemId: string, movimentoId: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
+    const escopo = await escopoEmpresa();
     const info = await prisma.$transaction(async (tx) => {
-      const item = await itemPendente(tx, itemId);
+      const item = await itemPendente(tx, itemId, escopo);
       const mov = await tx.movimento.findUnique({ where: { id: movimentoId }, include: { extratoItem: { select: { id: true } } } });
       if (!mov || mov.contaBancariaId !== item.contaBancariaId) throw new ErroAcao("Movimento não encontrado nesta conta.");
       if (mov.conciliado || mov.extratoItem) throw new ErroAcao("Este movimento já está conciliado com outro lançamento do extrato.");
@@ -283,11 +302,12 @@ export async function conciliarItem(itemId: string, movimentoId: string): Promis
 export async function baixarEConciliar(itemId: string, tituloId: string): Promise<Resultado<{ numero: number }>> {
   const r = await executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
+    const escopo = await escopoEmpresa();
     const info = await prisma.$transaction(async (tx) => {
-      const item = await itemPendente(tx, itemId);
+      const item = await itemPendente(tx, itemId, escopo);
       const valor = num(item.valor);
-      const titulo = await tx.titulo.findUnique({ where: { id: tituloId }, select: { id: true, numero: true, tipo: true } });
-      if (!titulo) throw new ErroAcao("Título não encontrado.");
+      const titulo = await tx.titulo.findFirst({ where: { id: tituloId, empresaId: { in: escopo.ids } }, select: { id: true, numero: true, tipo: true } });
+      if (!titulo) throw new ErroAcao("Título não encontrado nesta empresa.");
       if (titulo.tipo !== (valor > 0 ? "RECEBER" : "PAGAR")) {
         throw new ErroAcao(valor > 0 ? "Entradas do extrato só baixam títulos a receber." : "Saídas do extrato só baixam títulos a pagar.");
       }
@@ -338,8 +358,9 @@ export async function criarLancamentoConciliado(
   const r = await executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const d = esquemaLancamento.parse(entrada);
+    const escopo = await escopoEmpresa();
     const info = await prisma.$transaction(async (tx) => {
-      const item = await itemPendente(tx, d.itemId);
+      const item = await itemPendente(tx, d.itemId, escopo);
       const valor = num(item.valor);
       const tipo: TipoLancamento = valor > 0 ? "RECEBER" : "PAGAR";
       const conta = await tx.contaBancaria.findUnique({ where: { id: item.contaBancariaId }, select: { id: true, empresaId: true, ativo: true } });
@@ -411,8 +432,7 @@ export async function criarLancamentoConciliado(
 export async function ignorarItem(itemId: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
-    const item = await prisma.extratoItem.findUnique({ where: { id: itemId } });
-    if (!item) throw new ErroAcao("Lançamento do extrato não encontrado.");
+    const item = await itemNoEscopo(prisma, itemId, await escopoEmpresa());
     const r = await prisma.extratoItem.updateMany({ where: { id: itemId, status: "PENDENTE" }, data: { status: "IGNORADO" } });
     if (r.count !== 1) throw new ErroAcao("Só lançamentos pendentes podem ser ignorados. Atualize a página.");
     await auditar("ignorar", "conciliacao", itemId, resumoItem(item), undefined, { usuarioId: u.id });
@@ -424,8 +444,7 @@ export async function ignorarItem(itemId: string): Promise<Resultado> {
 export async function restaurarItem(itemId: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
-    const item = await prisma.extratoItem.findUnique({ where: { id: itemId } });
-    if (!item) throw new ErroAcao("Lançamento do extrato não encontrado.");
+    const item = await itemNoEscopo(prisma, itemId, await escopoEmpresa());
     const r = await prisma.extratoItem.updateMany({ where: { id: itemId, status: "IGNORADO" }, data: { status: "PENDENTE" } });
     if (r.count !== 1) throw new ErroAcao("Este lançamento não está ignorado. Atualize a página.");
     await auditar("restaurar", "conciliacao", itemId, resumoItem(item), undefined, { usuarioId: u.id });
@@ -438,9 +457,9 @@ export async function restaurarItem(itemId: string): Promise<Resultado> {
 export async function desfazerConciliacao(itemId: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
+    const escopo = await escopoEmpresa();
     const item = await prisma.$transaction(async (tx) => {
-      const it = await tx.extratoItem.findUnique({ where: { id: itemId } });
-      if (!it) throw new ErroAcao("Lançamento do extrato não encontrado.");
+      const it = await itemNoEscopo(tx, itemId, escopo);
       if (it.status !== "CONCILIADO") throw new ErroAcao("Este lançamento não está conciliado. Atualize a página.");
       const r = await tx.extratoItem.updateMany({ where: { id: itemId, status: "CONCILIADO" }, data: { status: "PENDENTE", movimentoId: null } });
       if (r.count !== 1) throw new ErroAcao("Este lançamento não está conciliado. Atualize a página.");
@@ -457,6 +476,7 @@ export async function desfazerConciliacao(itemId: string): Promise<Resultado> {
 export async function conciliarAutomaticamente(contaBancariaId: string): Promise<Resultado<{ conciliados: number }>> {
   const r = await executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
+    await exigirContaNoEscopo(await escopoEmpresa(), contaBancariaId);
     const pares = await prisma.$transaction(
       async (tx) => {
         const itens = await tx.extratoItem.findMany({
@@ -513,8 +533,7 @@ export async function conciliarAutomaticamente(contaBancariaId: string): Promise
 export async function buscarMovimentosParaVincular(itemId: string): Promise<Resultado<MovimentoOpcao[]>> {
   return executar(async () => {
     await exigirPermissao("financeiro:ver");
-    const item = await prisma.extratoItem.findUnique({ where: { id: itemId }, select: { contaBancariaId: true, data: true, valor: true } });
-    if (!item) throw new ErroAcao("Lançamento do extrato não encontrado.");
+    const item = await itemNoEscopo(prisma, itemId, await escopoEmpresa());
     const data = isoReq(item.data);
     const valor = num(item.valor);
     const credito = valor > 0;

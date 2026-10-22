@@ -40,7 +40,8 @@ import {
   SidebarMenuItem,
   SidebarRail,
 } from "@/components/ui/sidebar";
-import { MarcaIcone, NomeMarca } from "@/components/marca";
+import { SeletorEmpresa } from "@/components/layout/seletor-empresa";
+import type { EmpresaResumo } from "@/lib/auth/empresa";
 import { NAVEGACAO } from "./navegacao";
 import { pode, type PapelUsuario } from "@/lib/auth/permissoes";
 
@@ -69,7 +70,7 @@ const ICONES: Record<string, LucideIcon> = {
   Wallet,
 };
 
-export function AppSidebar({ papel, empresa }: { papel: PapelUsuario; empresa: string }) {
+export function AppSidebar({ papel, empresa, empresas }: { papel: PapelUsuario; empresa: EmpresaResumo; empresas: EmpresaResumo[] }) {
   const pathname = usePathname();
   const ativo = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
 
@@ -78,15 +79,7 @@ export function AppSidebar({ papel, empresa }: { papel: PapelUsuario; empresa: s
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <Link href="/">
-                <MarcaIcone className="size-8 rounded-md" />
-                <div className="grid flex-1 text-left leading-tight">
-                  <NomeMarca tom="escuro" className="text-white" />
-                  <span className="truncate text-xs opacity-70">{empresa}</span>
-                </div>
-              </Link>
-            </SidebarMenuButton>
+            <SeletorEmpresa ativa={empresa} disponiveis={empresas} />
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>

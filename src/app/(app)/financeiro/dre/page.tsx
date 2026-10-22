@@ -93,7 +93,7 @@ export default async function DrePage({ searchParams }: Props) {
         />
         <FiltroSelect parametro="centro" rotulo="Centro de custo" valor={f.centro ?? ""} rotuloTodos="Todos os centros" opcoes={centros} />
         {empresas.length > 1 && (
-          <FiltroSelect parametro="empresa" rotulo="Empresa" valor={f.empresa ?? ""} rotuloTodos="Todas as empresas" opcoes={empresas} />
+          <FiltroSelect parametro="empresa" rotulo="Empresa" valor={f.empresa ?? ""} rotuloTodos="Matriz e filiais" opcoes={empresas} />
         )}
       </BarraFiltros>
 

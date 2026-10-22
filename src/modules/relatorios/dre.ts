@@ -1,5 +1,6 @@
 import "server-only";
 // Consultas da DRE gerencial (agregação no banco por categoria × mês) + montagem em montarDre.
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma, Prisma } from "@/lib/db";
 import { hojeISO } from "@/lib/datas";
 import { fmtDocumento } from "@/lib/format";
@@ -17,9 +18,12 @@ export type FiltrosDre = {
   ano: number;
   regime: RegimeDre;
   centro: string | null;
+  /** matriz ou filial escolhida no filtro (null = matriz ativa com todas as filiais) */
   empresa: string | null;
   /** 'YYYY-MM-DD' de hoje (fuso de São Paulo) */
   hoje: string;
+  /** ids da empresa ativa (matriz e filiais); preenchido em consultarDre */
+  escopoIds: string[];
 };
 
 export type DadosDre = {
@@ -39,6 +43,7 @@ export function lerFiltrosDre(sp: SearchParams, hoje = hojeISO()): FiltrosDre {
     centro: param(sp.centro)?.trim() || null,
     empresa: param(sp.empresa)?.trim() || null,
     hoje,
+    escopoIds: [],
   };
 }
 
@@ -64,7 +69,7 @@ function valoresCompetencia(f: FiltrosDre, inicio: string, fim: string) {
      WHERE t.status::text <> 'CANCELADO'
        AND t.competencia BETWEEN ${inicio}::date AND ${fim}::date
        ${f.centro ? Prisma.sql`AND ${CENTRO} = ${f.centro}` : Prisma.empty}
-       ${f.empresa ? Prisma.sql`AND t."empresaId" = ${f.empresa}` : Prisma.empty}
+       AND t."empresaId" IN (${Prisma.join(empresaIds(f))})
      GROUP BY 1, 2, 3`;
 }
 
@@ -106,7 +111,12 @@ function baixasRateadas(inicio: string, fim: string) {
 function filtroBaixas(f: FiltrosDre) {
   return Prisma.sql`WHERE TRUE
     ${f.centro ? Prisma.sql`AND y."centroCustoId" = ${f.centro}` : Prisma.empty}
-    ${f.empresa ? Prisma.sql`AND y."empresaId" = ${f.empresa}` : Prisma.empty}`;
+    AND y."empresaId" IN (${Prisma.join(empresaIds(f))})`;
+}
+
+/** Ids consultados: a empresa escolhida no filtro ou toda a empresa ativa (matriz e filiais). */
+function empresaIds(f: FiltrosDre): string[] {
+  return f.empresa ? [f.empresa] : f.escopoIds;
 }
 
 /** Regime de caixa: principal das baixas distribuído pelos rateios, pela data da baixa. */
@@ -129,19 +139,21 @@ function encargosBaixas(f: FiltrosDre, inicio: string, fim: string) {
 
 export async function consultarDre(filtrosLidos: FiltrosDre): Promise<DadosDre> {
   const avisos: string[] = [];
-  const [categorias, centros, empresas] = await Promise.all([
+  const escopo = await escopoEmpresa();
+  const [categorias, centros] = await Promise.all([
     prisma.categoria.findMany({ select: { id: true, nome: true, codigo: true, grupoDre: true } }),
     prisma.centroCusto.findMany({ orderBy: [{ codigo: "asc" }, { nome: "asc" }], select: { id: true, nome: true, ativo: true } }),
-    prisma.empresa.findMany({ orderBy: { createdAt: "asc" }, select: { id: true, razaoSocial: true, nomeFantasia: true, cnpj: true } }),
   ]);
-  const f: FiltrosDre = { ...filtrosLidos };
+  // Filtro de empresa: a matriz ativa e as filiais dela. Outras empresas do grupo trocam-se no menu.
+  const empresas = [escopo.ativa, ...escopo.filiais];
+  const f: FiltrosDre = { ...filtrosLidos, escopoIds: escopo.ids };
   if (f.centro && !centros.some((c) => c.id === f.centro)) {
     f.centro = null;
     avisos.push("O centro de custo escolhido não existe. Exibindo todos os centros.");
   }
   if (f.empresa && !empresas.some((e) => e.id === f.empresa)) {
     f.empresa = null;
-    avisos.push("A empresa escolhida não existe. Exibindo todas as empresas.");
+    avisos.push("A empresa escolhida não pertence à empresa ativa. Exibindo matriz e filiais.");
   }
 
   const inicio = `${f.ano}-01-01`;
@@ -168,7 +180,7 @@ export async function consultarDre(filtrosLidos: FiltrosDre): Promise<DadosDre> 
     filtros: f,
     resultado: montarDre(categorias, valores, encargos),
     centros: centros.map((c) => ({ valor: c.id, rotulo: c.ativo ? c.nome : `${c.nome} (inativo)` })),
-    empresas: empresas.map((e) => ({ valor: e.id, rotulo: `${e.nomeFantasia || e.razaoSocial} · ${fmtDocumento(e.cnpj)}` })),
+    empresas: escopo.filiais.length ? empresas.map((e) => ({ valor: e.id, rotulo: `${e.nome} · ${fmtDocumento(e.cnpj)}` })) : [],
     avisos,
   };
 }

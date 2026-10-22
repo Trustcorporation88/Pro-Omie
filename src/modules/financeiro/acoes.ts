@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma, Prisma } from "@/lib/db";
 import { executar, type Resultado } from "@/lib/acoes";
 import { ErroAcao, exigirPermissao } from "@/lib/auth/sessao";
+import { escopoEmpresa, exigirContaNoEscopo, exigirEmpresaNoEscopo, type EscopoEmpresa } from "@/lib/auth/empresa";
 import { auditar } from "@/lib/auditoria";
 import { arred2, fmtData, fmtMoeda } from "@/lib/format";
 import { num } from "@/lib/serial";
@@ -63,6 +64,12 @@ async function travarTitulo(tx: Tx, tituloId: string) {
   await tx.titulo.update({ where: { id: tituloId }, data: { updatedAt: new Date() }, select: { id: true } });
 }
 
+/** Título da empresa ativa (matriz ou filiais). Fora dela, responde como se não existisse. */
+async function tituloNoEscopo(tx: Tx | typeof prisma, tituloId: string, escopo: EscopoEmpresa) {
+  const t = await tx.titulo.findFirst({ where: { id: tituloId, empresaId: { in: escopo.ids } }, select: { id: true } });
+  if (!t) throw new ErroAcao("Título não encontrado nesta empresa.");
+}
+
 /** Confere se categorias, centros, conta, forma, pessoa e empresa existem (mensagens claras em vez de erro de FK). */
 async function validarReferencias(
   tx: Tx,
@@ -74,26 +81,29 @@ async function validarReferencias(
     contaBancariaId?: string | null;
     formaPagamentoId?: string | null;
   },
+  escopo: EscopoEmpresa,
 ) {
   const categoriaIds = [...new Set(d.rateios.map((r) => r.categoriaId))];
   const centroIds = [...new Set(d.rateios.map((r) => r.centroCustoId).filter((x): x is string => !!x))];
   const [categorias, centros, conta, forma, pessoa, empresa] = await Promise.all([
     tx.categoria.findMany({ where: { id: { in: categoriaIds } }, select: { id: true, tipo: true } }),
     centroIds.length ? tx.centroCusto.findMany({ where: { id: { in: centroIds } }, select: { id: true } }) : Promise.resolve([]),
-    d.contaBancariaId ? tx.contaBancaria.findUnique({ where: { id: d.contaBancariaId }, select: { id: true } }) : Promise.resolve(true),
+    d.contaBancariaId
+      ? tx.contaBancaria.findFirst({ where: { id: d.contaBancariaId, empresaId: { in: escopo.ids } }, select: { id: true } })
+      : Promise.resolve(true),
     d.formaPagamentoId ? tx.formaPagamento.findUnique({ where: { id: d.formaPagamentoId }, select: { id: true } }) : Promise.resolve(true),
     d.pessoaId ? tx.pessoa.findUnique({ where: { id: d.pessoaId }, select: { id: true } }) : Promise.resolve(true),
-    d.empresaId ? tx.empresa.findUnique({ where: { id: d.empresaId }, select: { id: true } }) : Promise.resolve(true),
+    d.empresaId ? tx.empresa.findFirst({ where: { id: d.empresaId, AND: { id: { in: escopo.ids } } }, select: { id: true } }) : Promise.resolve(true),
   ]);
   const tipoCategoria = d.tipo === "RECEBER" ? "RECEITA" : "DESPESA";
   if (categorias.length !== categoriaIds.length) throw new ErroAcao("Categoria não encontrada. Recarregue a página.");
   if (categorias.some((c) => c.tipo !== tipoCategoria))
     throw new ErroAcao(`Use categorias de ${tipoCategoria === "RECEITA" ? "receita" : "despesa"} neste lançamento.`);
   if (centros.length !== centroIds.length) throw new ErroAcao("Centro de custo não encontrado. Recarregue a página.");
-  if (!conta) throw new ErroAcao("Conta bancária não encontrada.");
+  if (!conta) throw new ErroAcao("Conta bancária não encontrada nesta empresa.");
   if (!forma) throw new ErroAcao("Forma de pagamento não encontrada.");
   if (!pessoa) throw new ErroAcao("Cliente/fornecedor não encontrado.");
-  if (!empresa) throw new ErroAcao("Empresa não encontrada.");
+  if (!empresa) throw new ErroAcao("Empresa fora do escopo atual. Troque de empresa no menu.", { empresaId: "Empresa fora do escopo atual." });
 }
 
 // ───────────────────────── Lançamentos ─────────────────────────
@@ -102,12 +112,17 @@ export async function criarLancamentoAcao(entrada: EntradaLancamento): Promise<R
   return executar(
     async () => {
       const u = await exigirPermissao("financeiro:editar");
+      const escopo = await escopoEmpresa();
       const d = esquemaLancamento.parse(entrada);
+      exigirEmpresaNoEscopo(escopo, d.empresaId, "Empresa fora do escopo atual. Troque de empresa no menu.");
       const criados = await prisma.$transaction(async (tx) => {
-        await validarReferencias(tx, d);
+        await validarReferencias(tx, d, escopo);
         if (d.baixarAgora) {
-          const conta = await tx.contaBancaria.findUnique({ where: { id: d.baixarAgora.contaBancariaId }, select: { ativo: true } });
-          if (!conta?.ativo) throw new ErroAcao("A conta escolhida para a baixa está inativa ou não existe.");
+          const conta = await tx.contaBancaria.findFirst({
+            where: { id: d.baixarAgora.contaBancariaId, empresaId: { in: escopo.ids } },
+            select: { ativo: true },
+          });
+          if (!conta?.ativo) throw new ErroAcao("A conta escolhida para a baixa está inativa ou não existe nesta empresa.");
         }
         const ids = await criarLancamento(tx, d, u.id);
         return tx.titulo.findMany({
@@ -140,13 +155,15 @@ export async function editarTituloAcao(tituloId: string, entrada: EntradaEdicaoT
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(tituloId);
     const d = esquemaEdicaoTitulo.parse(entrada);
+    const escopo = await escopoEmpresa();
     const { antes, depois } = await prisma.$transaction(async (tx) => {
+      await tituloNoEscopo(tx, id, escopo);
       await travarTitulo(tx, id);
       const antes = await tx.titulo.findUniqueOrThrow({
         where: { id },
         include: { rateios: { select: { categoriaId: true, centroCustoId: true, percentual: true } } },
       });
-      await validarReferencias(tx, { ...d, tipo: antes.tipo });
+      await validarReferencias(tx, { ...d, tipo: antes.tipo }, escopo);
       const depois = await editarTitulo(tx, id, d);
       return { antes, depois };
     });
@@ -185,7 +202,10 @@ export async function baixarTituloAcao(entrada: EntradaBaixa): Promise<Resultado
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const d = esquemaBaixa.parse(entrada);
+    const escopo = await escopoEmpresa();
+    await exigirContaNoEscopo(escopo, d.contaBancariaId);
     const { baixa, titulo } = await prisma.$transaction(async (tx) => {
+      await tituloNoEscopo(tx, d.tituloId, escopo);
       await travarTitulo(tx, d.tituloId);
       const baixa = await baixarTitulo(tx, d, u.id);
       const titulo = await tx.titulo.findUniqueOrThrow({
@@ -213,9 +233,12 @@ export async function baixarEmLoteAcao(entrada: EntradaBaixaLote): Promise<Resul
     const d = esquemaBaixaLote.parse(entrada);
     // ordem fixa evita deadlock entre lotes concorrentes
     const ids = [...new Set(d.tituloIds)].sort();
+    const escopo = await escopoEmpresa();
+    await exigirContaNoEscopo(escopo, d.contaBancariaId);
     const feitas = await prisma.$transaction(async (tx) => {
       const out: { baixaId: string; tituloId: string; numero: number; tipo: TipoTitulo; valor: number }[] = [];
       for (const tituloId of ids) {
+        await tituloNoEscopo(tx, tituloId, escopo);
         await travarTitulo(tx, tituloId);
         const t = await tx.titulo.findUniqueOrThrow({
           where: { id: tituloId },
@@ -253,11 +276,12 @@ export async function estornarBaixaAcao(baixaId: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(baixaId);
-    const atual = await prisma.baixa.findUnique({
-      where: { id },
+    const escopo = await escopoEmpresa();
+    const atual = await prisma.baixa.findFirst({
+      where: { id, titulo: { empresaId: { in: escopo.ids } } },
       select: { tituloId: true, valorTotal: true, data: true, titulo: { select: { numero: true, tipo: true } } },
     });
-    if (!atual) throw new ErroAcao("Baixa não encontrada.");
+    if (!atual) throw new ErroAcao("Baixa não encontrada nesta empresa.");
     await prisma.$transaction(async (tx) => {
       await travarTitulo(tx, atual.tituloId);
       await estornarBaixa(tx, id);
@@ -282,7 +306,9 @@ export async function cancelarTituloAcao(tituloId: string, motivo?: string | nul
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(tituloId);
     const m = esquemaMotivo.parse(motivo);
+    const escopo = await escopoEmpresa();
     const t = await prisma.$transaction(async (tx) => {
+      await tituloNoEscopo(tx, id, escopo);
       await travarTitulo(tx, id);
       return cancelarTitulo(tx, id, m);
     });
@@ -296,7 +322,9 @@ export async function reabrirTituloAcao(tituloId: string): Promise<Resultado> {
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(tituloId);
+    const escopo = await escopoEmpresa();
     const t = await prisma.$transaction(async (tx) => {
+      await tituloNoEscopo(tx, id, escopo);
       await travarTitulo(tx, id);
       return reabrirTitulo(tx, id);
     });
@@ -310,12 +338,13 @@ export async function excluirTituloAcao(tituloId: string): Promise<Resultado<{ t
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(tituloId);
+    const escopo = await escopoEmpresa();
     const t = await prisma.$transaction(async (tx) => {
-      const atual = await tx.titulo.findUnique({
-        where: { id },
+      const atual = await tx.titulo.findFirst({
+        where: { id, empresaId: { in: escopo.ids } },
         include: { rateios: { select: { categoriaId: true, centroCustoId: true, percentual: true, valor: true } } },
       });
-      if (!atual) throw new ErroAcao("Título não encontrado.");
+      if (!atual) throw new ErroAcao("Título não encontrado nesta empresa.");
       await excluirTitulo(tx, id);
       return atual;
     });
@@ -387,7 +416,8 @@ export async function anexarArquivoAcao(formData: FormData): Promise<Resultado<{
     if (!mimeType) throw new ErroAcao("Formato não aceito. Use PDF, PNG, JPG, WEBP, XML, OFX, CSV, XLSX ou DOCX.");
     const dados = new Uint8Array(await arquivo.arrayBuffer());
     if (!assinaturaConfere(ext, dados)) throw new ErroAcao(`O conteúdo do arquivo não corresponde a um .${ext} válido.`);
-    const titulo = await prisma.titulo.findUnique({ where: { id: tituloId }, select: { id: true, numero: true } });
+    const escopo = await escopoEmpresa();
+    const titulo = await prisma.titulo.findFirst({ where: { id: tituloId, empresaId: { in: escopo.ids } }, select: { id: true, numero: true } });
     if (!titulo) throw new ErroAcao("Título não encontrado.");
     const anexo = await prisma.anexo.create({
       data: { tituloId, nome, mimeType, tamanho: dados.byteLength, storage: "db", dados, criadoPorId: u.id },
@@ -435,12 +465,13 @@ export async function transferirAcao(entrada: EntradaTransferencia): Promise<Res
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const d = esquemaTransferencia.parse(entrada);
+    const escopo = await escopoEmpresa();
     const t = await prisma.$transaction(async (tx) => {
       const contas = await tx.contaBancaria.findMany({
-        where: { id: { in: [d.contaOrigemId, d.contaDestinoId] } },
+        where: { id: { in: [d.contaOrigemId, d.contaDestinoId] }, empresaId: { in: escopo.ids } },
         select: { id: true, nome: true, ativo: true },
       });
-      if (contas.length !== 2) throw new ErroAcao("Conta não encontrada. Recarregue a página.");
+      if (contas.length !== 2) throw new ErroAcao("Conta não encontrada nesta empresa. Recarregue a página.");
       if (contas.some((c) => !c.ativo)) throw new ErroAcao("Não é possível transferir de/para uma conta inativa.");
       const criada = await transferir(tx, d, u.id);
       const nome = (cid: string) => contas.find((c) => c.id === cid)?.nome ?? "";
@@ -463,9 +494,10 @@ export async function excluirTransferenciaAcao(transferenciaId: string): Promise
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(transferenciaId);
+    const escopo = await escopoEmpresa();
     const t = await prisma.$transaction(async (tx) => {
-      const atual = await tx.transferencia.findUnique({
-        where: { id },
+      const atual = await tx.transferencia.findFirst({
+        where: { id, contaOrigem: { empresaId: { in: escopo.ids } } },
         include: { contaOrigem: { select: { nome: true } }, contaDestino: { select: { nome: true } } },
       });
       if (!atual) throw new ErroAcao("Transferência não encontrada.");
@@ -489,8 +521,9 @@ export async function criarAjusteAcao(entrada: EntradaAjuste): Promise<Resultado
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const d = esquemaAjuste.parse(entrada);
-    const conta = await prisma.contaBancaria.findUnique({ where: { id: d.contaBancariaId }, select: { nome: true, ativo: true } });
-    if (!conta) throw new ErroAcao("Conta não encontrada.");
+    const escopo = await escopoEmpresa();
+    const conta = await prisma.contaBancaria.findFirst({ where: { id: d.contaBancariaId, empresaId: { in: escopo.ids } }, select: { nome: true, ativo: true } });
+    if (!conta) throw new ErroAcao("Conta não encontrada nesta empresa.");
     if (!conta.ativo) throw new ErroAcao("Não é possível lançar ajuste em conta inativa.");
     const m = await prisma.$transaction((tx) => criarAjuste(tx, d, u.id));
     await auditar(
@@ -510,9 +543,13 @@ export async function excluirAjusteAcao(movimentoId: string): Promise<Resultado>
   return executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const id = esquemaId.parse(movimentoId);
+    const escopo = await escopoEmpresa();
     const m = await prisma.$transaction(async (tx) => {
-      const atual = await tx.movimento.findUnique({ where: { id }, include: { contaBancaria: { select: { nome: true } } } });
-      if (!atual) throw new ErroAcao("Movimento não encontrado.");
+      const atual = await tx.movimento.findFirst({
+        where: { id, contaBancaria: { empresaId: { in: escopo.ids } } },
+        include: { contaBancaria: { select: { nome: true } } },
+      });
+      if (!atual) throw new ErroAcao("Movimento não encontrado nesta empresa.");
       await excluirAjuste(tx, id);
       return atual;
     });

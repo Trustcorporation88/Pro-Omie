@@ -26,10 +26,10 @@ const CLASSE_SELECT = cn(
 );
 
 const TEXTOS: Record<string, { titulo: string; descricao: string }> = {
-  "matriz:editar": { titulo: "Editar matriz", descricao: "Dados cadastrais da empresa principal." },
-  "matriz:novo": { titulo: "Cadastrar matriz", descricao: "Dados cadastrais da empresa principal." },
+  "matriz:editar": { titulo: "Editar empresa", descricao: "Dados cadastrais da empresa." },
+  "matriz:novo": { titulo: "Nova empresa", descricao: "Outra empresa do grupo, com CNPJ, contas e lançamentos próprios. A troca é feita no menu." },
   "filial:editar": { titulo: "Editar filial", descricao: "Dados cadastrais da filial." },
-  "filial:novo": { titulo: "Nova filial", descricao: "A filial fica vinculada à matriz." },
+  "filial:novo": { titulo: "Nova filial", descricao: "A filial fica vinculada à empresa (matriz) escolhida." },
 };
 
 function Campo({
@@ -86,6 +86,7 @@ function Secao({ titulo, children }: { titulo: string; children: React.ReactNode
 export function FormularioEmpresa({
   tipo,
   id,
+  matrizId = null,
   iniciais,
   aberto,
   onAbertoChange,
@@ -94,6 +95,8 @@ export function FormularioEmpresa({
   tipo: TipoEmpresa;
   /** null = cadastro novo */
   id: string | null;
+  /** matriz à qual a nova filial pertence (só para tipo "filial" e id null) */
+  matrizId?: string | null;
   iniciais: ValoresEmpresa;
   aberto: boolean;
   onAbertoChange: (v: boolean) => void;
@@ -206,7 +209,7 @@ export function FormularioEmpresa({
   function salvar(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     iniciarSalvar(async () => {
-      const r = await salvarEmpresa(id, tipo, valores);
+      const r = await salvarEmpresa(id, tipo, valores, matrizId);
       if (r.ok) {
         toast.success(r.mensagem ?? "Dados salvos.");
         onAbertoChange(false);

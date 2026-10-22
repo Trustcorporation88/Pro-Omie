@@ -14,10 +14,10 @@ import { ConfirmarAcao } from "@/components/confirmar-acao";
 import { FormularioUsuario } from "./usuario-form";
 import { SenhaProvisoriaDialog } from "./senha-provisoria-dialog";
 import { definirAtivoUsuario, desbloquearUsuario, redefinirSenhaUsuario } from "@/modules/configuracoes/acoes";
-import type { SegredoExibido, UsuarioAcao } from "@/modules/configuracoes/tipos";
+import type { EmpresaOpcao, SegredoExibido, UsuarioAcao } from "@/modules/configuracoes/tipos";
 
 /** "Novo usuário": abre o formulário e, depois de criar, mostra a senha provisória uma única vez. */
-export function BotaoNovoUsuario() {
+export function BotaoNovoUsuario({ empresas }: { empresas: EmpresaOpcao[] }) {
   const [aberto, setAberto] = useState(false);
   const [chave, setChave] = useState(0);
   const [segredo, setSegredo] = useState<SegredoExibido | null>(null);
@@ -38,7 +38,8 @@ export function BotaoNovoUsuario() {
         <FormularioUsuario
           key={chave}
           id={null}
-          iniciais={{ nome: "", email: "", papel: "FINANCEIRO" }}
+          iniciais={{ nome: "", email: "", papel: "FINANCEIRO", todasEmpresas: true, empresas: [] }}
+          empresasDisponiveis={empresas}
           aberto={aberto}
           onAbertoChange={setAberto}
           aoCriar={setSegredo}
@@ -55,7 +56,7 @@ function Dica({ children }: { children: React.ReactNode }) {
 }
 
 /** Menu de ações da linha: editar, redefinir senha, desbloquear e inativar/reativar. */
-export function AcoesUsuario({ usuario: u }: { usuario: UsuarioAcao }) {
+export function AcoesUsuario({ usuario: u, empresas }: { usuario: UsuarioAcao; empresas: EmpresaOpcao[] }) {
   const [editar, setEditar] = useState(false);
   const [redefinir, setRedefinir] = useState(false);
   const [desbloquear, setDesbloquear] = useState(false);
@@ -103,7 +104,8 @@ export function AcoesUsuario({ usuario: u }: { usuario: UsuarioAcao }) {
       {editar && (
         <FormularioUsuario
           id={u.id}
-          iniciais={{ nome: u.nome, email: u.email, papel: u.papel }}
+          iniciais={{ nome: u.nome, email: u.email, papel: u.papel, todasEmpresas: u.todasEmpresas, empresas: u.empresas }}
+          empresasDisponiveis={empresas}
           papelTravado={papelTravado}
           aberto={editar}
           onAbertoChange={setEditar}
