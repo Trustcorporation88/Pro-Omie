@@ -167,10 +167,13 @@ export function FormularioEmpresa({
               cidade: d.cidade || s.cidade,
               uf: d.uf || s.uf,
               codigoMunicipio: d.codigoMunicipio || s.codigoMunicipio,
+              inscricaoEstadual: d.inscricaoEstadual || s.inscricaoEstadual,
             },
       );
       setErros({});
-      toast.success(`Dados da Receita carregados${d.situacao ? ` · ${d.situacao}` : ""}`);
+      toast.success(
+        `Dados carregados (${d.fonte})${d.situacao ? ` · ${d.situacao}` : ""}${d.inscricaoEstadual ? ` · IE ${d.inscricaoEstadual}` : ""}`,
+      );
     });
   }
 

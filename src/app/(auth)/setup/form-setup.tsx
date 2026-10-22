@@ -34,8 +34,9 @@ export function FormSetup({ token }: { token: string }) {
       const d = r.data;
       setV((s) => ({
         ...s,
-        razaoSocial: d.razaoSocial,
-        nomeFantasia: d.nomeFantasia,
+        razaoSocial: d.razaoSocial || s.razaoSocial,
+        nomeFantasia: d.nomeFantasia || s.nomeFantasia,
+        inscricaoEstadual: d.inscricaoEstadual || s.inscricaoEstadual,
         cep: d.cep,
         logradouro: d.logradouro,
         numero: d.numero,
@@ -49,7 +50,9 @@ export function FormSetup({ token }: { token: string }) {
         telefone: d.telefone,
         regimeTributario: d.regimeSugerido ?? s.regimeTributario,
       }));
-      toast.success(`Dados da Receita carregados${d.situacao ? ` · situação ${d.situacao}` : ""}`);
+      toast.success(
+        `Dados carregados (${d.fonte})${d.situacao ? ` · situação ${d.situacao}` : ""}${d.inscricaoEstadual ? ` · IE ${d.inscricaoEstadual}` : ""}`,
+      );
     });
   }
 
