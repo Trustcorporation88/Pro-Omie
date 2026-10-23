@@ -7,6 +7,8 @@ import { configuracaoEmail, enviarViaResend, type Anexo } from "./provedor";
 const ESPERAS_MIN = [5, 30, 120, 720, 1440];
 const MAX_TENTATIVAS = ESPERAS_MIN.length;
 const SENSIVEIS = new Set(["senha_provisoria", "redefinir_senha"]);
+/** E-mails que vão para clientes: saem com o nome da empresa no "De:" (avisos do sistema seguem com o remetente configurado). */
+const COM_NOME_DA_EMPRESA = new Set(["proposta", "pedido", "nfe", "nfse", "cobranca", "teste"]);
 
 export const emailsValidos = (lista: string) =>
   lista
@@ -57,11 +59,13 @@ export async function despachar(id: string) {
   if (!configurado) {
     return prisma.email.update({ where: { id }, data: { erro: "E-mail não configurado: falta RESEND_API_KEY na Vercel.", proximaTentativa: new Date(Date.now() + 3_600_000) } });
   }
+  const empresa = e.empresaId && COM_NOME_DA_EMPRESA.has(e.tipo) ? await prisma.empresa.findUnique({ where: { id: e.empresaId }, select: { nomeFantasia: true, razaoSocial: true } }) : null;
   try {
     const provedorId = await enviarViaResend({
       para: e.para.split(", "),
       copia: e.copia ? e.copia.split(", ") : undefined,
       responderPara: e.responderPara,
+      nomeRemetente: empresa ? empresa.nomeFantasia || empresa.razaoSocial : null,
       assunto: e.assunto,
       html: e.html,
       texto: e.texto,

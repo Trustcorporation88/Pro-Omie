@@ -3,7 +3,24 @@
 import "server-only";
 
 const URL_RESEND = "https://api.resend.com";
-export const REMETENTE_PADRAO = "Pro Omie <nao-responda@erp.trustcorp.com.br>";
+export const REMETENTE_PADRAO = "Pro Omie <nao-responda@trustcorp.com.br>";
+
+/** Nome de exibição seguro para o "De:" (sem aspas, <>, vírgulas e quebras de linha). */
+export function nomeExibicao(nome: string | null | undefined): string {
+  return (nome ?? "")
+    .normalize("NFC")
+    .replace(/[^\p{L}\p{N} &'.\-]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 80);
+}
+
+/** "Nome <endereço>": com o nome da empresa quando informado; senão o remetente configurado. */
+export function remetentePara(nomeRemetente?: string | null): string {
+  const { remetente, endereco } = configuracaoEmail();
+  const nome = nomeExibicao(nomeRemetente);
+  return nome ? `${nome} <${endereco}>` : remetente;
+}
 
 export function configuracaoEmail() {
   const chave = process.env.RESEND_API_KEY?.trim() || null;
@@ -41,15 +58,24 @@ async function resend<T>(caminho: string, opcoes: { metodo?: "GET" | "POST"; cor
 
 export type Anexo = { nome: string; tipo: string; base64: string };
 
-export type MensagemEmail = { para: string[]; copia?: string[]; responderPara?: string | null; assunto: string; html: string; texto: string; anexos?: Anexo[] };
+export type MensagemEmail = {
+  para: string[];
+  copia?: string[];
+  responderPara?: string | null;
+  /** nome da empresa no "De:" (e-mails para clientes); vazio = remetente configurado */
+  nomeRemetente?: string | null;
+  assunto: string;
+  html: string;
+  texto: string;
+  anexos?: Anexo[];
+};
 
 /** Envia pela Resend. Devolve o id do provedor ou lança erro com a mensagem da API. */
 export async function enviarViaResend(m: MensagemEmail): Promise<string> {
-  const { remetente } = configuracaoEmail();
   const r = await resend<{ id?: string; message?: string; name?: string }>("/emails", {
     metodo: "POST",
     corpo: {
-      from: remetente,
+      from: remetentePara(m.nomeRemetente),
       to: m.para,
       cc: m.copia?.length ? m.copia : undefined,
       reply_to: m.responderPara || undefined,
