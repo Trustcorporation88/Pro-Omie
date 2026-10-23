@@ -11,6 +11,8 @@ import { pode } from "@/lib/auth/permissoes";
 import { fmtDataHora, fmtDocumento, fmtMoeda } from "@/lib/format";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { obterNota } from "@/modules/fiscal/nfe/consultas";
+import { emailDoDocumentoCliente, estadoEmail } from "@/modules/email/consultas";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { ROTULO_STATUS_NOTA, TOM_STATUS_NOTA } from "@/modules/fiscal/nfe/tipos";
 import { ROTULO_MOTOR } from "@/modules/fiscal/tipos";
 
@@ -34,6 +36,7 @@ export default async function Pagina({ params }: Props) {
   const { id } = await params;
   const n = await obterNota(id);
   if (!n) notFound();
+  const email = { tipo: "nfe" as const, id: n.id, paraPadrao: await emailDoDocumentoCliente(n.destinatarioDocumento, (await escopoEmpresa()).ids), configurado: estadoEmail().configurado };
   return (
     <>
       <Link href="/fiscal/emitidas" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
@@ -50,7 +53,7 @@ export default async function Pagina({ params }: Props) {
         }
         descricao={`${n.destinatarioNome}${n.destinatarioDocumento ? ` · ${fmtDocumento(n.destinatarioDocumento)}` : ""}`}
       >
-        <AcoesNfe id={n.id} status={n.status} podeEditar={pode(u.papel, "fiscal:editar")} temDanfe={n.temDanfe} temXml={n.temXml} cancelavel={n.cancelavel} />
+        <AcoesNfe id={n.id} status={n.status} podeEditar={pode(u.papel, "fiscal:editar")} temDanfe={n.temDanfe} temXml={n.temXml} cancelavel={n.cancelavel} email={email} />
       </PageHeader>
       <div className="space-y-4">
         {(n.status === "REJEITADA" || n.status === "DENEGADA" || n.status === "PROCESSANDO") && n.xMotivo && (

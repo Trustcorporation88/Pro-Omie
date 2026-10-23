@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Ban, FileDown, FileCode2, LoaderCircle, PenLine, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { EnviarEmail, type AlvoEmail } from "@/components/email/enviar-email";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Campo } from "@/components/financeiro/campos";
@@ -12,7 +13,7 @@ import type { Resultado } from "@/lib/acoes";
 import { cancelarNfe, consultarNfe, corrigirNfe } from "@/modules/fiscal/nfe/acoes";
 import type { StatusNota } from "@/modules/fiscal/nfe/tipos";
 
-export function AcoesNfe({ id, status, podeEditar, temDanfe, temXml, cancelavel }: { id: string; status: StatusNota; podeEditar: boolean; temDanfe: boolean; temXml: boolean; cancelavel: boolean }) {
+export function AcoesNfe({ id, status, podeEditar, temDanfe, temXml, cancelavel, email }: { id: string; status: StatusNota; podeEditar: boolean; temDanfe: boolean; temXml: boolean; cancelavel: boolean; email?: AlvoEmail | null }) {
   const [dialogo, setDialogo] = useState<"cancelar" | "cce" | null>(null);
   const [pendente, iniciar] = useTransition();
   const router = useRouter();
@@ -32,6 +33,7 @@ export function AcoesNfe({ id, status, podeEditar, temDanfe, temXml, cancelavel 
           </a>
         </Button>
       )}
+      {email && (status === "AUTORIZADA" || status === "CANCELADA") && <EnviarEmail alvo={email} />}
       {podeEditar && (status === "PROCESSANDO" || status === "REJEITADA" || status === "AUTORIZADA") && (
         <Button
           variant="outline"

@@ -72,6 +72,7 @@ export function SenhaProvisoriaDialog({
           <DialogTitle>{segredo.tipo === "criado" ? "Usuário criado" : "Senha redefinida"}</DialogTitle>
           <DialogDescription>
             Senha provisória de <strong className="font-medium text-foreground">{segredo.nome}</strong> ({segredo.email}).
+            {segredo.emailEnviado ? " Ela também foi enviada por e-mail para a pessoa." : ""}
           </DialogDescription>
         </DialogHeader>
 

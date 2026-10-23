@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, Table
 import { PageHeader } from "@/components/page-header";
 import { Selo } from "@/components/selos";
 import { AcoesDocumento } from "@/components/vendas/acoes-documento";
+import type { AlvoEmail } from "@/components/email/enviar-email";
 import { fmtData, fmtMoeda } from "@/lib/format";
 import { hojeISO } from "@/lib/datas";
 import { fmtDecimal, fmtNumeroDoc, fmtPrecoUnitario } from "@/modules/vendas/calculos";
@@ -29,6 +30,7 @@ export function DetalheDocumento({
   podeVerFinanceiro,
   podeVerCrm = false,
   painelNfe,
+  email,
 }: {
   doc: DocumentoVenda;
   opcoes: OpcoesVenda;
@@ -38,6 +40,8 @@ export function DetalheDocumento({
   podeVerCrm?: boolean;
   /** painel da NF-e do pedido (montado no servidor pela página) */
   painelNfe?: React.ReactNode;
+  /** envio por e-mail (destinatário padrão e se o provedor está configurado) */
+  email?: AlvoEmail | null;
 }) {
   const proposta = doc.tipo === "proposta";
   const base = proposta ? "/vendas/propostas" : "/vendas/pedidos";
@@ -59,7 +63,7 @@ export function DetalheDocumento({
         }
         descricao={`${doc.pessoaNome} · ${fmtMoeda(doc.total)}`}
       >
-        <AcoesDocumento doc={doc} podeEditar={podeEditar} podeFaturar={podeFaturar} opcoes={opcoes} hoje={hoje} />
+        <AcoesDocumento doc={doc} podeEditar={podeEditar} podeFaturar={podeFaturar} opcoes={opcoes} hoje={hoje} email={email} />
       </PageHeader>
 
       {doc.motivo && (

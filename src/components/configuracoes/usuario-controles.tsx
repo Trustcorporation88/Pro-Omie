@@ -139,7 +139,7 @@ export function AcoesUsuario({ usuario: u, empresas, podeLiberarTodas }: { usuar
         rotuloConfirmar="Redefinir senha"
         acao={async () => {
           const r = await redefinirSenhaUsuario(u.id);
-          if (r.ok && r.data) setSegredo({ tipo: "redefinida", nome: r.data.nome, email: r.data.email, senha: r.data.senhaProvisoria });
+          if (r.ok && r.data) setSegredo({ tipo: "redefinida", nome: r.data.nome, email: r.data.email, senha: r.data.senhaProvisoria, emailEnviado: r.data.emailEnviado });
           return r;
         }}
       />

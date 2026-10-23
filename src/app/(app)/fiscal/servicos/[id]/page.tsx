@@ -11,6 +11,8 @@ import { pode } from "@/lib/auth/permissoes";
 import { fmtData, fmtDataHora, fmtDocumento, fmtMoeda } from "@/lib/format";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { obterNotaServico } from "@/modules/fiscal/nfse/consultas";
+import { emailDoDocumentoCliente, estadoEmail } from "@/modules/email/consultas";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { MOTIVOS_CANCELAMENTO_NFSE, urlConsultaPublicaNfse } from "@/modules/fiscal/nfse/tipos";
 import { ROTULO_STATUS_NOTA, TOM_STATUS_NOTA } from "@/modules/fiscal/nfe/tipos";
 import { ROTULO_MOTOR } from "@/modules/fiscal/tipos";
@@ -33,6 +35,7 @@ export default async function Pagina({ params }: Props) {
   const { id } = await params;
   const n = await obterNotaServico(id);
   if (!n) notFound();
+  const email = { tipo: "nfse" as const, id: n.id, paraPadrao: await emailDoDocumentoCliente(n.tomadorDocumento, (await escopoEmpresa()).ids), configurado: estadoEmail().configurado };
   const titulo = n.numeroNfse ? `NFS-e nº ${n.numeroNfse}` : `DPS nº ${n.numero} · série ${n.serie}`;
   return (
     <>
@@ -49,7 +52,7 @@ export default async function Pagina({ params }: Props) {
         }
         descricao={`${n.tomadorNome || "Sem tomador"}${n.tomadorDocumento ? ` · ${fmtDocumento(n.tomadorDocumento)}` : ""}`}
       >
-        <AcoesNfse id={n.id} status={n.status} podeEditar={pode(u.papel, "fiscal:editar")} temDanfse={n.temDanfse} temXml={n.temXml} />
+        <AcoesNfse id={n.id} status={n.status} podeEditar={pode(u.papel, "fiscal:editar")} temDanfse={n.temDanfse} temXml={n.temXml} email={email} />
       </PageHeader>
       <div className="space-y-4">
         {(n.status === "REJEITADA" || n.status === "PROCESSANDO") && n.mensagem && (

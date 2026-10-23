@@ -1339,3 +1339,52 @@ model NotaServico {
   @@index([empresaId, status])
   @@map("notas_servico")
 }
+
+enum StatusEmail {
+  PENDENTE
+  ENVIADO
+  FALHOU
+}
+
+/// Fila de e-mails transacionais (envio imediato com reenvio pelo cron). Anexos pequenos (PDF, XML) guardados em JSON base64.
+model Email {
+  id               String      @id @default(cuid())
+  empresaId        String?
+  tipo             String
+  origemId         String?
+  para             String
+  copia            String?
+  responderPara    String?
+  assunto          String
+  html             String
+  texto            String
+  /// [{ nome, tipo, base64 }]
+  anexos           Json?
+  status           StatusEmail @default(PENDENTE)
+  tentativas       Int         @default(0)
+  erro             String?
+  provedorId       String?
+  enviadoEm        DateTime?
+  proximaTentativa DateTime?
+  usuarioId        String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([status, proximaTentativa])
+  @@index([empresaId, createdAt])
+  @@index([tipo, origemId])
+  @@map("emails")
+}
+
+/// Token de redefinição de senha ("esqueci minha senha"): só o hash fica guardado; vale 1 hora e uma vez.
+model TokenSenha {
+  id        String    @id @default(cuid())
+  usuarioId String
+  tokenHash String    @unique
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([usuarioId])
+  @@map("tokens_senha")
+}

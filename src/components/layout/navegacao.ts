@@ -82,6 +82,7 @@ export const NAVEGACAO: GrupoNav[] = [
     itens: [
       { titulo: "Empresa e filiais", href: "/configuracoes/empresa", icone: "Building", permissao: "config:admin" },
       { titulo: "Usuários", href: "/configuracoes/usuarios", icone: "UserCog", permissao: "config:admin" },
+      { titulo: "E-mails", href: "/configuracoes/email", icone: "Mail", permissao: "config:admin" },
       { titulo: "Auditoria", href: "/configuracoes/auditoria", icone: "ScrollText", permissao: "config:admin" },
     ],
   },

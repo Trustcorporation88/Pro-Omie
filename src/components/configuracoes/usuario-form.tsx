@@ -98,7 +98,7 @@ export function FormularioUsuario({
       toast.success(r.mensagem ?? "Usuário criado.");
       onAbertoChange(false);
       router.refresh();
-      if (r.data) aoCriar?.({ tipo: "criado", nome: r.data.nome, email: r.data.email, senha: r.data.senhaProvisoria });
+      if (r.data) aoCriar?.({ tipo: "criado", nome: r.data.nome, email: r.data.email, senha: r.data.senhaProvisoria, emailEnviado: r.data.emailEnviado });
       else toast.error("Usuário criado, mas a senha provisória não pôde ser exibida. Use “Redefinir senha”.");
     });
   }
