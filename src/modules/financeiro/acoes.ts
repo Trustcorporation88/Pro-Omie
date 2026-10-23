@@ -6,6 +6,7 @@ import { executar, type Resultado } from "@/lib/acoes";
 import { ErroAcao, exigirPermissao } from "@/lib/auth/sessao";
 import { escopoEmpresa, exigirContaNoEscopo, exigirEmpresaNoEscopo, type EscopoEmpresa } from "@/lib/auth/empresa";
 import { auditar } from "@/lib/auditoria";
+import { encerrarCobrancaPorBaixaManual } from "@/modules/cobranca/servicos";
 import { arred2, fmtData, fmtMoeda } from "@/lib/format";
 import { num } from "@/lib/serial";
 import type { TipoTitulo } from "@/generated/prisma/enums";
@@ -234,6 +235,8 @@ export async function baixarTituloAcao(entrada: EntradaBaixa): Promise<Resultado
       { ...d, tituloId: titulo.id, valorTotal: num(baixa.valorTotal), statusTitulo: titulo.status },
       { usuarioId: u.id },
     );
+    // cobrança em aberto no Asaas: marca como recebida por fora, para o Asaas parar de cobrar
+    if (titulo.tipo === "RECEBER" && titulo.status === "QUITADO") await encerrarCobrancaPorBaixaManual(titulo.id, d.data).catch(() => 0);
     revalidarFinanceiro(titulo.id);
     return undefined;
   }, "Baixa registrada.");

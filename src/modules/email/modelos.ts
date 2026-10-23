@@ -90,3 +90,18 @@ export function modeloTeste(p: { nome: string; empresa: string }): Modelo {
     ...layout({ titulo: "Está tudo certo", paragrafos: [`Olá, ${p.nome.split(" ")[0]}. Este é um e-mail de teste enviado pelo Pro Omie de ${p.empresa}.`, "Se ele chegou, os registros DNS estão certos e os e-mails ao cliente vão sair normalmente."], rodape: rodapeEmpresa(p.empresa) }),
   };
 }
+
+export function modeloCobranca(p: { empresa: string; cliente: string; descricao: string; valor: string; vencimento: string; urlFatura: string | null; urlBoleto: string | null; linhaDigitavel: string | null; pixPayload: string | null; sandbox: boolean }): Modelo {
+  const paragrafos = [
+    `Olá, ${p.cliente}.`,
+    `${p.empresa} enviou a cobrança de ${p.valor} com vencimento em ${p.vencimento}, referente a: ${p.descricao}.`,
+    ...(p.linhaDigitavel ? [`Linha digitável do boleto: ${p.linhaDigitavel}`] : []),
+    ...(p.pixPayload ? [`Pix copia e cola: ${p.pixPayload}`] : []),
+    ...(p.urlBoleto ? [`Boleto em PDF: ${p.urlBoleto}`] : []),
+    "Depois do pagamento, a baixa é automática. Qualquer dúvida, é só responder este e-mail.",
+  ];
+  return {
+    assunto: `${p.sandbox ? "[TESTE] " : ""}Cobrança de ${p.valor} - ${p.empresa}`,
+    ...layout({ titulo: `Cobrança de ${p.valor}`, paragrafos, botao: p.urlFatura ? { texto: "Pagar com boleto ou Pix", url: p.urlFatura } : null, aviso: p.sandbox ? "Cobrança de teste (sandbox), sem valor." : null, rodape: rodapeEmpresa(p.empresa) }),
+  };
+}

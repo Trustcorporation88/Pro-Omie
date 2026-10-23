@@ -180,6 +180,8 @@ model Empresa {
   notasFiscais        NotaFiscal[]
   inutilizacoes       InutilizacaoNfe[]
   notasServico        NotaServico[]
+  configuracaoCobranca ConfiguracaoCobranca?
+  cobrancas           Cobranca[]
 
   @@map("empresas")
 }
@@ -476,6 +478,7 @@ model Titulo {
   rateios TituloRateio[]
   baixas  Baixa[]
   anexos  Anexo[]
+  cobrancas Cobranca[]
 
   @@index([tipo, status, vencimento])
   @@index([pessoaId])
@@ -1387,4 +1390,106 @@ model TokenSenha {
 
   @@index([usuarioId])
   @@map("tokens_senha")
+}
+
+enum TipoCobranca {
+  BOLETO
+  PIX
+  UNDEFINED
+}
+
+/// Cobrança pelo Asaas, por estabelecimento (uma conta Asaas por CNPJ). A chave da API fica cifrada (AES-256-GCM).
+model ConfiguracaoCobranca {
+  empresaId             String   @id
+  empresa               Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  ativa                 Boolean  @default(false)
+  /// 1 = produção (api.asaas.com), 2 = sandbox (api-sandbox.asaas.com)
+  ambiente              Int      @default(2)
+  chaveCifrada          Bytes?
+  chaveFinal            String?
+  /// conta onde o dinheiro recebido pelo Asaas é lançado na baixa
+  contaBancariaId       String?
+  formaPadrao           TipoCobranca @default(UNDEFINED)
+  multaPercentual       Decimal  @default(2) @db.Decimal(5, 2)
+  jurosMensal           Decimal  @default(1) @db.Decimal(5, 2)
+  /// o Asaas também notifica o cliente (custa por cobrança); por padrão o ERP manda o próprio e-mail
+  notificarPeloAsaas    Boolean  @default(false)
+  enviarEmailAutomatico Boolean  @default(true)
+  webhookToken          String?
+  webhookId             String?
+  webhookRegistradoEm   DateTime?
+  testadaEm             DateTime?
+  atualizadoPorId       String?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@map("configuracoes_cobranca")
+}
+
+/// Cliente da empresa no Asaas (id do customer por conta Asaas).
+model ClienteAsaas {
+  id         String   @id @default(cuid())
+  empresaId  String
+  pessoaId   String
+  customerId String
+  createdAt  DateTime @default(now())
+
+  @@unique([empresaId, pessoaId])
+  @@map("clientes_asaas")
+}
+
+/// Cobrança (boleto/Pix) de um título a receber.
+model Cobranca {
+  id              String       @id @default(cuid())
+  empresaId       String
+  empresa         Empresa      @relation(fields: [empresaId], references: [id])
+  tituloId        String
+  titulo          Titulo       @relation(fields: [tituloId], references: [id], onDelete: Cascade)
+  pessoaId        String?
+  asaasPaymentId  String       @unique
+  asaasCustomerId String
+  tipo            TipoCobranca
+  /// status do Asaas: PENDING, RECEIVED, CONFIRMED, OVERDUE, REFUNDED, RECEIVED_IN_CASH, DELETED...
+  status          String
+  valor           Decimal      @db.Decimal(14, 2)
+  valorLiquido    Decimal?     @db.Decimal(14, 2)
+  vencimento      DateTime     @db.Date
+  urlFatura       String?
+  urlBoleto       String?
+  linhaDigitavel  String?
+  codigoBarras    String?
+  nossoNumero     String?
+  pixPayload      String?
+  pixExpiraEm     DateTime?
+  pagoEm          DateTime?
+  baixaId         String?
+  canceladaEm     DateTime?
+  erro            String?
+  criadaPorId     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  eventos EventoCobranca[]
+
+  @@index([tituloId])
+  @@index([empresaId, status])
+  @@map("cobrancas")
+}
+
+/// Eventos recebidos do webhook do Asaas (id único = idempotência).
+model EventoCobranca {
+  id           String    @id @default(cuid())
+  asaasEventId String    @unique
+  cobrancaId   String?
+  cobranca     Cobranca? @relation(fields: [cobrancaId], references: [id], onDelete: SetNull)
+  empresaId    String?
+  evento       String
+  paymentId    String?
+  payload      Json
+  recebidoEm   DateTime  @default(now())
+  processadoEm DateTime?
+  erro         String?
+
+  @@index([paymentId])
+  @@map("eventos_cobranca")
 }
