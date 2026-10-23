@@ -7,6 +7,7 @@ import { exigirUsuario } from "@/lib/auth/sessao";
 import { escopoEmpresa } from "@/lib/auth/empresa";
 import { pode } from "@/lib/auth/permissoes";
 import { contarPendenciasHoje } from "@/modules/crm/consultas";
+import { contarNotasPendentes } from "@/modules/fiscal/consultas";
 import { sair } from "@/modules/auth/acoes";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -31,9 +32,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   // selo no menu: atividades minhas atrasadas ou de hoje
   const pendentes = pode(u.papel, "crm:ver") ? await contarPendenciasHoje(u.id).catch(() => 0) : 0;
+  // selo no menu: NF-e recebidas sem manifestação final
+  const notas = pode(u.papel, "fiscal:ver") ? await contarNotasPendentes(escopo.ids).catch(() => 0) : 0;
   return (
     <SidebarProvider>
-      <AppSidebar papel={u.papel} empresa={escopo.ativa} empresas={escopo.disponiveis} selos={{ "/crm/atividades": pendentes }} />
+      <AppSidebar papel={u.papel} empresa={escopo.ativa} empresas={escopo.disponiveis} selos={{ "/crm/atividades": pendentes, "/fiscal/recebidas": notas }} />
       <SidebarInset>
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />

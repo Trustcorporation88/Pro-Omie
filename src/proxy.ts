@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { COOKIE_SESSAO, verificarSessao } from "@/lib/auth/jwt";
 
-// Rotas acessíveis sem login.
-const PUBLICAS = ["/login", "/setup", "/api/health"];
+// Rotas acessíveis sem login. /api/cron confere o CRON_SECRET na própria rota (chamado pelo Cron da Vercel).
+const PUBLICAS = ["/login", "/setup", "/api/health", "/api/cron"];
 
 export async function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;

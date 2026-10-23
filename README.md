@@ -68,6 +68,22 @@ Logotipo e ícones ficam em `marca/` como texto base64, porque a integração us
 
 **Certificado digital A1** (para a Fase 4): enviado por estabelecimento em Configurações › Empresas e filiais (.pfx ou .p12 com a senha). O servidor abre o arquivo com a senha (node-forge, que lê também o formato RC2 antigo que o OpenSSL 3 recusa), recusa vencido, de outro CNPJ (raiz diferente), sem CNPJ (e-CPF) ou sem chave privada, e guarda arquivo e senha cifrados com AES-256-GCM (`CERTIFICADOS_CHAVE`, com o id da empresa autenticado junto). A senha nunca volta para a tela nem vai para a auditoria. Filial sem certificado usa o da matriz. O painel avisa os administradores 30 dias antes do vencimento. Código em `src/modules/configuracoes/certificado.ts` (`certificadoParaEmissao` entrega o certificado aberto para a emissão).
 
+**Notas recebidas** (Fase 4, etapa 1): busca as NF-e, CT-e e NFS-e emitidas contra o CNPJ de cada estabelecimento com o certificado A1. A NF-e e o CT-e vêm do DistDFe do Ambiente Nacional da SEFAZ; a NFS-e, do Ambiente de Dados Nacional (ADN). Há dois motores com a mesma interface (`src/modules/fiscal/motor.ts`):
+
+- **SEFAZ direto** (padrão, sem custo, `src/modules/fiscal/sefaz/`). O mTLS usa o A1 e valida o servidor com as raízes do Node mais as ACs ICP-Brasil (`ac-icp-brasil.ts`).
+- **Focus NFe** (reserva, desligado, `src/modules/fiscal/focus/`). Para ativar: crie `FOCUS_NFE_TOKEN_MASTER` na Vercel; em Configurações › Empresas e filiais › Notas recebidas, use "Ativar na Focus" (cadastra o estabelecimento lá com o certificado do ERP e liga a busca de notas) e escolha o motor Focus.
+
+Regras (vindas do HUBCLONE/ProContador Office, que já roda isso em produção):
+
+- Uma execução por CNPJ (trava no banco).
+- Depois de "nenhum documento" ou do fim do acervo, e depois do erro 656, a próxima consulta de NF-e e CT-e só acontece 1 hora depois. A guarda é local: o sistema nem chama a SEFAZ antes disso.
+- O cursor é salvo página a página, e só quando todos os documentos da página foram gravados.
+- O resumo nunca substitui o XML completo, e o cancelamento marca a nota.
+
+A ciência automática (opcional) libera o XML completo. A confirmação, o desconhecimento e a "operação não realizada" são feitos na tela, assinados com XMLDSig (`sefaz/assinatura.ts`) e enviados ao NFeRecepcaoEvento4 do AN. A nota recebida vai para o contas a pagar com as parcelas das duplicatas, e o fornecedor é cadastrado pelo CNPJ.
+
+A busca nasce desligada por estabelecimento. Dois sistemas consultando a SEFAZ para o mesmo CNPJ (por exemplo, o ProContador) levam a SEFAZ a bloquear o CNPJ com o erro 656. O Cron da Vercel (`vercel.json`) chama `/api/cron/fiscal` de hora em hora com `CRON_SECRET`.
+
 O logotipo de cada empresa (o que sai nas propostas e pedidos) é outra coisa: o administrador envia em Configurações › Empresas e filiais. O navegador corta as margens vazias, reduz para até 1200 × 600 px e converte para PNG (ou JPEG, se ficar pesado); o servidor aceita até 700 KB, confere o formato e gera um PDF de teste antes de gravar (`src/modules/configuracoes/logotipo.ts`).
 
 ## Desenvolvimento
@@ -100,13 +116,15 @@ Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 | `DATABASE_POOL_MAX` | Opcional. Conexões por instância (padrão 3 na Vercel, 8 fora dela) |
 | `SETUP_TOKEN` | Token da configuração inicial |
 | `CNPJ_API_KEY` | Chave do CNPJ Trust ou da CNPJá: consulta de CNPJ com Simples/MEI e inscrição estadual (sem ela, fontes gratuitas) |
-| `CERTIFICADOS_CHAVE` | 32 bytes em base64 (`openssl rand -base64 32`). Cifra o arquivo e a senha dos certificados A1. Não troque: os certificados já enviados deixam de abrir e precisam ser reenviados |
+| `CERTIFICADOS_CHAVE` | 32 bytes em base64 (`openssl rand -base64 32`). Cifra o arquivo e a senha dos certificados A1 (e os tokens da Focus). Não troque: os certificados já enviados deixam de abrir e precisam ser reenviados |
+| `CRON_SECRET` | Segredo que a Vercel manda no cron de hora em hora (`/api/cron/fiscal`). Sem ele o cron responde 401 |
+| `FOCUS_NFE_TOKEN_MASTER` | Opcional. Token Master da conta Focus NFe; só para o motor reserva (cadastra os estabelecimentos lá). Sensível |
 
 ## Roteiro
 
 - Fase 2: Vendas e CRM ✔ (funil, atividades, propostas, pedidos e faturamento)
 - Fase 3: Estoque ✔ (recicláveis, entradas, baixa na venda, ajustes, relatório por material); falta compras (custo médio, entrada por XML)
-- Fase 4: Fiscal e cobrança (NF-e, NFS-e, boletos e PIX via provedores homologados)
+- Fase 4: Fiscal e cobrança: notas recebidas ✔ (NF-e, CT-e e NFS-e direto na SEFAZ e no ADN, manifestação e contas a pagar; Focus NFe pronta como reserva); falta emissão de NF-e e NFS-e (direto na SEFAZ, com a Focus como reserva), boletos e PIX
 - Fase 5: Contratos recorrentes e ordens de serviço
 - Fase 6: Painel do contador e exportação contábil
 - Fase 7: IA sobre os dados, alertas, API pública e app mobile

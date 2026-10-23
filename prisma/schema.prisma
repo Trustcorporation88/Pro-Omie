@@ -174,6 +174,10 @@ model Empresa {
   lancamentosEstoque LancamentoEstoque[]
   saldosEstoque      SaldoEstoque[]
 
+  configuracaoFiscal  ConfiguracaoFiscal?
+  cursoresCaptura     CursorCaptura[]
+  documentosRecebidos DocumentoRecebido[]
+
   @@map("empresas")
 }
 
@@ -270,6 +274,8 @@ model Pessoa {
   atividades    Atividade[]
 
   lancamentosEstoque LancamentoEstoque[]
+
+  documentosRecebidos DocumentoRecebido[]
 
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
@@ -984,4 +990,164 @@ model CertificadoDigital {
 
   @@index([validoAte])
   @@map("certificados_digitais")
+}
+
+// ───────────────────────── Fiscal: notas recebidas (Fase 4, etapa 1) ─────────────────────────
+// Captação das notas emitidas contra o CNPJ (NF-e e CT-e pelo DistDFe da SEFAZ, NFS-e pelo Ambiente Nacional).
+// Dois motores com a mesma interface: SEFAZ direto (padrão, sem custo) e Focus NFe (reserva, desligado).
+
+enum MotorFiscal {
+  SEFAZ
+  FOCUS
+}
+
+enum TipoDocumentoFiscal {
+  NFE
+  CTE
+  NFSE
+}
+
+/// Papel do estabelecimento no documento.
+enum DirecaoDocumento {
+  /// destinatário da NF-e, tomador do CT-e ou da NFS-e
+  ENTRADA
+  /// emitente ou prestador
+  SAIDA
+  /// transportador, remetente, autorizado no XML etc.
+  TERCEIRO
+}
+
+enum SituacaoDocumento {
+  AUTORIZADO
+  CANCELADO
+  DENEGADO
+}
+
+/// Manifestação do destinatário da NF-e.
+enum Manifestacao {
+  CIENCIA
+  CONFIRMACAO
+  DESCONHECIMENTO
+  NAO_REALIZADA
+}
+
+/// Configuração fiscal por estabelecimento (um CNPJ). A captação nasce desligada: dois sistemas consultando a
+/// SEFAZ para o mesmo CNPJ levam a bloqueio por consumo indevido (cStat 656).
+model ConfiguracaoFiscal {
+  empresaId             String      @id
+  empresa               Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  captacaoAtiva         Boolean     @default(false)
+  motor                 MotorFiscal @default(SEFAZ)
+  /// 1 = produção, 2 = homologação
+  ambiente              Int         @default(1)
+  captarNfe             Boolean     @default(true)
+  captarCte             Boolean     @default(true)
+  captarNfse            Boolean     @default(true)
+  cienciaAutomatica     Boolean     @default(true)
+  /// trava de captura: uma execução por CNPJ (dono e validade)
+  travaToken            String?
+  travaAte              DateTime?
+  /// Focus NFe (motor reserva): id da empresa lá e tokens cifrados (AES-256-GCM)
+  focusEmpresaId        String?
+  focusTokenProducao    Bytes?
+  focusTokenHomologacao Bytes?
+  focusAtivadaEm        DateTime?
+  atualizadoPorId       String?
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@map("configuracoes_fiscais")
+}
+
+/// Onde parou a captação de cada tipo, por estabelecimento e motor (NSU na SEFAZ, versão na Focus).
+model CursorCaptura {
+  id               String              @id @default(cuid())
+  empresaId        String
+  empresa          Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipo             TipoDocumentoFiscal
+  motor            MotorFiscal
+  ultimoNsu        String              @default("0")
+  maxNsu           String?
+  consultadoEm     DateTime?
+  /// cStat da última consulta real (137, 138, 656...) ou ERR
+  status           String?
+  mensagem         String?
+  /// regra da SEFAZ: depois de "nenhum documento" (137) ou "consumo indevido" (656), só consultar de novo depois disto
+  proximaConsulta  DateTime?
+  /// a última execução parou antes do fim (teto de páginas ou de tempo)
+  pendente         Boolean             @default(false)
+  documentosUltima Int                 @default(0)
+  updatedAt        DateTime            @updatedAt
+
+  @@unique([empresaId, tipo, motor])
+  @@map("cursores_captura")
+}
+
+model DocumentoRecebido {
+  id                    String              @id @default(cuid())
+  /// estabelecimento (CNPJ) contra o qual o documento foi emitido
+  empresaId             String
+  empresa               Empresa             @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  tipo                  TipoDocumentoFiscal
+  /// chave de acesso (44 dígitos; NFS-e nacional tem 50)
+  chave                 String
+  direcao               DirecaoDocumento    @default(ENTRADA)
+  numero                String?
+  serie                 String?
+  emitenteDocumento     String?
+  emitenteNome          String?
+  emitenteIe            String?
+  destinatarioDocumento String?
+  valor                 Decimal?            @db.Decimal(14, 2)
+  emitidoEm             DateTime?
+  situacao              SituacaoDocumento   @default(AUTORIZADO)
+  protocolo             String?
+  /// true quando o XML guardado é o documento completo; false = só o resumo (NF-e antes da manifestação)
+  completo              Boolean             @default(false)
+  xml                   String
+  nsu                   String?
+  motor                 MotorFiscal
+  manifestacao          Manifestacao?
+  manifestadoEm         DateTime?
+  manifestacaoProtocolo String?
+  manifestacaoErro      String?
+  /// fornecedor vinculado (cadastro da matriz)
+  pessoaId              String?
+  pessoa                Pessoa?             @relation(fields: [pessoaId], references: [id], onDelete: SetNull)
+  /// lançado no contas a pagar (títulos com origem NOTA_FISCAL e origemId = este id)
+  lancadoEm             DateTime?
+  lancadoPorId          String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  eventos EventoDocumento[]
+
+  @@unique([empresaId, chave])
+  @@index([empresaId, tipo, emitidoEm])
+  @@index([empresaId, manifestacao])
+  @@map("documentos_recebidos")
+}
+
+/// Eventos dos documentos recebidos (cancelamento, carta de correção, manifestações). Pode chegar antes do documento.
+model EventoDocumento {
+  id             String             @id @default(cuid())
+  empresaId      String
+  documentoId    String?
+  documento      DocumentoRecebido? @relation(fields: [documentoId], references: [id], onDelete: SetNull)
+  chaveDocumento String
+  /// código do evento (110111 cancelamento, 110110 carta de correção, 210210 ciência...)
+  tipoEvento     String
+  sequencia      Int                @default(1)
+  descricao      String?
+  /// texto da correção ou justificativa
+  detalhe        String?
+  ocorridoEm     DateTime?
+  protocolo      String?
+  xml            String
+  nsu            String?
+  createdAt      DateTime           @default(now())
+
+  @@unique([empresaId, chaveDocumento, tipoEvento, sequencia])
+  @@index([documentoId])
+  @@map("eventos_documentos")
 }
