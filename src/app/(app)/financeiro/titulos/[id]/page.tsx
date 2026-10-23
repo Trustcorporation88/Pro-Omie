@@ -12,6 +12,9 @@ import { SeloSituacao } from "@/components/financeiro/selo-situacao";
 import { TEXTOS, estaAberto, rotuloAcao, type TituloDetalhe, type TituloLinha } from "@/components/financeiro/tipos";
 import { listarCondicoesPagamento, obterTitulo } from "@/modules/financeiro/consultas";
 import { carregarOpcoesFinanceiras } from "@/modules/financeiro/opcoes";
+import { CobrancaTitulo } from "@/components/cobranca/cobranca-titulo";
+import { painelCobrancaTitulo } from "@/modules/cobranca/consultas";
+import { estadoEmail } from "@/modules/email/consultas";
 import { exigirUsuario, usuarioAtual } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
 import { escopoEmpresa } from "@/lib/auth/empresa";
@@ -89,10 +92,11 @@ export default async function TituloPage({ params }: Props) {
   const { id } = await params;
   const podeEditar = pode(u.papel, "financeiro:editar");
   const hoje = hojeISO();
-  const [t, opcoesFinanceiras, condicoes] = await Promise.all([
+  const [t, opcoesFinanceiras, condicoes, cobranca] = await Promise.all([
     obterTitulo(id),
     podeEditar ? carregarOpcoesFinanceiras() : Promise.resolve(null),
     podeEditar ? listarCondicoesPagamento() : Promise.resolve([]),
+    painelCobrancaTitulo(id).catch(() => null),
   ]);
   // estado amigável (e não notFound): após excluir pelo detalhe, a action re-renderiza esta rota antes do redirecionamento
   if (!t) {
@@ -267,6 +271,10 @@ export default async function TituloPage({ params }: Props) {
               </TableBody>
             </Table>
           </Card>
+
+          {cobranca && (cobranca.cobrancas.length > 0 || cobranca.podeGerar || !cobranca.configurada) && t.tipo === "RECEBER" && t.status !== "CANCELADO" && (
+            <CobrancaTitulo tituloId={id} painel={cobranca} podeEditar={podeEditar} emailConfigurado={estadoEmail().configurado} />
+          )}
 
           <Card className="gap-0 overflow-hidden py-0">
             <CardHeader className="py-4">

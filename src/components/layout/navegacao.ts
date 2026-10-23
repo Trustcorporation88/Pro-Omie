@@ -19,6 +19,7 @@ export const NAVEGACAO: GrupoNav[] = [
     titulo: "Financeiro",
     itens: [
       { titulo: "Contas a receber", href: "/financeiro/receber", icone: "CircleArrowDown", permissao: "financeiro:ver" },
+      { titulo: "Cobranças", href: "/financeiro/cobrancas", icone: "CreditCard", permissao: "financeiro:ver" },
       { titulo: "Contas a pagar", href: "/financeiro/pagar", icone: "CircleArrowUp", permissao: "financeiro:ver" },
       { titulo: "Movimentações", href: "/financeiro/movimentacoes", icone: "Landmark", permissao: "financeiro:ver" },
       { titulo: "Conciliação bancária", href: "/financeiro/conciliacao", icone: "GitCompareArrows", permissao: "financeiro:ver" },
@@ -72,7 +73,6 @@ export const NAVEGACAO: GrupoNav[] = [
     titulo: "Próximas fases",
     itens: [
       { titulo: "Compras", href: "#", icone: "PackagePlus", emBreve: "Fase 3" },
-      { titulo: "Cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
       { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
       { titulo: "Painel do contador", href: "#", icone: "Calculator", emBreve: "Fase 6" },
     ],
