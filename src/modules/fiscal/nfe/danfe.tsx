@@ -108,7 +108,7 @@ function Danfe({ p, opcoes }: { p: No; opcoes: OpcoesDanfe }) {
     <Document title={`DANFE ${txt(ide.nNF)}`} author={txt(emit.xNome)}>
       <Page size="A4" style={s.pagina}>
         {(homolog || opcoes.cancelada) && (
-          <Text style={s.marca} fixed>
+          <Text style={[s.marca, { fontSize: opcoes.cancelada ? 58 : 44 }]} fixed>
             {opcoes.cancelada ? "CANCELADA" : "SEM VALOR FISCAL"}
           </Text>
         )}
