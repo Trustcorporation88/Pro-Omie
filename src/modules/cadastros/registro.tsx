@@ -6,6 +6,8 @@ import { ROTULOS, type Opcao } from "@/lib/rotulos";
 import { iso, num, numOuNull } from "@/lib/serial";
 import type { EntidadeCadastro } from "./campos";
 
+const br = (d: Date) => (iso(d) ?? "").split("-").reverse().join("/");
+
 export type Valores = Record<string, string | number | boolean | null>;
 export type LinhaCadastro = { id: string; ativo: boolean; rotulo: string; valores: Valores; celulas: React.ReactNode[] };
 export type Coluna = { titulo: string; classe?: string };
@@ -273,15 +275,120 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
         })),
       };
     }
+    case "contratos": {
+      const where: Prisma.ContratoWhereInput = { ...daEmpresa, ...statusWhere(f.status), ...(f.q ? { OR: [{ descricao: ins(f.q) }, { pessoa: { is: { nome: ins(f.q) } } }, ...(/^\d+$/.test(f.q) ? [{ numero: Number(f.q) }] : [])] } : {}) };
+      const [rows, total] = await Promise.all([
+        prisma.contrato.findMany({ where, orderBy: { numero: "desc" }, ...pag(f), include: { pessoa: { select: { nome: true, nomeFantasia: true } }, _count: { select: { geracoes: true } } } }),
+        prisma.contrato.count({ where }),
+      ]);
+      const PER: Record<string, string> = { MENSAL: "Mensal", BIMESTRAL: "Bimestral", TRIMESTRAL: "Trimestral", SEMESTRAL: "Semestral", ANUAL: "Anual" };
+      return {
+        total,
+        colunas: [{ titulo: "Nº" }, { titulo: "Cliente" }, { titulo: "Descrição" }, { titulo: "Valor" }, { titulo: "Periodicidade" }, { titulo: "Próxima competência" }, { titulo: "Situação" }],
+        linhas: rows.map((c) => ({
+          id: c.id,
+          ativo: c.ativo,
+          rotulo: `Contrato ${c.numero} · ${c.pessoa.nomeFantasia || c.pessoa.nome}`,
+          valores: {
+            pessoaId: c.pessoaId,
+            produtoId: c.produtoId,
+            descricao: c.descricao,
+            valor: num(c.valor),
+            periodicidade: c.periodicidade,
+            diaVencimento: String(c.diaVencimento),
+            inicio: iso(c.inicio),
+            fim: c.fim ? iso(c.fim) : null,
+            antecedenciaDias: String(c.antecedenciaDias),
+            categoriaId: c.categoriaId,
+            contaBancariaId: c.contaBancariaId,
+            formaPagamentoId: c.formaPagamentoId,
+            gerarCobranca: c.gerarCobranca,
+            observacoes: c.observacoes,
+          },
+          celulas: [
+            <span key="n" className="tabular font-medium">{String(c.numero).padStart(4, "0")}</span>,
+            <span key="c" className="font-medium">{c.pessoa.nomeFantasia || c.pessoa.nome}</span>,
+            <span key="d" className="text-sm">{c.descricao}</span>,
+            <span key="v" className="tabular">{fmtMoeda(num(c.valor))}</span>,
+            <span key="p">{`${PER[c.periodicidade] ?? c.periodicidade} · dia ${c.diaVencimento}`}</span>,
+            <span key="x" className="tabular text-sm">{`${(iso(c.proximaCompetencia) ?? "").slice(5, 7)}/${(iso(c.proximaCompetencia) ?? "").slice(0, 4)} · ${c._count.geracoes} gerada(s)`}</span>,
+            <Selo key="s" tom={c.ativo ? "sucesso" : "neutro"}>{c.ativo ? "Ativo" : "Suspenso"}</Selo>,
+          ],
+        })),
+      };
+    }
+    case "ordens": {
+      const st = f.extra.situacao;
+      const where: Prisma.OrdemServicoWhereInput = {
+        ...daEmpresa,
+        ...(st === "abertas" ? { status: { in: ["ABERTA", "EM_ANDAMENTO"] } } : st === "concluidas" ? { status: "CONCLUIDA" } : st === "canceladas" ? { status: "CANCELADA" } : {}),
+        ...(f.q ? { OR: [{ descricao: ins(f.q) }, { pessoa: { is: { nome: ins(f.q) } } }, ...(/^\d+$/.test(f.q) ? [{ numero: Number(f.q) }] : [])] } : {}),
+      };
+      const [rows, total] = await Promise.all([prisma.ordemServico.findMany({ where, orderBy: { numero: "desc" }, ...pag(f), include: { pessoa: { select: { nome: true, nomeFantasia: true } } } }), prisma.ordemServico.count({ where })]);
+      const usuarios = await prisma.usuario.findMany({ where: { id: { in: rows.map((o) => o.responsavelId).filter((x): x is string => !!x) } }, select: { id: true, nome: true } });
+      const ST: Record<string, { rotulo: string; tom: "neutro" | "sucesso" | "alerta" | "perigo" | "info" }> = { ABERTA: { rotulo: "Aberta", tom: "info" }, EM_ANDAMENTO: { rotulo: "Em andamento", tom: "alerta" }, CONCLUIDA: { rotulo: "Concluída", tom: "sucesso" }, CANCELADA: { rotulo: "Cancelada", tom: "neutro" } };
+      return {
+        total,
+        colunas: [{ titulo: "Nº" }, { titulo: "Cliente" }, { titulo: "Serviço" }, { titulo: "Responsável" }, { titulo: "Prazos" }, { titulo: "Valor" }, { titulo: "Situação" }],
+        linhas: rows.map((o) => ({
+          id: o.id,
+          ativo: o.ativo,
+          rotulo: `OS ${o.numero} · ${o.pessoa.nomeFantasia || o.pessoa.nome}`,
+          valores: {
+            pessoaId: o.pessoaId,
+            status: o.status,
+            descricao: o.descricao,
+            detalhes: o.detalhes,
+            produtoId: o.produtoId,
+            quantidade: num(o.quantidade),
+            valorUnitario: num(o.valorUnitario),
+            responsavelId: o.responsavelId,
+            abertura: iso(o.abertura),
+            previsao: o.previsao ? iso(o.previsao) : null,
+            conclusao: o.conclusao ? iso(o.conclusao) : null,
+            observacoes: o.observacoes,
+            pedidoId: o.pedidoId,
+          },
+          celulas: [
+            <span key="n" className="tabular font-medium">{String(o.numero).padStart(4, "0")}</span>,
+            <span key="c" className="font-medium">{o.pessoa.nomeFantasia || o.pessoa.nome}</span>,
+            <span key="d" className="text-sm">{o.descricao}</span>,
+            <span key="r" className="text-sm">{usuarios.find((u) => u.id === o.responsavelId)?.nome ?? "—"}</span>,
+            <span key="p" className="tabular text-xs">{`${br(o.abertura)}${o.previsao ? ` → ${br(o.previsao)}` : ""}${o.conclusao ? ` ✓ ${br(o.conclusao)}` : ""}`}</span>,
+            <span key="v" className="tabular">{fmtMoeda(num(o.quantidade) * num(o.valorUnitario))}</span>,
+            <span key="s" className="flex flex-wrap gap-1"><Selo tom={ST[o.status]?.tom ?? "neutro"}>{ST[o.status]?.rotulo ?? o.status}</Selo>{o.pedidoId && <Selo tom="sucesso">Pedido gerado</Selo>}</span>,
+          ],
+        })),
+      };
+    }
   }
 }
 
 /** Opções carregadas do banco para selects dos formulários. */
 export async function opcoesCadastro(entidade: EntidadeCadastro): Promise<Record<string, Opcao[]>> {
-  if (entidade !== "contas-bancarias") return {};
-  // Só a empresa ativa e as filiais dela: outra empresa do grupo troca-se no menu.
   const escopo = await escopoEmpresa();
-  return {
-    empresas: [escopo.ativa, ...escopo.filiais].map((e, i) => ({ valor: e.id, rotulo: `${e.nome} · ${fmtDocumento(e.cnpj)}${i === 0 ? " (matriz)" : ""}` })),
-  };
+  if (entidade === "contas-bancarias") {
+    // Só a empresa ativa e as filiais dela: outra empresa do grupo troca-se no menu.
+    return { empresas: [escopo.ativa, ...escopo.filiais].map((e, i) => ({ valor: e.id, rotulo: `${e.nome} · ${fmtDocumento(e.cnpj)}${i === 0 ? " (matriz)" : ""}` })) };
+  }
+  if (entidade === "contratos" || entidade === "ordens") {
+    const matriz = escopo.ativa.id;
+    const [clientes, servicos, categorias, contas, formas, usuarios] = await Promise.all([
+      prisma.pessoa.findMany({ where: { empresaId: matriz, cliente: true, ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true, nomeFantasia: true, documento: true } }),
+      prisma.produto.findMany({ where: { empresaId: matriz, tipo: "SERVICO", ativo: true }, orderBy: { descricao: "asc" }, select: { id: true, codigo: true, descricao: true } }),
+      prisma.categoria.findMany({ where: { empresaId: matriz, tipo: "RECEITA", ativo: true }, orderBy: { codigo: "asc" }, select: { id: true, codigo: true, nome: true } }),
+      prisma.contaBancaria.findMany({ where: { empresaId: { in: escopo.ids }, ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+      prisma.formaPagamento.findMany({ where: { empresaId: matriz, ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+      prisma.usuario.findMany({ where: { ativo: true }, orderBy: { nome: "asc" }, select: { id: true, nome: true } }),
+    ]);
+    return {
+      clientes: clientes.map((c) => ({ valor: c.id, rotulo: `${c.nomeFantasia || c.nome}${c.documento ? ` · ${fmtDocumento(c.documento)}` : ""}` })),
+      servicos: servicos.map((p) => ({ valor: p.id, rotulo: `${p.codigo} · ${p.descricao}` })),
+      categoriasReceita: categorias.map((c) => ({ valor: c.id, rotulo: `${c.codigo ?? ""} ${c.nome}`.trim() })),
+      contas: contas.map((c) => ({ valor: c.id, rotulo: c.nome })),
+      formas: formas.map((f) => ({ valor: f.id, rotulo: f.nome })),
+      usuarios: usuarios.map((u) => ({ valor: u.id, rotulo: u.nome })),
+    };
+  }
+  return {};
 }

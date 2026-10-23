@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Ellipsis, Pencil, Plus, Power, Trash } from "lucide-react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
+import { gerarCompetenciaContrato, gerarPedidoDaOs } from "@/modules/servicos/acoes";
+import { Ellipsis, Pencil, Plus, Power, Trash, CalendarPlus, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -74,6 +77,17 @@ export function AcoesLinhaCadastro({
   const [editar, setEditar] = useState(false);
   const [excluir, setExcluir] = useState(false);
   const [inativar, setInativar] = useState(false);
+  const router = useRouter();
+  const [, iniciar] = useTransition();
+  const rodar = (fn: () => Promise<{ ok: boolean; erro?: string; mensagem?: string; data?: unknown }>, aoOk?: (d: unknown) => void) =>
+    iniciar(async () => {
+      const r = await fn();
+      if (r.ok) {
+        toast.success(r.mensagem ?? "Feito.", { duration: 9000 });
+        aoOk?.(r.data);
+      } else toast.error(r.erro ?? "Falhou.", { duration: 10000 });
+      router.refresh();
+    });
   if (!podeEditar) return null;
   return (
     <>
@@ -87,8 +101,23 @@ export function AcoesLinhaCadastro({
           <DropdownMenuItem onSelect={() => setEditar(true)}>
             <Pencil /> Editar
           </DropdownMenuItem>
+          {entidade === "contratos" && ativo && (
+            <DropdownMenuItem onSelect={() => rodar(() => gerarCompetenciaContrato(id))}>
+              <CalendarPlus /> Gerar próxima competência agora
+            </DropdownMenuItem>
+          )}
+          {entidade === "ordens" && !valores.pedidoId && valores.status !== "CANCELADA" && (
+            <DropdownMenuItem onSelect={() => rodar(() => gerarPedidoDaOs(id), (d) => router.push(`/vendas/pedidos/${(d as { pedidoId: string }).pedidoId}`))}>
+              <ShoppingCart /> Gerar pedido da OS
+            </DropdownMenuItem>
+          )}
+          {entidade === "ordens" && typeof valores.pedidoId === "string" && (
+            <DropdownMenuItem onSelect={() => router.push(`/vendas/pedidos/${valores.pedidoId}`)}>
+              <ShoppingCart /> Abrir pedido
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem onSelect={() => setInativar(true)}>
-            <Power /> {ativo ? "Inativar" : "Reativar"}
+            <Power /> {ativo ? (entidade === "contratos" ? "Suspender" : "Inativar") : "Reativar"}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem variant="destructive" onSelect={() => setExcluir(true)}>

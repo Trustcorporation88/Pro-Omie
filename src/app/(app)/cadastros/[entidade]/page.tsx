@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { GerarContratos } from "@/components/cadastro/gerar-contratos";
 import { notFound } from "next/navigation";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -41,10 +42,13 @@ export default async function CadastroPage({ params, searchParams }: Props) {
     const escopo = await escopoEmpresa();
     iniciais = { empresaId: escopo.ativa.id, dataSaldoInicial: hojeISO() };
   }
+  if (entidade === "ordens") iniciais = { abertura: hojeISO() };
+  if (entidade === "contratos") iniciais = { inicio: hojeISO() };
 
   return (
     <>
       <PageHeader titulo={meta.titulo} descricao={meta.descricao}>
+        {entidade === "contratos" && pode(u.papel, "financeiro:editar") && <GerarContratos />}
         {editar && <BotaoNovoCadastro entidade={entidade} opcoesDinamicas={opcoesDinamicas} iniciais={iniciais} />}
       </PageHeader>
 
@@ -64,6 +68,9 @@ export default async function CadastroPage({ params, searchParams }: Props) {
         )}
         {entidade === "produtos" && (
           <SelectFiltro parametro="tipo" rotuloTodos="Produtos e serviços" opcoes={[{ valor: "PRODUTO", rotulo: "Produtos" }, { valor: "SERVICO", rotulo: "Serviços" }]} />
+        )}
+        {entidade === "ordens" && (
+          <SelectFiltro parametro="situacao" rotuloTodos="Todas as situações" opcoes={[{ valor: "abertas", rotulo: "Abertas e em andamento" }, { valor: "concluidas", rotulo: "Concluídas" }, { valor: "canceladas", rotulo: "Canceladas" }]} />
         )}
         {entidade === "categorias" && (
           <SelectFiltro parametro="tipo" rotuloTodos="Receitas e despesas" opcoes={[{ valor: "RECEITA", rotulo: "Receitas" }, { valor: "DESPESA", rotulo: "Despesas" }]} />
