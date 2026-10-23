@@ -111,6 +111,7 @@ const esquemaConfig = z.object({
   nfeSerie: z.number().int().min(1, "Série de 1 a 889.").max(889, "Série de 1 a 889."),
   nfeProximoNumero: z.number().int().min(1, "Número a partir de 1.").max(999_999_999),
   nfeInformacoes: z.string().max(2000).optional().nullable(),
+  nfeIbsCbs: z.enum(["NAO", "HOMOLOGACAO", "SEMPRE"]).optional(),
 });
 
 export async function salvarConfiguracaoNfe(empresaId: string, entrada: z.input<typeof esquemaConfig>): Promise<Resultado> {
@@ -126,7 +127,12 @@ export async function salvarConfiguracaoNfe(empresaId: string, entrada: z.input<
       if (!(d.nfeAmbiente === 1 ? c?.focusTokenProducao : c?.focusTokenHomologacao))
         throw new ErroAcao("Ative o estabelecimento na Focus NFe (bloco Notas recebidas) antes de escolher este motor.");
     }
-    const dados = { ...d, nfeInformacoes: d.nfeInformacoes?.trim() || TEXTO_SIMPLES, atualizadoPorId: u.id };
+    if (d.nfeIbsCbs === "SEMPRE") {
+      const emp = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { regimeTributario: true } });
+      if (emp && emp.regimeTributario !== "LUCRO_PRESUMIDO" && emp.regimeTributario !== "LUCRO_REAL")
+        throw new ErroAcao("Simples Nacional/MEI: a Receita ainda não publicou como preencher o IBS/CBS para optantes (a tributação começa em 2027, NT específica a sair). Até lá, use 'Só em homologação'.", { nfeIbsCbs: "Só em homologação para o Simples Nacional." });
+    }
+    const dados = { ...d, nfeIbsCbs: d.nfeIbsCbs ?? "NAO", nfeInformacoes: d.nfeInformacoes?.trim() || TEXTO_SIMPLES, atualizadoPorId: u.id };
     const antes = await prisma.configuracaoFiscal.findUnique({ where: { empresaId }, select: { nfeAmbiente: true } });
     await prisma.configuracaoFiscal.upsert({ where: { empresaId }, create: { empresaId, ...dados }, update: dados });
     const nome = empresa.nomeFantasia || empresa.razaoSocial;
@@ -134,7 +140,7 @@ export async function salvarConfiguracaoNfe(empresaId: string, entrada: z.input<
       "configurar_nfe",
       "empresa",
       empresaId,
-      `Emissão de NF-e de ${nome}: ${d.nfeAtiva ? "ligada" : "desligada"} · ${d.nfeAmbiente === 1 ? "PRODUÇÃO" : "homologação"} · ${d.nfeMotor === "SEFAZ" ? "SEFAZ direto" : "Focus NFe"} · série ${d.nfeSerie}, próximo nº ${d.nfeProximoNumero}${antes && antes.nfeAmbiente !== d.nfeAmbiente ? " (ambiente trocado)" : ""}`,
+      `Emissão de NF-e de ${nome}: ${d.nfeAtiva ? "ligada" : "desligada"} · ${d.nfeAmbiente === 1 ? "PRODUÇÃO" : "homologação"} · ${d.nfeMotor === "SEFAZ" ? "SEFAZ direto" : "Focus NFe"} · série ${d.nfeSerie}, próximo nº ${d.nfeProximoNumero} · IBS/CBS ${({ NAO: "não", HOMOLOGACAO: "só homologação", SEMPRE: "sempre" } as Record<string, string>)[d.nfeIbsCbs ?? "NAO"]}${antes && antes.nfeAmbiente !== d.nfeAmbiente ? " (ambiente trocado)" : ""}`,
       d,
       { usuarioId: u.id, empresaId: empresa.matrizId ?? empresa.id },
     );

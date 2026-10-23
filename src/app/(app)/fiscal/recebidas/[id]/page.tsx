@@ -13,6 +13,9 @@ import { pode } from "@/lib/auth/permissoes";
 import { dateParaISO, hojeISO } from "@/lib/datas";
 import { fmtData, fmtDataHora, fmtDocumento, fmtMoeda, fmtNumero } from "@/lib/format";
 import { obterRecebida, opcoesLancamento } from "@/modules/fiscal/consultas";
+import { EntradaNota } from "@/components/estoque/entrada-nota";
+import { sugestoesEntradaNota } from "@/modules/estoque/entrada-nota";
+import { escopoEmpresa } from "@/lib/auth/empresa";
 import { ROTULO_DIRECAO, ROTULO_EVENTO, ROTULO_MANIFESTACAO, ROTULO_MOTOR, ROTULO_TIPO_DOC } from "@/modules/fiscal/tipos";
 
 export const metadata: Metadata = { title: "Nota recebida" };
@@ -42,6 +45,7 @@ export default async function Pagina({ params }: Props) {
   const podeManifestar = pode(u.papel, "fiscal:editar") && n.tipo === "NFE" && entrada && autorizada;
   const podeLancar = pode(u.papel, "fiscal:editar") && pode(u.papel, "financeiro:editar") && entrada && autorizada && !n.lancadoEm && !recusada && (n.valor ?? 0) > 0;
   const opcoes = podeLancar ? await opcoesLancamento(n.estabelecimento.matrizId) : null;
+  const entradaEstoque = n.tipo === "NFE" && entrada && pode(u.papel, "estoque:ver") ? await sugestoesEntradaNota(id, (await escopoEmpresa()).ids).catch(() => null) : null;
   const titulo = `${ROTULO_TIPO_DOC[n.tipo]}${n.numero ? ` nº ${n.numero}` : ""}${n.serie ? ` · série ${n.serie}` : ""}`;
   const emissao = n.emitidoEm ? dateParaISO(new Date(n.emitidoEm)) : hojeISO();
 
@@ -150,6 +154,7 @@ export default async function Pagina({ params }: Props) {
           </CardContent>
         </Card>
 
+        {entradaEstoque && (entradaEstoque.lancado || entradaEstoque.podeLancar) && <EntradaNota dados={entradaEstoque} podeEditar={pode(u.papel, "estoque:editar")} />}
         {n.detalhe && n.detalhe.itens.length > 0 && (
           <Card className="gap-0 overflow-hidden py-0">
             <CardHeader className="py-4">

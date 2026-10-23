@@ -157,6 +157,9 @@ export type EstadoEmissao = {
   serie: number;
   proximoNumero: number;
   informacoes: string | null;
+  ibsCbs: "NAO" | "HOMOLOGACAO" | "SEMPRE";
+  /** regime normal (CRT 3): o grupo IBS/CBS é obrigatório */
+  regimeNormal: boolean;
   temCertificado: boolean;
   focusAtivada: boolean;
   emitidas: number;
@@ -166,10 +169,11 @@ export type EstadoEmissao = {
 export async function estadoEmissao(estabs: { id: string; nome: string; cnpj: string }[]): Promise<EstadoEmissao[]> {
   const ids = estabs.map((e) => e.id);
   if (!ids.length) return [];
-  const [configs, contagens, inuts] = await Promise.all([
+  const [configs, contagens, inuts, regimes] = await Promise.all([
     prisma.configuracaoFiscal.findMany({ where: { empresaId: { in: ids } } }),
     prisma.notaFiscal.groupBy({ by: ["empresaId"], where: { empresaId: { in: ids }, status: { in: ["AUTORIZADA", "CANCELADA"] } }, _count: true }),
     prisma.inutilizacaoNfe.findMany({ where: { empresaId: { in: ids } }, orderBy: { createdAt: "desc" }, distinct: ["empresaId"] }),
+    prisma.empresa.findMany({ where: { id: { in: ids } }, select: { id: true, regimeTributario: true } }),
   ]);
   return Promise.all(
     estabs.map(async (e) => {
@@ -185,6 +189,8 @@ export async function estadoEmissao(estabs: { id: string; nome: string; cnpj: st
         serie: c?.nfeSerie ?? 1,
         proximoNumero: c?.nfeProximoNumero ?? 1,
         informacoes: c?.nfeInformacoes ?? null,
+        ibsCbs: (c?.nfeIbsCbs === "SEMPRE" || c?.nfeIbsCbs === "HOMOLOGACAO" ? c.nfeIbsCbs : "NAO") as "NAO" | "HOMOLOGACAO" | "SEMPRE",
+        regimeNormal: ["LUCRO_PRESUMIDO", "LUCRO_REAL"].includes(regimes.find((r) => r.id === e.id)?.regimeTributario ?? ""),
         temCertificado: !!(await validadeCertificadoEmissao(e.id).catch(() => null)),
         focusAtivada: !!c?.focusTokenProducao,
         emitidas: contagens.find((x) => x.empresaId === e.id)?._count ?? 0,

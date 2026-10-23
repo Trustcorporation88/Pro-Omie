@@ -199,6 +199,7 @@ function GrupoLinhas({ grupo, itens, hoje, podeVender }: { grupo: string | null;
             <TableCell className={cn("tabular text-right font-medium", l.saldo <= 0 && "font-normal text-muted-foreground")}>{fmtQtd(l.saldo, l.unidade)}</TableCell>
             <TableCell className="tabular text-right text-sm">
               {l.precoVenda ? `${fmtMoeda(l.precoVenda)}/${l.unidade.toLowerCase()}` : <Selo tom="alerta">sem preço</Selo>}
+              {l.custoMedio > 0 && <span className="block text-xs text-muted-foreground">{`custo médio ${fmtMoeda(l.custoMedio)}`}</span>}
             </TableCell>
             <TableCell className="tabular text-right">{l.saldo > 0 && l.precoVenda ? fmtMoeda(l.valorEstimado) : "—"}</TableCell>
             <TableCell className="text-sm whitespace-nowrap text-muted-foreground">
