@@ -182,6 +182,8 @@ model Empresa {
   notasServico        NotaServico[]
   configuracaoCobranca ConfiguracaoCobranca?
   cobrancas           Cobranca[]
+  contratos           Contrato[]
+  ordensServico       OrdemServico[]
 
   @@map("empresas")
 }
@@ -285,6 +287,8 @@ model Pessoa {
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
   @@map("pessoas")
+  contratos     Contrato[]
+  ordensServico OrdemServico[]
 }
 
 model Produto {
@@ -330,6 +334,8 @@ model Produto {
   @@unique([empresaId, codigo])
   @@index([empresaId, descricao])
   @@map("produtos")
+  contratos     Contrato[]
+  ordensServico OrdemServico[]
 }
 
 model Categoria {
@@ -1492,4 +1498,103 @@ model EventoCobranca {
 
   @@index([paymentId])
   @@map("eventos_cobranca")
+}
+
+enum Periodicidade {
+  MENSAL
+  BIMESTRAL
+  TRIMESTRAL
+  SEMESTRAL
+  ANUAL
+}
+
+/// Contrato recorrente (plano, mensalidade): gera pedido faturado + conta a receber a cada competência, com cobrança opcional.
+model Contrato {
+  id                 String        @id @default(cuid())
+  empresaId          String
+  empresa            Empresa       @relation(fields: [empresaId], references: [id])
+  numero             Int
+  pessoaId           String
+  pessoa             Pessoa        @relation(fields: [pessoaId], references: [id])
+  produtoId          String?
+  produto            Produto?      @relation(fields: [produtoId], references: [id])
+  descricao          String
+  valor              Decimal       @db.Decimal(14, 2)
+  periodicidade      Periodicidade @default(MENSAL)
+  /// dia do vencimento no mês da competência (1 a 28)
+  diaVencimento      Int           @default(10)
+  inicio             DateTime      @db.Date
+  fim                DateTime?     @db.Date
+  /// primeiro dia da próxima competência a gerar
+  proximaCompetencia DateTime      @db.Date
+  /// gerar com esta antecedência (dias antes do vencimento)
+  antecedenciaDias   Int           @default(10)
+  categoriaId        String?
+  contaBancariaId    String?
+  formaPagamentoId   String?
+  gerarCobranca      Boolean       @default(false)
+  observacoes        String?
+  ativo              Boolean       @default(true)
+  criadoPorId        String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  geracoes ContratoGeracao[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, ativo, proximaCompetencia])
+  @@map("contratos")
+}
+
+model ContratoGeracao {
+  id          String   @id @default(cuid())
+  contratoId  String
+  contrato    Contrato @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  competencia DateTime @db.Date
+  pedidoId    String?
+  tituloId    String?
+  cobrancaId  String?
+  erro        String?
+  createdAt   DateTime @default(now())
+
+  @@unique([contratoId, competencia])
+  @@map("contratos_geracoes")
+}
+
+enum StatusOs {
+  ABERTA
+  EM_ANDAMENTO
+  CONCLUIDA
+  CANCELADA
+}
+
+/// Ordem de serviço: trabalho a executar para um cliente; ao concluir vira pedido (que fatura e emite a NFS-e).
+model OrdemServico {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  numero        Int
+  pessoaId      String
+  pessoa        Pessoa   @relation(fields: [pessoaId], references: [id])
+  produtoId     String?
+  produto       Produto? @relation(fields: [produtoId], references: [id])
+  descricao     String
+  detalhes      String?
+  status        StatusOs @default(ABERTA)
+  responsavelId String?
+  abertura      DateTime @db.Date
+  previsao      DateTime? @db.Date
+  conclusao     DateTime? @db.Date
+  quantidade    Decimal  @default(1) @db.Decimal(14, 3)
+  valorUnitario Decimal  @default(0) @db.Decimal(14, 4)
+  pedidoId      String?  @unique
+  observacoes   String?
+  ativo         Boolean  @default(true)
+  criadoPorId   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, status])
+  @@map("ordens_servico")
 }

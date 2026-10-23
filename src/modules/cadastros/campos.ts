@@ -39,11 +39,15 @@ export type EntidadeCadastro =
   | "centros-de-custo"
   | "contas-bancarias"
   | "formas-de-pagamento"
-  | "condicoes-de-pagamento";
+  | "condicoes-de-pagamento"
+  | "contratos"
+  | "ordens";
 
 export const ENTIDADES: EntidadeCadastro[] = [
   "pessoas",
   "produtos",
+  "contratos",
+  "ordens",
   "categorias",
   "centros-de-custo",
   "contas-bancarias",
@@ -212,6 +216,48 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
     campos: [
       { nome: "nome", rotulo: "Nome", tipo: "texto", obrigatorio: true, largura: 3, placeholder: "ex.: 30/60/90" },
       { nome: "dias", rotulo: "Dias de cada parcela", tipo: "texto", obrigatorio: true, largura: 3, ajuda: "Separados por vírgula. 0 = à vista. Ex.: 30,60,90" },
+    ],
+  },
+  contratos: {
+    titulo: "Contratos recorrentes",
+    singular: "contrato",
+    descricao: "Planos e mensalidades: a cada competência o sistema gera o pedido faturado, a conta a receber e, se quiser, o boleto ou Pix. A NFS-e sai do pedido gerado.",
+    padrao: { periodicidade: "MENSAL", diaVencimento: "10", antecedenciaDias: "10", gerarCobranca: false },
+    campos: [
+      { nome: "pessoaId", rotulo: "Cliente", tipo: "selecao", opcoesDinamicas: "clientes", obrigatorio: true, largura: 4, secao: "Contrato" },
+      { nome: "produtoId", rotulo: "Serviço do cadastro", tipo: "selecao", opcoesDinamicas: "servicos", largura: 2, ajuda: "Dá o código de tributação da NFS-e.", secao: "Contrato" },
+      { nome: "descricao", rotulo: "Descrição (sai no pedido e na nota)", tipo: "texto", obrigatorio: true, largura: 6, placeholder: "ex.: Plano contábil anual - mensalidade", secao: "Contrato" },
+      { nome: "valor", rotulo: "Valor de cada competência", tipo: "moeda", obrigatorio: true, largura: 2, secao: "Contrato" },
+      { nome: "periodicidade", rotulo: "Periodicidade", tipo: "selecao", opcoes: [{ valor: "MENSAL", rotulo: "Mensal" }, { valor: "BIMESTRAL", rotulo: "Bimestral" }, { valor: "TRIMESTRAL", rotulo: "Trimestral" }, { valor: "SEMESTRAL", rotulo: "Semestral" }, { valor: "ANUAL", rotulo: "Anual" }], obrigatorio: true, largura: 2, secao: "Contrato" },
+      { nome: "diaVencimento", rotulo: "Dia do vencimento", tipo: "numero", obrigatorio: true, largura: 2, ajuda: "De 1 a 28.", secao: "Contrato" },
+      { nome: "inicio", rotulo: "Início", tipo: "data", obrigatorio: true, largura: 2, secao: "Vigência" },
+      { nome: "fim", rotulo: "Fim (opcional)", tipo: "data", largura: 2, ajuda: "Vazio = até ser encerrado.", secao: "Vigência" },
+      { nome: "antecedenciaDias", rotulo: "Gerar com antecedência (dias)", tipo: "numero", largura: 2, ajuda: "Quantos dias antes do vencimento o pedido e a cobrança são gerados.", secao: "Vigência" },
+      { nome: "categoriaId", rotulo: "Categoria da receita", tipo: "selecao", opcoesDinamicas: "categoriasReceita", largura: 3, secao: "Financeiro" },
+      { nome: "contaBancariaId", rotulo: "Conta prevista", tipo: "selecao", opcoesDinamicas: "contas", largura: 3, secao: "Financeiro" },
+      { nome: "formaPagamentoId", rotulo: "Forma de pagamento", tipo: "selecao", opcoesDinamicas: "formas", largura: 3, secao: "Financeiro" },
+      { nome: "gerarCobranca", rotulo: "Gerar boleto/Pix (Asaas)", tipo: "booleano", largura: 3, secao: "Financeiro" },
+      { nome: "observacoes", rotulo: "Observações", tipo: "area", largura: 6, secao: "Financeiro" },
+    ],
+  },
+  ordens: {
+    titulo: "Ordens de serviço",
+    singular: "ordem de serviço",
+    descricao: "Trabalhos a executar para um cliente. Ao concluir, gere o pedido pela ação da linha: ele fatura e emite a NFS-e.",
+    padrao: { status: "ABERTA", quantidade: "1" },
+    campos: [
+      { nome: "pessoaId", rotulo: "Cliente", tipo: "selecao", opcoesDinamicas: "clientes", obrigatorio: true, largura: 4, secao: "Ordem" },
+      { nome: "status", rotulo: "Situação", tipo: "selecao", opcoes: [{ valor: "ABERTA", rotulo: "Aberta" }, { valor: "EM_ANDAMENTO", rotulo: "Em andamento" }, { valor: "CONCLUIDA", rotulo: "Concluída" }, { valor: "CANCELADA", rotulo: "Cancelada" }], obrigatorio: true, largura: 2, secao: "Ordem" },
+      { nome: "descricao", rotulo: "Serviço", tipo: "texto", obrigatorio: true, largura: 6, placeholder: "ex.: Abertura de CNPJ - MEI", secao: "Ordem" },
+      { nome: "detalhes", rotulo: "Detalhes para a equipe", tipo: "area", largura: 6, secao: "Ordem" },
+      { nome: "produtoId", rotulo: "Serviço do cadastro", tipo: "selecao", opcoesDinamicas: "servicos", largura: 3, ajuda: "Dá o código de tributação da NFS-e.", secao: "Valores" },
+      { nome: "quantidade", rotulo: "Quantidade", tipo: "numero", largura: 1, secao: "Valores" },
+      { nome: "valorUnitario", rotulo: "Valor unitário", tipo: "moeda", largura: 2, secao: "Valores" },
+      { nome: "responsavelId", rotulo: "Responsável", tipo: "selecao", opcoesDinamicas: "usuarios", largura: 3, secao: "Prazos" },
+      { nome: "abertura", rotulo: "Abertura", tipo: "data", obrigatorio: true, largura: 1, secao: "Prazos" },
+      { nome: "previsao", rotulo: "Previsão", tipo: "data", largura: 1, secao: "Prazos" },
+      { nome: "conclusao", rotulo: "Conclusão", tipo: "data", largura: 1, secao: "Prazos" },
+      { nome: "observacoes", rotulo: "Observações (saem no pedido)", tipo: "area", largura: 6, secao: "Prazos" },
     ],
   },
 };

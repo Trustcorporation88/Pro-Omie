@@ -36,6 +36,10 @@ function configuracao(entidade: EntidadeCadastro): { delegado: Delegado; esquema
       return { delegado: d(prisma.formaPagamento), esquema: E.esquemaFormaPagamento, nome: "forma_pagamento", rotulo: (r) => String(r.nome) };
     case "condicoes-de-pagamento":
       return { delegado: d(prisma.condicaoPagamento), esquema: E.esquemaCondicaoPagamento, nome: "condicao_pagamento", rotulo: (r) => String(r.nome) };
+    case "contratos":
+      return { delegado: d(prisma.contrato), esquema: E.esquemaContrato, nome: "contrato", rotulo: (r) => `Contrato ${r.numero}: ${r.descricao}` };
+    case "ordens":
+      return { delegado: d(prisma.ordemServico), esquema: E.esquemaOrdem, nome: "ordem_servico", rotulo: (r) => `OS ${r.numero}: ${r.descricao}` };
   }
 }
 
@@ -82,6 +86,16 @@ export async function salvarCadastro(
       await auditar("atualizar", nome, id, rotulo(r), { antes, depois: dados });
       revalidatePath(`/cadastros/${ent}`);
       return { id: r.id };
+    }
+    if (ent === "contratos" || ent === "ordens") {
+      // numeração por empresa e competência inicial do contrato
+      const seq = await prisma.sequenciaDocumento.upsert({ where: { empresaId_tipo: { empresaId: escopo.ativa.id, tipo: ent === "contratos" ? "contrato" : "os" } }, create: { empresaId: escopo.ativa.id, tipo: ent === "contratos" ? "contrato" : "os", ultimo: 1 }, update: { ultimo: { increment: 1 } } });
+      dados.numero = seq.ultimo;
+      dados.criadoPorId = (await exigirPermissao("cadastros:editar")).id;
+      if (ent === "contratos") {
+        const inicio = dados.inicio as Date;
+        dados.proximaCompetencia = new Date(Date.UTC(inicio.getUTCFullYear(), inicio.getUTCMonth(), 1));
+      }
     }
     const r = await delegado.create({ data: dados });
     await auditar("criar", nome, r.id, rotulo(r), dados);

@@ -50,6 +50,13 @@ export const NAVEGACAO: GrupoNav[] = [
     ],
   },
   {
+    titulo: "Serviços",
+    itens: [
+      { titulo: "Contratos recorrentes", href: "/cadastros/contratos", icone: "Repeat", permissao: "cadastros:ver" },
+      { titulo: "Ordens de serviço", href: "/cadastros/ordens", icone: "Wrench", permissao: "cadastros:ver" },
+    ],
+  },
+  {
     titulo: "Fiscal",
     itens: [
       { titulo: "Notas emitidas", href: "/fiscal/emitidas", icone: "FileText", permissao: "fiscal:ver" },

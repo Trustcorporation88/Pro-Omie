@@ -133,3 +133,47 @@ export const esquemaCondicaoPagamento = z.object({
     .transform((v) => v.replace(/\s/g, ""))
     .refine((v) => /^\d{1,3}(,\d{1,3})*$/.test(v), "Use números separados por vírgula, ex.: 30,60,90"),
 });
+
+const dataOpc = z
+  .union([z.string(), z.null()]).optional()
+  .transform((v) => (v && v.trim() ? v.trim() : null))
+  .refine((v) => v === null || ehISOValido(v), "Data inválida.")
+  .transform((v) => (v ? isoParaDate(v) : null));
+const idObrig = (msg: string) => z.union([z.string(), z.null()]).optional().transform((v) => (v ?? "").trim()).pipe(z.string().min(1, msg));
+const idOpcional = z.union([z.string(), z.null()]).optional().transform((v) => (v && v.trim() ? v.trim() : null));
+const inteiro = (min: number, max: number, msg: string) =>
+  z.union([z.string(), z.number(), z.null()]).optional().transform((v) => Number(String(v ?? "").replace(",", "."))).refine((n) => Number.isInteger(n) && n >= min && n <= max, msg);
+
+export const esquemaContrato = z
+  .object({
+    pessoaId: idObrig("Escolha o cliente."),
+    produtoId: idOpcional,
+    descricao: obrig("Informe a descrição."),
+    valor: moeda.refine((v) => v > 0, "Informe o valor."),
+    periodicidade: enumDe(["MENSAL", "BIMESTRAL", "TRIMESTRAL", "SEMESTRAL", "ANUAL"]),
+    diaVencimento: inteiro(1, 28, "Dia do vencimento de 1 a 28."),
+    inicio: data,
+    fim: dataOpc,
+    antecedenciaDias: inteiro(0, 60, "Antecedência de 0 a 60 dias."),
+    categoriaId: idOpcional,
+    contaBancariaId: idOpcional,
+    formaPagamentoId: idOpcional,
+    gerarCobranca: bool,
+    observacoes: opc,
+  })
+  .refine((d) => !d.fim || d.fim >= d.inicio, { message: "O fim não pode ser antes do início.", path: ["fim"] });
+
+export const esquemaOrdem = z.object({
+  pessoaId: idObrig("Escolha o cliente."),
+  status: enumDe(["ABERTA", "EM_ANDAMENTO", "CONCLUIDA", "CANCELADA"]),
+  descricao: obrig("Informe o serviço."),
+  detalhes: opc,
+  produtoId: idOpcional,
+  quantidade: z.union([z.string(), z.number(), z.null()]).optional().transform((v) => (v === null || v === undefined || v === "" ? 1 : Number(String(v).replace(/\./g, "").replace(",", ".")))).refine((n) => Number.isFinite(n) && n > 0, "Quantidade inválida."),
+  valorUnitario: moeda,
+  responsavelId: idOpcional,
+  abertura: data,
+  previsao: dataOpc,
+  conclusao: dataOpc,
+  observacoes: opc,
+});
