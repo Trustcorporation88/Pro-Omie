@@ -55,6 +55,7 @@ export const NAVEGACAO: GrupoNav[] = [
       { titulo: "Notas emitidas", href: "/fiscal/emitidas", icone: "FileText", permissao: "fiscal:ver" },
       { titulo: "Notas de serviço", href: "/fiscal/servicos", icone: "FileBadge", permissao: "fiscal:ver" },
       { titulo: "Notas recebidas", href: "/fiscal/recebidas", icone: "FileInput", permissao: "fiscal:ver" },
+      { titulo: "Fechamento mensal", href: "/contador", icone: "FileArchive", permissao: "fiscal:ver" },
     ],
   },
   {
