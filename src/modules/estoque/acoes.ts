@@ -11,6 +11,7 @@ import { fmtMoeda } from "@/lib/format";
 import { num } from "@/lib/serial";
 import { esquemaAjuste, esquemaEntrada, esquemaMateriaisPadrao, esquemaPrecos, type EntradaAjuste, type EntradaEstoque, type EntradaPrecos } from "./esquemas";
 import { proximoNumeroEstoque, somarSaldo, tirarSaldo } from "./servicos";
+import { lancarEntradaDaNota, type ItemEscolhido } from "./entrada-nota";
 import { MATERIAIS_PADRAO, MOTIVOS_AJUSTE, fmtQtd, type MotivoAjuste } from "./tipos";
 
 const arred3 = (n: number) => Math.round((n + Number.EPSILON) * 1000) / 1000;
@@ -252,6 +253,9 @@ export async function excluirLancamentoEstoque(id: string): Promise<Resultado> {
     if (lanc.tipo === "VENDA") {
       throw new ErroAcao(`Esta saída veio do faturamento do pedido nº ${numeroDoc(lanc.pedido?.numero ?? 0)}. Para devolver ao estoque, desfaça o faturamento no pedido.`);
     }
+    if (lanc.documentoId) {
+      throw new ErroAcao(`Esta entrada veio de uma nota fiscal recebida (${lanc.referencia ?? "NF-e"}) e já entrou no custo médio. Para corrigir a quantidade, faça um ajuste de estoque.`);
+    }
     await prisma.$transaction(async (tx) => {
       const saldos = await tx.saldoEstoque.findMany({ where: { empresaId: lanc.empresaId, produtoId: { in: lanc.itens.map((i) => i.produtoId) } } });
       const mapa = new Map(saldos.map((s) => [s.produtoId, num(s.quantidade)]));
@@ -283,4 +287,30 @@ export async function excluirLancamentoEstoque(id: string): Promise<Resultado> {
     revalidarEstoque();
     return undefined;
   }, "Lançamento excluído e saldo desfeito.");
+}
+
+/** Número vindo do cliente: já numérico, ou texto em pt-BR ("1.234,5") / com ponto decimal ("3.5"). */
+function numeroEntrada(v: unknown): number {
+  if (typeof v === "number") return Number.isFinite(v) ? v : 0;
+  const t = String(v ?? "").trim();
+  if (!t) return 0;
+  const n = t.includes(",") ? Number(t.replace(/\./g, "").replace(",", ".")) : Number(t);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Entrada no estoque a partir de uma NF-e recebida (compra), com custo unitário e custo médio. */
+export async function lancarEntradaNotaAcao(documentoId: string, itens: ItemEscolhido[]): Promise<Resultado<{ id: string; numero: number }>> {
+  let mensagem = "";
+  const r = await executar(async () => {
+    const u = await exigirPermissao("estoque:editar");
+    const escopo = await escopoEmpresa();
+    const lista = (Array.isArray(itens) ? itens : []).map((i) => ({ numero: Number(i.numero), produtoId: i.produtoId ? String(i.produtoId) : null, quantidade: numeroEntrada(i.quantidade) }));
+    const res = await lancarEntradaDaNota(documentoId, lista, { escopoIds: escopo.ids, usuarioId: u.id });
+    await auditar("entrada", "estoque", res.id, `Entrada nº ${numeroDoc(res.numero)} pela NF-e recebida · ${res.linhas.map((l) => `${l.produto}: ${fmtQtd(l.quantidade, l.unidade)} a ${fmtMoeda(l.custoUnitario)}`).join(", ")}`, { documentoId, itens: lista }, { usuarioId: u.id, empresaId: escopo.ativa.id });
+    revalidarEstoque();
+    revalidatePath(`/fiscal/recebidas/${documentoId}`);
+    mensagem = `Entrada nº ${numeroDoc(res.numero)} registrada: ${res.linhas.length} item(ns), ${fmtMoeda(res.total)} ao custo. Saldos e custo médio atualizados.`;
+    return { id: res.id, numero: res.numero };
+  });
+  return r.ok ? { ...r, mensagem } : r;
 }

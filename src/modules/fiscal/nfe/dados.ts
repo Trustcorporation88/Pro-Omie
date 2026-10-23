@@ -7,7 +7,7 @@ import { validadeCertificadoEmissao } from "@/modules/configuracoes/certificado"
 import { CODIGO_UF } from "../sefaz/conexao";
 import { AUTORIZADORA } from "./sefaz";
 import type { DadosNfe, Endereco, ItemNfe } from "./montagem";
-import { arred2, totais } from "./montagem";
+import { aliquotasIbsCbsDoAno, arred2, calcularIbsCbs, totais } from "./montagem";
 import { naturezaPorCfop, PADRAO_FISCAL, TEXTO_SIMPLES, TPAG_POR_MEIO, type ProblemaEmissao } from "./tipos";
 
 const dig = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
@@ -72,7 +72,13 @@ export async function prepararNfe(pedidoId: string, escopoIds: string[]) {
   if (pedido.status !== "FATURADO") problemas.push({ campo: "pedido", mensagem: "Fature o pedido antes de emitir a NF-e (o faturamento gera as contas a receber e baixa o estoque)." });
   if (!config?.nfeAtiva) problemas.push({ campo: "config", mensagem: "A emissão de NF-e ainda não está ligada para este estabelecimento. Um administrador liga em Configurações › Empresas e filiais › Emissão de NF-e.", link: linkEmpresa });
   const crt = CRT[emp.regimeTributario];
-  if (crt === 3) problemas.push({ campo: "emitente.regime", mensagem: "Empresa do regime normal: a NF-e exige o grupo IBS/CBS, que ainda não está nesta etapa.", link: linkEmpresa });
+  // grupo IBS/CBS (NT 2025.002): opcional por estabelecimento; Simples Nacional/MEI só em homologação até a NT específica sair
+  const ambiente = config?.nfeAmbiente === 1 ? 1 : 2;
+  const modoIbsCbs = config?.nfeIbsCbs ?? "NAO";
+  const informarIbsCbs = modoIbsCbs === "SEMPRE" ? crt === 3 || ambiente === 2 : modoIbsCbs === "HOMOLOGACAO" ? ambiente === 2 : false;
+  const ibsCbs = informarIbsCbs ? aliquotasIbsCbsDoAno(new Date().getFullYear()) : null;
+  if (crt === 3 && !informarIbsCbs) problemas.push({ campo: "emitente.regime", mensagem: "Empresa do regime normal: a NF-e exige o grupo IBS/CBS. Ligue 'Informar IBS/CBS: sempre' na configuração de emissão.", link: linkEmpresa });
+  if (informarIbsCbs && !ibsCbs) problemas.push({ campo: "config.ibscbs", mensagem: `As alíquotas de referência do IBS/CBS de ${new Date().getFullYear()} ainda não estão no sistema (dependem de resolução do Senado). Desligue o grupo IBS/CBS na configuração de emissão ou atualize o sistema.`, link: linkEmpresa });
   if (!dig(emp.inscricaoEstadual)) problemas.push({ campo: "emitente.ie", mensagem: "Cadastre a inscrição estadual da empresa.", link: linkEmpresa });
   const enderEmit = conferirEndereco(emp, "emitente", linkEmpresa, problemas);
   const motor = config?.nfeMotor ?? "SEFAZ";
@@ -126,8 +132,18 @@ export async function prepararNfe(pedidoId: string, escopoIds: string[]) {
       desconto: Math.max(0, arred2(bruto - total)),
       origem: prod?.origem ?? 0,
       csosn: regra.csosn,
+      cstIbsCbs: prod?.cstIbsCbs ?? null,
+      cClassTrib: prod?.cClassTrib ?? null,
     };
   });
+  if (ibsCbs)
+    for (const it of itens) {
+      try {
+        calcularIbsCbs(0, ibsCbs, it);
+      } catch (e) {
+        problemas.push({ campo: `item.${it.codigo}.ibscbs`, mensagem: `${it.descricao}: ${e instanceof Error ? e.message : String(e)}`, link: `/cadastros/produtos?q=${encodeURIComponent(it.codigo)}` });
+      }
+    }
   // conferência de centavos: sem serviços, o total da nota fecha com o total do pedido
   if (!servicos.length && itens.length) {
     const diferenca = arred2(totais({ itens }).vNF - num(pedido.total));
@@ -168,7 +184,7 @@ export async function prepararNfe(pedidoId: string, escopoIds: string[]) {
     .join("\n");
 
   const dados: DadosSemNumero = {
-    ambiente: (config?.nfeAmbiente === 1 ? 1 : 2) as 1 | 2,
+    ambiente: ambiente as 1 | 2,
     cUF: CODIGO_UF[enderEmit.uf] ?? "35",
     naturezaOperacao: naturezaPorCfop(itens.map((i) => i.cfop)),
     emitente: { cnpj: emp.cnpj, razaoSocial: emp.razaoSocial, nomeFantasia: emp.nomeFantasia, ie: dig(emp.inscricaoEstadual), crt: crt as 1 | 2 | 3 | 4, endereco: enderEmit },
@@ -178,6 +194,7 @@ export async function prepararNfe(pedidoId: string, escopoIds: string[]) {
     pagamentos,
     cobranca,
     informacoesComplementares: informacoes,
+    ibsCbs,
   };
   return { pedido, empresa: emp, config, motor, dados, problemas, totais: tot, temServicos: servicos.length > 0 };
 }

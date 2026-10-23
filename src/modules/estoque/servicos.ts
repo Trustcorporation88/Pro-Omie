@@ -21,11 +21,25 @@ export async function proximoNumeroEstoque(tx: Tx, empresaId: string) {
 }
 
 /** Soma ao saldo do material no estabelecimento (cria a linha na primeira entrada). */
-export async function somarSaldo(tx: Tx, empresaId: string, produtoId: string, quantidade: number) {
+export async function somarSaldo(tx: Tx, empresaId: string, produtoId: string, quantidade: number, custoUnitario: number | null = null) {
+  if (custoUnitario === null) {
+    await tx.saldoEstoque.upsert({
+      where: { empresaId_produtoId: { empresaId, produtoId } },
+      create: { empresaId, produtoId, quantidade },
+      update: { quantidade: { increment: quantidade } },
+    });
+    return;
+  }
+  // entrada com custo (nota fiscal de compra): custo médio ponderado pelo saldo anterior
+  const atual = await tx.saldoEstoque.findUnique({ where: { empresaId_produtoId: { empresaId, produtoId } } });
+  const saldoAnterior = Math.max(0, num(atual?.quantidade ?? 0));
+  const custoAnterior = num(atual?.custoMedio ?? 0);
+  const total = saldoAnterior + quantidade;
+  const custoMedio = total > 0 ? Math.round(((saldoAnterior * custoAnterior + quantidade * custoUnitario) / total) * 10000) / 10000 : custoUnitario;
   await tx.saldoEstoque.upsert({
     where: { empresaId_produtoId: { empresaId, produtoId } },
-    create: { empresaId, produtoId, quantidade },
-    update: { quantidade: { increment: quantidade } },
+    create: { empresaId, produtoId, quantidade, custoMedio },
+    update: { quantidade: { increment: quantidade }, custoMedio },
   });
 }
 

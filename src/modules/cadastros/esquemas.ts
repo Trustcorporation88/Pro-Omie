@@ -86,6 +86,9 @@ export const esquemaProduto = z.object({
   codigoTributacaoNacional: digitos.refine((v) => !v || v.length === 6, "Código de tributação nacional tem 6 dígitos (ex.: 010701)."),
   codigoTributacaoMunicipal: digitos.refine((v) => !v || v.length <= 20, "Código municipal inválido."),
   codigoNbs: digitos.refine((v) => !v || v.length === 9, "Código NBS tem 9 dígitos."),
+  // IBS/CBS (NT 2025.002)
+  cstIbsCbs: digitos.refine((v) => !v || v === "000", "Nesta versão só o CST 000 (tributação integral) é aceito."),
+  cClassTrib: digitos.refine((v) => !v || /^000\d{3}$/.test(v), "Classificação de 6 dígitos começando por 000 (ex.: 000001)."),
 });
 
 export const esquemaCategoria = z.object({

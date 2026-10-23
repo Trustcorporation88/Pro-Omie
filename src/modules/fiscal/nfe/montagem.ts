@@ -38,7 +38,71 @@ export type ItemNfe = {
   csosn: string;
   /** só no CSOSN 101 */
   pCredSN?: number;
+  /** CST do IBS/CBS (3 dígitos); vazio = 000 */
+  cstIbsCbs?: string | null;
+  /** classificação tributária do IBS/CBS (6 dígitos); vazio = 000001 */
+  cClassTrib?: string | null;
 };
+
+/** Alíquotas do IBS/CBS usadas no grupo (em %). */
+export type AliquotasIbsCbs = { pIBSUF: number; pIBSMun: number; pCBS: number };
+
+/** Alíquotas de referência por ano (LC 214/2025, arts. 343, 344 e 346). 2027+ depende de resolução do Senado: informar na configuração. */
+export function aliquotasIbsCbsDoAno(ano: number): AliquotasIbsCbs | null {
+  if (ano <= 2026) return { pIBSUF: 0.1, pIBSMun: 0, pCBS: 0.9 };
+  return null;
+}
+
+export type IbsCbsItem = { cst: string; cClassTrib: string; vBC: number; vIBSUF: number; vIBSMun: number; vIBS: number; vCBS: number };
+
+/** Valores do IBS/CBS de um item (base = valor do item líquido de desconto; em 2026 os valores não entram no total da nota). */
+export function calcularIbsCbs(vBC: number, a: AliquotasIbsCbs, item: Pick<ItemNfe, "cstIbsCbs" | "cClassTrib">): IbsCbsItem {
+  const cst = (item.cstIbsCbs ?? "").replace(/\D/g, "") || "000";
+  const cClassTrib = (item.cClassTrib ?? "").replace(/\D/g, "") || "000001";
+  if (cst !== "000") throw new Error(`CST ${cst} do IBS/CBS ainda não é suportado: nesta versão só a tributação integral (CST 000).`);
+  if (!/^000\d{3}$/.test(cClassTrib)) throw new Error(`Classificação tributária ${cClassTrib} incompatível com o CST 000 (os três primeiros dígitos têm de ser 000).`);
+  const vIBSUF = arred2((vBC * a.pIBSUF) / 100);
+  const vIBSMun = arred2((vBC * a.pIBSMun) / 100);
+  const vCBS = arred2((vBC * a.pCBS) / 100);
+  return { cst, cClassTrib, vBC: arred2(vBC), vIBSUF, vIBSMun, vIBS: arred2(vIBSUF + vIBSMun), vCBS };
+}
+
+function xmlIbsCbs(v: IbsCbsItem, a: AliquotasIbsCbs): string {
+  return (
+    "<IBSCBS>" +
+    tag("CST", v.cst) +
+    tag("cClassTrib", v.cClassTrib) +
+    "<gIBSCBS>" +
+    tag("vBC", d2(v.vBC)) +
+    `<gIBSUF>${tag("pIBSUF", d4(a.pIBSUF))}${tag("vIBSUF", d2(v.vIBSUF))}</gIBSUF>` +
+    `<gIBSMun>${tag("pIBSMun", d4(a.pIBSMun))}${tag("vIBSMun", d2(v.vIBSMun))}</gIBSMun>` +
+    tag("vIBS", d2(v.vIBS)) +
+    `<gCBS>${tag("pCBS", d4(a.pCBS))}${tag("vCBS", d2(v.vCBS))}</gCBS>` +
+    "</gIBSCBS></IBSCBS>"
+  );
+}
+
+/** Totais do IBS/CBS da nota (soma dos itens). */
+export function totalIbsCbs(itens: IbsCbsItem[]) {
+  const soma = (f: (i: IbsCbsItem) => number) => arred2(itens.reduce((acc, i) => acc + f(i), 0));
+  return { vBC: soma((i) => i.vBC), vIBSUF: soma((i) => i.vIBSUF), vIBSMun: soma((i) => i.vIBSMun), vIBS: soma((i) => i.vIBS), vCBS: soma((i) => i.vCBS) };
+}
+
+function xmlIbsCbsTot(itens: IbsCbsItem[]): string {
+  const tot = totalIbsCbs(itens);
+  return (
+    "<IBSCBSTot>" +
+    tag("vBCIBSCBS", d2(tot.vBC)) +
+    "<gIBS>" +
+    `<gIBSUF><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib>${tag("vIBSUF", d2(tot.vIBSUF))}</gIBSUF>` +
+    `<gIBSMun><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib>${tag("vIBSMun", d2(tot.vIBSMun))}</gIBSMun>` +
+    tag("vIBS", d2(tot.vIBS)) +
+    "<vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus>" +
+    "</gIBS>" +
+    `<gCBS><vDif>0.00</vDif><vDevTrib>0.00</vDevTrib>${tag("vCBS", d2(tot.vCBS))}<vCredPres>0.00</vCredPres><vCredPresCondSus>0.00</vCredPresCondSus></gCBS>` +
+    "</IBSCBSTot>"
+  );
+}
 
 export type DadosNfe = {
   ambiente: 1 | 2;
@@ -59,6 +123,8 @@ export type DadosNfe = {
   pagamentos: { indPag: 0 | 1; tPag: string; valor: number }[];
   cobranca?: { numero: string; valorOriginal: number; desconto: number; valorLiquido: number; duplicatas: { numero: string; vencimento: string; valor: number }[] } | null;
   informacoesComplementares?: string | null;
+  /** grupo IBS/CBS (NT 2025.002): ausente = não informar */
+  ibsCbs?: AliquotasIbsCbs | null;
 };
 
 const d2 = (n: number) => (Math.round(n * 100) / 100).toFixed(2);
@@ -115,8 +181,9 @@ export function totais(d: Pick<DadosNfe, "itens">) {
 
 /** Monta o `<NFe>` sem assinatura. Devolve também o Id do infNFe (o que é assinado). */
 export function montarNfe(d: DadosNfe): { xml: string; id: string } {
-  if (d.emitente.crt === 3) throw new Error("Regime normal (CRT 3) exige o grupo IBS/CBS, ainda não suportado nesta etapa.");
+  if (d.emitente.crt === 3 && !d.ibsCbs) throw new Error("Regime normal (CRT 3): a NF-e exige o grupo IBS/CBS. Ligue 'Informar IBS/CBS' na configuração de emissão.");
   const id = `NFe${d.chave}`;
+  const valoresIbsCbs: IbsCbsItem[] = [];
   const interna = d.emitente.endereco.uf.toUpperCase() === d.destinatario.endereco.uf.toUpperCase();
   const tot = totais(d);
   const indFinal = d.destinatario.indIEDest === 9 ? 1 : 0;
@@ -166,6 +233,12 @@ export function montarNfe(d: DadosNfe): { xml: string; id: string } {
     tag("email", d.destinatario.email ? escaparTexto(d.destinatario.email.trim().slice(0, 60)) : "") +
     "</dest>";
 
+  const grupoIbsCbs = (i: ItemNfe, vBC: number) => {
+    if (!d.ibsCbs) return "";
+    const v = calcularIbsCbs(vBC, d.ibsCbs, i);
+    valoresIbsCbs.push(v);
+    return xmlIbsCbs(v, d.ibsCbs);
+  };
   const det = d.itens
     .map((i, k) => {
       const vProd = valorBruto(i);
@@ -189,7 +262,7 @@ export function montarNfe(d: DadosNfe): { xml: string; id: string } {
         tag("vUnTrib", v) +
         (i.desconto > 0 ? tag("vDesc", d2(i.desconto)) : "") +
         "<indTot>1</indTot></prod>" +
-        `<imposto>${icms(i, arred2(vProd - i.desconto))}${PIS_COFINS}</imposto></det>`
+        `<imposto>${icms(i, arred2(vProd - i.desconto))}${PIS_COFINS}${grupoIbsCbs(i, arred2(vProd - i.desconto))}</imposto></det>`
       );
     })
     .join("");
@@ -202,7 +275,9 @@ export function montarNfe(d: DadosNfe): { xml: string; id: string } {
     tag("vDesc", d2(tot.vDesc)) +
     "<vII>0.00</vII><vIPI>0.00</vIPI><vIPIDevol>0.00</vIPIDevol><vPIS>0.00</vPIS><vCOFINS>0.00</vCOFINS><vOutro>0.00</vOutro>" +
     tag("vNF", d2(tot.vNF)) +
-    "</ICMSTot></total>";
+    "</ICMSTot>" +
+    (d.ibsCbs ? xmlIbsCbsTot(valoresIbsCbs) : "") +
+    "</total>";
 
   const transp = `<transp><modFrete>${d.modFrete}</modFrete></transp>`;
 

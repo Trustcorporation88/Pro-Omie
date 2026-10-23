@@ -136,6 +136,8 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
       },
       { nome: "codigoTributacaoMunicipal", rotulo: "Cód. tributação municipal", tipo: "texto", largura: 2, ajuda: "Só se o município exigir.", secao: "NF-e e NFS-e (confirme com o contador)" },
       { nome: "codigoNbs", rotulo: "Código NBS", tipo: "texto", largura: 2, placeholder: "9 dígitos", ajuda: "Nomenclatura Brasileira de Serviços (opcional).", secao: "NF-e e NFS-e (confirme com o contador)" },
+      { nome: "cstIbsCbs", rotulo: "CST IBS/CBS", tipo: "texto", largura: 2, placeholder: "000", ajuda: "Reforma tributária (NT 2025.002). Vazio = 000, tributação integral.", secao: "NF-e e NFS-e (confirme com o contador)" },
+      { nome: "cClassTrib", rotulo: "Classificação tributária IBS/CBS", tipo: "texto", largura: 2, placeholder: "000001", ajuda: "cClassTrib de 6 dígitos. Vazio = 000001.", secao: "NF-e e NFS-e (confirme com o contador)" },
       {
         nome: "textoFiscal",
         rotulo: "Texto legal nas vendas dentro do estado",

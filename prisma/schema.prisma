@@ -317,6 +317,10 @@ model Produto {
   cfopInterestadual  String?
   csosnInterno       String?
   csosnInterestadual String?
+  /// CST do IBS/CBS (3 dígitos). Vazio = 000 (tributação integral)
+  cstIbsCbs          String?
+  /// código de classificação tributária do IBS/CBS (6 dígitos). Vazio = 000001
+  cClassTrib         String?
   textoFiscal        String?
   /// NFS-e nacional (serviços): código de tributação nacional (6 dígitos), municipal e NBS
   codigoTributacaoNacional  String?
@@ -336,6 +340,7 @@ model Produto {
   @@map("produtos")
   contratos     Contrato[]
   ordensServico OrdemServico[]
+  vinculosFornecedor VinculoProdutoFornecedor[]
 }
 
 model Categoria {
@@ -945,6 +950,9 @@ model LancamentoEstoque {
   pessoaId    String?
   pessoa      Pessoa?               @relation(fields: [pessoaId], references: [id], onDelete: SetNull)
   /// processo de destruição, MTR, lote ou ticket de pesagem
+  /// nota fiscal recebida que originou a entrada (compra)
+  documentoId String? @unique
+  documento   DocumentoRecebido? @relation(fields: [documentoId], references: [id], onDelete: SetNull)
   referencia  String?
   /// ajuste: código do motivo (lista fixa no módulo estoque)
   motivo      String?
@@ -968,6 +976,8 @@ model ItemEstoque {
   /// positivo entra, negativo sai (na unidade do produto)
   quantidade   Decimal           @db.Decimal(14, 3)
   /// ajuste: saldo contado no inventário
+  /// custo unitário da entrada (nota fiscal de compra)
+  custoUnitario Decimal? @db.Decimal(14, 4)
   saldoContado Decimal?          @db.Decimal(14, 3)
 
   @@index([lancamentoId])
@@ -981,6 +991,8 @@ model SaldoEstoque {
   empresa    Empresa  @relation(fields: [empresaId], references: [id])
   produtoId  String
   produto    Produto  @relation(fields: [produtoId], references: [id])
+  /// custo médio ponderado (entradas por nota fiscal)
+  custoMedio Decimal @default(0) @db.Decimal(14, 4)
   quantidade Decimal  @default(0) @db.Decimal(14, 3)
   updatedAt  DateTime @updatedAt
 
@@ -1080,6 +1092,8 @@ model ConfiguracaoFiscal {
   nfeAtiva              Boolean     @default(false)
   nfeAmbiente           Int         @default(2)
   nfeMotor              MotorFiscal @default(SEFAZ)
+  /// grupo IBS/CBS (LC 214/2025, NT 2025.002): NAO = não informar; HOMOLOGACAO = só em notas de homologação; SEMPRE = em toda nota
+  nfeIbsCbs             String      @default("NAO")
   nfeSerie              Int         @default(1)
   nfeProximoNumero      Int         @default(1)
   /// texto padrão das informações complementares (o do Simples Nacional vem preenchido)
@@ -1167,6 +1181,7 @@ model DocumentoRecebido {
   updatedAt             DateTime            @updatedAt
 
   eventos EventoDocumento[]
+  lancamentoEstoque LancamentoEstoque?
 
   @@unique([empresaId, chave])
   @@index([empresaId, tipo, emitidoEm])
@@ -1597,4 +1612,19 @@ model OrdemServico {
   @@unique([empresaId, numero])
   @@index([empresaId, status])
   @@map("ordens_servico")
+}
+
+/// Memória do "de-para": código do produto no fornecedor → produto do cadastro (entrada no estoque pela nota recebida).
+model VinculoProdutoFornecedor {
+  id                   String   @id @default(cuid())
+  empresaId            String
+  fornecedorDocumento  String
+  codigoFornecedor     String
+  produtoId            String
+  produto              Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@unique([empresaId, fornecedorDocumento, codigoFornecedor])
+  @@map("vinculos_produto_fornecedor")
 }

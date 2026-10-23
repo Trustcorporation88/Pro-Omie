@@ -89,6 +89,7 @@ function CorpoConfig({ estado: e, fechar }: { estado: EstadoEmissao; fechar: () 
   const [serie, setSerie] = useState(String(e.serie));
   const [proximo, setProximo] = useState(String(e.proximoNumero));
   const [informacoes, setInformacoes] = useState(e.informacoes ?? TEXTO_SIMPLES);
+  const [ibsCbs, setIbsCbs] = useState<"NAO" | "HOMOLOGACAO" | "SEMPRE">(e.ibsCbs);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [pendente, iniciar] = useTransition();
   const indoParaProducao = e.ambiente === 2 && ambiente === "1";
@@ -147,6 +148,25 @@ function CorpoConfig({ estado: e, fechar }: { estado: EstadoEmissao; fechar: () 
         <Campo id="nfe-info" rotulo="Informações complementares padrão" ajuda="Vai em toda nota. O texto legal de cada produto (ex.: diferimento) é somado automaticamente.">
           <Textarea id="nfe-info" rows={3} maxLength={2000} value={informacoes} onChange={(x) => setInformacoes(x.target.value)} />
         </Campo>
+        <div className="space-y-1.5">
+          <p className="text-sm font-medium">Grupo IBS/CBS (reforma tributária)</p>
+          <Segmentado<"NAO" | "HOMOLOGACAO" | "SEMPRE">
+            rotulo="Grupo IBS/CBS"
+            valor={ibsCbs}
+            onChange={setIbsCbs}
+            opcoes={[
+              { valor: "NAO", rotulo: "Não informar" },
+              { valor: "HOMOLOGACAO", rotulo: "Só em homologação" },
+              { valor: "SEMPRE", rotulo: "Sempre" },
+            ]}
+          />
+          {erros.nfeIbsCbs && <p className="text-xs text-destructive">{erros.nfeIbsCbs}</p>}
+          <p className="text-xs text-muted-foreground">
+            {e.regimeNormal
+              ? "Regime normal: o grupo é obrigatório na NF-e desde 03/08/2026 (NT 2025.002). Escolha “Sempre”. Cada item sai com CST 000 / classificação 000001 (tributação integral) e as alíquotas de referência de 2026 (IBS 0,10% + CBS 0,90%), salvo outra classificação no cadastro do produto."
+              : "Simples Nacional/MEI: a obrigação começa em 01/01/2027 e a Receita ainda não publicou a NT com a forma de preenchimento para optantes. Até lá, “Só em homologação” permite testar o leiaute (CST 000 / 000001, IBS 0,10% + CBS 0,90%, valores informativos, sem somar no total)."}
+          </p>
+        </div>
       </div>
       <DialogFooter>
         <Button variant="outline" onClick={fechar} disabled={pendente}>
@@ -163,6 +183,7 @@ function CorpoConfig({ estado: e, fechar }: { estado: EstadoEmissao; fechar: () 
                 nfeSerie: Number(serie) || 0,
                 nfeProximoNumero: Number(proximo) || 0,
                 nfeInformacoes: informacoes,
+                nfeIbsCbs: ibsCbs,
               });
               if (r.ok) {
                 toast.success(r.mensagem ?? "Salvo.");

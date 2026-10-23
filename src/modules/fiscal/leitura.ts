@@ -255,6 +255,7 @@ export function lerDocumento(tipo: TipoDoc, xml: string, interessado: string, ba
 export type ItemNota = {
   numero: number;
   codigo: string;
+  gtin: string;
   descricao: string;
   ncm: string;
   cfop: string;
@@ -304,6 +305,7 @@ export function detalheNfe(xml: string): DetalheNota | null {
     itens: lista<No>(inf.det).map((d, i) => ({
       numero: Number(txt(d["@_nItem"])) || i + 1,
       codigo: txt(d.prod?.cProd),
+      gtin: /^\d{8,14}$/.test(txt(d.prod?.cEAN)) ? txt(d.prod?.cEAN) : /^\d{8,14}$/.test(txt(d.prod?.cEANTrib)) ? txt(d.prod?.cEANTrib) : "",
       descricao: txt(d.prod?.xProd),
       ncm: txt(d.prod?.NCM),
       cfop: txt(d.prod?.CFOP),

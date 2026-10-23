@@ -126,6 +126,8 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
             codigoTributacaoNacional: p.codigoTributacaoNacional,
             codigoTributacaoMunicipal: p.codigoTributacaoMunicipal,
             codigoNbs: p.codigoNbs,
+            cstIbsCbs: p.cstIbsCbs,
+            cClassTrib: p.cClassTrib,
           },
           celulas: [
             <span key="c" className="font-mono text-xs">{p.codigo}</span>,

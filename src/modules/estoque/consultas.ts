@@ -48,7 +48,7 @@ export async function carregarMateriais(escopo?: EscopoEmpresa): Promise<Materia
       grupoMaterial: true,
       precoVenda: true,
       ativo: true,
-      saldosEstoque: { where: { empresaId: { in: e.ids } }, select: { empresaId: true, quantidade: true } },
+      saldosEstoque: { where: { empresaId: { in: e.ids } }, select: { empresaId: true, quantidade: true, custoMedio: true } },
     },
   });
   const ordem = (g: string | null) => {
@@ -65,6 +65,7 @@ export async function carregarMateriais(escopo?: EscopoEmpresa): Promise<Materia
       precoVenda: num(p.precoVenda),
       ativo: p.ativo,
       saldos: Object.fromEntries(p.saldosEstoque.map((s) => [s.empresaId, num(s.quantidade)])),
+      custos: Object.fromEntries(p.saldosEstoque.map((s) => [s.empresaId, num(s.custoMedio)])),
     }))
     .filter((m) => m.ativo || Object.values(m.saldos).some((q) => q > 0))
     .sort((a, b) => ordem(a.grupo) - ordem(b.grupo) || a.descricao.localeCompare(b.descricao, "pt-BR"));
@@ -122,7 +123,10 @@ export async function carregarSaldos(f: FiltrosSaldo) {
   const termo = semAcento(f.q);
   const todas: LinhaSaldo[] = materiais.map((m) => {
     const saldo = somaSaldos(m, estabs);
-    return { ...m, saldo, valorEstimado: arred2(saldo * m.precoVenda), ultimaEntrada: ultima.get(m.id) ?? null, vendido30: vendido.get(m.id) ?? 0 };
+    const comCusto = estabs.filter((id) => (m.saldos[id] ?? 0) > 0 && (m.custos[id] ?? 0) > 0);
+    const base = comCusto.reduce((a, id) => a + m.saldos[id], 0);
+    const custoMedio = base > 0 ? Math.round((comCusto.reduce((a, id) => a + m.saldos[id] * m.custos[id], 0) / base) * 10000) / 10000 : 0;
+    return { ...m, saldo, valorEstimado: arred2(saldo * m.precoVenda), custoMedio, ultimaEntrada: ultima.get(m.id) ?? null, vendido30: vendido.get(m.id) ?? 0 };
   });
   const linhas = todas.filter(
     (l) =>

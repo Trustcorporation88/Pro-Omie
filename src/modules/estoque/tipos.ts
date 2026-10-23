@@ -86,11 +86,15 @@ export type MaterialEstoque = {
   precoVenda: number;
   ativo: boolean;
   saldos: Record<string, number>;
+  /** custo médio por estabelecimento (entradas por nota fiscal) */
+  custos: Record<string, number>;
 };
 
 export type LinhaSaldo = MaterialEstoque & {
   saldo: number;
   valorEstimado: number;
+  /** custo médio ponderado pelos saldos dos estabelecimentos */
+  custoMedio: number;
   ultimaEntrada: string | null;
   vendido30: number;
 };

@@ -90,6 +90,10 @@ function Danfe({ p, opcoes }: { p: No; opcoes: OpcoesDanfe }) {
   const dups = lista<No>(inf.cobr?.dup);
   const itens = lista<No>(inf.det);
   const infCpl = txt(inf.infAdic?.infCpl);
+  const ibsTot = (inf.total as No).IBSCBSTot as No | undefined;
+  const ibsCbs = ibsTot
+    ? `IBS/CBS (LC 214/2025, informativo): base R$ ${fmtMoedaDanfe(txt(ibsTot.vBCIBSCBS))} - IBS R$ ${fmtMoedaDanfe(txt((ibsTot.gIBS as No | undefined)?.vIBS))} - CBS R$ ${fmtMoedaDanfe(txt((ibsTot.gCBS as No | undefined)?.vCBS))}. Valores nao somados ao total da nota.`
+    : "";
   const docDest = txt(dest.CNPJ) || txt(dest.CPF);
   const enderecoEmit = [txt(ee.xLgr), txt(ee.nro), txt(ee.xCpl)].filter(Boolean).join(", ");
   const canc = opcoes.cancelamento;
@@ -100,6 +104,7 @@ function Danfe({ p, opcoes }: { p: No; opcoes: OpcoesDanfe }) {
     homolog ? "NF-E EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO - SEM VALOR FISCAL" : "",
     contingencia ? `EMITIDA EM CONTINGÊNCIA (SVC-AN) desde ${fmtData(txt(ide.dhCont))} ${fmtHora(txt(ide.dhCont))}. Justificativa: ${txt(ide.xJust)}` : "",
     infCpl,
+    ibsCbs,
   ]
     .filter(Boolean)
     .join("\n");
@@ -299,6 +304,8 @@ function Danfe({ p, opcoes }: { p: No; opcoes: OpcoesDanfe }) {
 }
 
 /** PDF do DANFE a partir do nfeProc (ou do NFe assinado, antes da autorização). */
+const fmtMoedaDanfe = (v: string) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export async function gerarDanfe(xml: string, opcoes: OpcoesDanfe = {}): Promise<Buffer> {
   const p = lerXml(xml, { isArray: (n) => n === "det" || n === "dup" });
   if (!(p.nfeProc?.NFe ?? p.NFe)?.infNFe) throw new Error("XML sem NF-e para gerar o DANFE");
