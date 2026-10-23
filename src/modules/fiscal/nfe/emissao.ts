@@ -34,7 +34,7 @@ export type ResultadoEmissao = { notaId: string; status: StatusNota; cStat?: str
 
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function abrirSefaz(empresaId: string) {
+export async function abrirSefaz(empresaId: string) {
   const cert = await certificadoParaEmissao(empresaId);
   if (!cert) throw new ErroAcao("Envie o certificado digital A1 em Configurações › Empresas e filiais.");
   if (cert.registro.validoAte < new Date()) throw new ErroAcao("O certificado digital A1 venceu. Envie o renovado.");
@@ -42,7 +42,7 @@ async function abrirSefaz(empresaId: string) {
   return { material, agente: criarAgente(material) };
 }
 
-function tokenFocus(empresaId: string, config: { focusTokenProducao: Uint8Array | null; focusTokenHomologacao: Uint8Array | null }, ambiente: 1 | 2) {
+export function tokenFocus(empresaId: string, config: { focusTokenProducao: Uint8Array | null; focusTokenHomologacao: Uint8Array | null }, ambiente: 1 | 2) {
   const pacote = ambiente === 1 ? config.focusTokenProducao : config.focusTokenHomologacao;
   if (!pacote) throw new ErroAcao("O estabelecimento não foi ativado na Focus NFe para este ambiente.");
   return decifrarTokenFocus(empresaId, ambiente, pacote);
