@@ -135,9 +135,11 @@ export async function enviarEmailTeste(para: string): Promise<Resultado> {
     exigirConfigurado();
     const lista = emailsValidos(para);
     if (lista.length !== 1) throw new ErroAcao("Informe um e-mail válido.", { para: "E-mail inválido." });
-    const m = ctx.matrizes[0] ? await prisma.empresa.findUnique({ where: { id: ctx.matrizes[0] }, select: { razaoSocial: true, nomeFantasia: true } }) : null;
+    // empresa ativa no seletor do menu: o teste sai com o nome dela no "De:", igual ao que o cliente recebe
+    const ativa = (await escopoEmpresa()).ativa;
+    const m = await prisma.empresa.findUnique({ where: { id: ativa.id }, select: { razaoSocial: true, nomeFantasia: true } });
     const empresa = m?.nomeFantasia || m?.razaoSocial || "Pro Omie";
-    const e = await enfileirar({ tipo: "teste", para: lista, ...modeloTeste({ nome: u.nome, empresa }), usuarioId: u.id });
+    const e = await enfileirar({ empresaId: ativa.id, tipo: "teste", para: lista, ...modeloTeste({ nome: u.nome, empresa }), usuarioId: u.id });
     if (e.status !== "ENVIADO") throw new ErroAcao(`O envio falhou: ${e.erro ?? "sem detalhes"}`);
     mensagem = `E-mail de teste enviado para ${lista[0]}.`;
     return undefined;
