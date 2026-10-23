@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { EnviarEmail, type AlvoEmail } from "@/components/email/enviar-email";
 import { Ban, Check, FileDown, FilePlus2, LoaderCircle, Pencil, Receipt, RotateCcw, Send, Undo2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,12 +27,14 @@ export function AcoesDocumento({
   podeFaturar,
   opcoes,
   hoje,
+  email,
 }: {
   doc: DocumentoVenda;
   podeEditar: boolean;
   podeFaturar: boolean;
   opcoes: OpcoesVenda;
   hoje: string;
+  email?: AlvoEmail | null;
 }) {
   const router = useRouter();
   const [confirmar, setConfirmar] = useState<Confirmacao | null>(null);
@@ -164,6 +167,7 @@ export function AcoesDocumento({
       </a>
     </Button>,
   );
+  if (email) botoes.push(<EnviarEmail key="email" alvo={email} />);
 
   return (
     <>

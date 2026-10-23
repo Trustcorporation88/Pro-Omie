@@ -88,6 +88,7 @@ export type SegredoExibido = {
   tipo: "criado" | "redefinida";
   nome: string;
   email: string;
+  emailEnviado?: boolean;
   senha: string;
 };
 

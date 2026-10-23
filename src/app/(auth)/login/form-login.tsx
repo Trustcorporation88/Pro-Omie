@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState } from "react";
+import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,12 @@ export function FormLogin({ voltar }: { voltar: string }) {
         <Input id="email" name="email" type="email" autoComplete="username" required autoFocus />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="senha">Senha</Label>
+        <div className="flex items-center justify-between">
+          <Label htmlFor="senha">Senha</Label>
+          <Link href="/esqueci-senha" className="text-xs text-primary underline">
+            Esqueci minha senha
+          </Link>
+        </div>
         <Input id="senha" name="senha" type="password" autoComplete="current-password" required />
       </div>
       {estado && !estado.ok && (

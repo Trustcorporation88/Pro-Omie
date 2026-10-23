@@ -9,6 +9,10 @@ import { hojeDate } from "@/lib/datas";
 import { criarDadosPadrao } from "@/modules/setup/dados-padrao";
 import { ROTULO_PAPEL } from "@/lib/auth/permissoes";
 import { auditar } from "@/lib/auditoria";
+import { configuracaoEmail } from "@/modules/email/provedor";
+import { enfileirar } from "@/modules/email/fila";
+import { modeloSenhaProvisoria } from "@/modules/email/modelos";
+import { urlBase } from "@/modules/email/acoes";
 import { fmtDocumento } from "@/lib/format";
 import { esquemaEdicaoUsuario, esquemaEmpresa, esquemaNovoUsuario } from "./esquemas";
 import { gerarSenhaProvisoria } from "./senha";
@@ -421,9 +425,17 @@ async function usuarioAdministrado(tx: Prisma.TransactionClient | typeof prisma,
 }
 
 /** Cria o usuário com senha provisória aleatória (hash no banco, trocarSenha = true). A senha só volta nesta resposta. */
+/** Manda a senha provisória por e-mail quando o envio está configurado (o administrador também vê a senha na tela). */
+async function enviarSenhaProvisoria(p: { nome: string; email: string; senha: string }, empresaId: string | null | undefined): Promise<boolean> {
+  if (!configuracaoEmail().configurado) return false;
+  const emp = empresaId ? await prisma.empresa.findUnique({ where: { id: empresaId }, select: { razaoSocial: true, nomeFantasia: true } }) : null;
+  const e = await enfileirar({ empresaId: empresaId ?? null, tipo: "senha_provisoria", origemId: p.email, para: [p.email], ...modeloSenhaProvisoria({ nome: p.nome, email: p.email, senha: p.senha, url: `${await urlBase()}/login`, empresa: emp?.nomeFantasia || emp?.razaoSocial || "Pro Omie" }) });
+  return e.status === "ENVIADO";
+}
+
 export async function criarUsuario(
   valores: Record<string, unknown>,
-): Promise<Resultado<{ id: string; nome: string; email: string; senhaProvisoria: string }>> {
+): Promise<Resultado<{ id: string; nome: string; email: string; senhaProvisoria: string; emailEnviado: boolean }>> {
   return executar(async () => {
     const { ctx } = await exigirAdmin();
     const d = esquemaNovoUsuario.parse(valores);
@@ -451,8 +463,9 @@ export async function criarUsuario(
       { nome: d.nome, email: d.email, papel: d.papel, ...acesso },
       { empresaId: empresaDoUsuario(acesso) },
     );
+    const emailEnviado = await enviarSenhaProvisoria({ nome: d.nome, email: d.email, senha }, empresaDoUsuario(acesso)).catch(() => false);
     revalidar("/configuracoes/usuarios");
-    return { id: criado.id, nome: d.nome, email: d.email, senhaProvisoria: senha };
+    return { id: criado.id, nome: d.nome, email: d.email, senhaProvisoria: senha, emailEnviado };
   }, "Usuário criado.");
 }
 
@@ -507,7 +520,7 @@ export async function editarUsuario(id: string, valores: Record<string, unknown>
  */
 export async function redefinirSenhaUsuario(
   id: string,
-): Promise<Resultado<{ nome: string; email: string; senhaProvisoria: string }>> {
+): Promise<Resultado<{ nome: string; email: string; senhaProvisoria: string; emailEnviado: boolean }>> {
   return executar(async () => {
     const { u: eu, ctx } = await exigirAdmin();
     if (id === eu.id) {
@@ -527,8 +540,9 @@ export async function redefinirSenhaUsuario(
     await auditar("redefinir_senha", "usuario", id, `Senha redefinida: ${alvo.nome} (${alvo.email})`, undefined, {
       empresaId: empresaDoUsuario(alvo),
     });
+    const emailEnviado = await enviarSenhaProvisoria({ nome: alvo.nome, email: alvo.email, senha }, empresaDoUsuario(alvo)).catch(() => false);
     revalidar("/configuracoes/usuarios");
-    return { nome: alvo.nome, email: alvo.email, senhaProvisoria: senha };
+    return { nome: alvo.nome, email: alvo.email, senhaProvisoria: senha, emailEnviado };
   }, "Senha redefinida.");
 }
 
