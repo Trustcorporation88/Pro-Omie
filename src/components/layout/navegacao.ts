@@ -49,6 +49,10 @@ export const NAVEGACAO: GrupoNav[] = [
     ],
   },
   {
+    titulo: "Fiscal",
+    itens: [{ titulo: "Notas recebidas", href: "/fiscal/recebidas", icone: "FileInput", permissao: "fiscal:ver" }],
+  },
+  {
     titulo: "Cadastros",
     itens: [
       { titulo: "Clientes e fornecedores", href: "/cadastros/pessoas", icone: "Users", permissao: "cadastros:ver" },
@@ -64,7 +68,7 @@ export const NAVEGACAO: GrupoNav[] = [
     titulo: "Próximas fases",
     itens: [
       { titulo: "Compras", href: "#", icone: "PackagePlus", emBreve: "Fase 3" },
-      { titulo: "Notas fiscais e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
+      { titulo: "Emissão de notas e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
       { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
       { titulo: "Painel do contador", href: "#", icone: "Calculator", emBreve: "Fase 6" },
     ],
