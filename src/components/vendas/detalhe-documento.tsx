@@ -191,6 +191,12 @@ export function DetalheDocumento({
               <Dado rotulo="Condição de pagamento">{doc.condicaoNome ?? "A combinar"}</Dado>
               <Dado rotulo="Forma de pagamento">{doc.formaNome}</Dado>
               <Dado rotulo="Empresa emissora">{doc.empresaNome}</Dado>
+              {doc.baixaEstoque && (
+                <Dado rotulo="Baixa no estoque">
+                  {`Nº ${fmtNumeroDoc(doc.baixaEstoque.numero)}`}
+                  <div className="text-xs font-normal text-muted-foreground">{doc.baixaEstoque.resumo}</div>
+                </Dado>
+              )}
               {doc.oportunidade && (
                 <Dado rotulo="Oportunidade">
                   {podeVerCrm ? (

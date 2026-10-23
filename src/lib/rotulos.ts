@@ -4,6 +4,16 @@ export const ROTULOS = {
   tipoPessoa: { JURIDICA: "Pessoa jurídica", FISICA: "Pessoa física", ESTRANGEIRA: "Estrangeiro" },
   indicadorIE: { CONTRIBUINTE: "Contribuinte de ICMS", ISENTO: "Contribuinte isento", NAO_CONTRIBUINTE: "Não contribuinte" },
   tipoProduto: { PRODUTO: "Produto", SERVICO: "Serviço" },
+  grupoMaterial: {
+    PAPEL: "Papel e papelão",
+    PLASTICO: "Plásticos",
+    METAL_NAO_FERROSO: "Metais não ferrosos",
+    METAL_FERROSO: "Metais ferrosos",
+    METAL_PRECIOSO: "Metais preciosos",
+    VIDRO: "Vidro",
+    ELETRONICO: "Eletroeletrônicos",
+    OUTROS: "Outros materiais",
+  },
   tipoCategoria: { RECEITA: "Receita", DESPESA: "Despesa" },
   grupoDre: {
     RECEITA_BRUTA: "Receita bruta",

@@ -5,6 +5,8 @@ import { fmtDocumento } from "@/lib/format";
 import { ROTULOS } from "@/lib/rotulos";
 import { isoReq, num } from "@/lib/serial";
 import type { DocumentoVenda, ItemDocumento, LinhaDocumento, OpcoesVenda, TipoDocumentoVenda } from "./tipos";
+import { estoqueDoPedido } from "@/modules/estoque/servicos";
+import { fmtQtd } from "@/modules/estoque/tipos";
 
 export const POR_PAGINA_VENDAS = 30;
 
@@ -185,7 +187,10 @@ export async function obterDocumento(tipo: TipoDocumentoVenda, id: string): Prom
     itens: d.itens.map(paraItem),
     criadoEm: d.createdAt.toISOString(),
   });
-  const itens = { orderBy: { ordem: "asc" as const }, include: { produto: { select: { codigo: true, descricao: true } } } };
+  const itens = {
+    orderBy: { ordem: "asc" as const },
+    include: { produto: { select: { codigo: true, descricao: true, tipo: true, controlaEstoque: true, unidade: true } } },
+  };
 
   if (tipo === "proposta") {
     const d = await prisma.proposta.findFirst({
@@ -193,13 +198,35 @@ export async function obterDocumento(tipo: TipoDocumentoVenda, id: string): Prom
       include: { ...incluirDetalhe, itens, pedido: { select: { id: true, numero: true } }, oportunidade: { select: { id: true, titulo: true } } },
     });
     if (!d) return null;
-    return { ...comum(d), tipo, validade: isoReq(d.validade), motivo: d.motivoRecusa, vinculo: d.pedido, oportunidade: d.oportunidade, titulos: [] };
+    return {
+      ...comum(d),
+      tipo,
+      validade: isoReq(d.validade),
+      motivo: d.motivoRecusa,
+      vinculo: d.pedido,
+      oportunidade: d.oportunidade,
+      titulos: [],
+      estoque: [],
+      baixaEstoque: null,
+    };
   }
   const d = await prisma.pedido.findFirst({
     where: { id, empresaId: { in: escopo.ids } },
-    include: { ...incluirDetalhe, itens, proposta: { select: { id: true, numero: true } } },
+    include: {
+      ...incluirDetalhe,
+      itens,
+      proposta: { select: { id: true, numero: true } },
+      lancamentoEstoque: { select: { numero: true, itens: { select: { quantidade: true, produto: { select: { descricao: true, unidade: true } } } } } },
+    },
   });
   if (!d) return null;
+  const estoque = d.status === "ABERTO" ? await estoqueDoPedido(d.empresaId, d.itens) : [];
+  const baixa = d.lancamentoEstoque
+    ? {
+        numero: d.lancamentoEstoque.numero,
+        resumo: d.lancamentoEstoque.itens.map((i) => `${i.produto.descricao} ${fmtQtd(Math.abs(num(i.quantidade)), i.produto.unidade)}`).join(", "),
+      }
+    : null;
   const titulos = await prisma.titulo.findMany({
     where: { origem: "VENDA", origemId: d.id, empresaId: { in: escopo.ids } },
     orderBy: [{ parcela: "asc" }],
@@ -212,6 +239,8 @@ export async function obterDocumento(tipo: TipoDocumentoVenda, id: string): Prom
     motivo: d.motivoCancelamento,
     vinculo: d.proposta,
     oportunidade: null,
+    estoque,
+    baixaEstoque: baixa,
     titulos: titulos.map((t) => ({ id: t.id, numero: t.numero, vencimento: isoReq(t.vencimento), valor: num(t.valor), status: t.status })),
   };
 }

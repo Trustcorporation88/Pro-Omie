@@ -7,6 +7,7 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { buscarProdutos, type ProdutoResumo } from "@/modules/busca/acoes";
 import { fmtMoeda } from "@/lib/format";
+import { fmtQtd } from "@/modules/estoque/tipos";
 import { cn } from "@/lib/utils";
 
 /** Seletor de produto ou serviço da empresa ativa (busca por código ou descrição). Vazio = item avulso. */
@@ -89,6 +90,9 @@ export function SeletorProduto({
                     <span className="truncate">{p.descricao}</span>
                     <span className="text-xs text-muted-foreground">
                       {p.codigo} · {p.tipo === "SERVICO" ? "Serviço" : "Produto"} · {fmtMoeda(p.precoVenda)}/{p.unidade}
+                      {p.saldo !== null && (
+                        <span className={cn("ml-1", p.saldo > 0 ? "text-success" : "text-destructive")}>· estoque {fmtQtd(p.saldo, p.unidade)}</span>
+                      )}
                     </span>
                   </div>
                 </CommandItem>

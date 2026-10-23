@@ -41,6 +41,14 @@ export const NAVEGACAO: GrupoNav[] = [
     ],
   },
   {
+    titulo: "Estoque",
+    itens: [
+      { titulo: "Saldos", href: "/estoque", icone: "Boxes", permissao: "estoque:ver" },
+      { titulo: "Movimentações", href: "/estoque/movimentacoes", icone: "ArrowLeftRight", permissao: "estoque:ver" },
+      { titulo: "Vendas por material", href: "/estoque/vendas", icone: "ChartColumn", permissao: "estoque:ver" },
+    ],
+  },
+  {
     titulo: "Cadastros",
     itens: [
       { titulo: "Clientes e fornecedores", href: "/cadastros/pessoas", icone: "Users", permissao: "cadastros:ver" },
@@ -55,7 +63,7 @@ export const NAVEGACAO: GrupoNav[] = [
   {
     titulo: "Próximas fases",
     itens: [
-      { titulo: "Estoque e compras", href: "#", icone: "Boxes", emBreve: "Fase 3" },
+      { titulo: "Compras", href: "#", icone: "PackagePlus", emBreve: "Fase 3" },
       { titulo: "Notas fiscais e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
       { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
       { titulo: "Painel do contador", href: "#", icone: "Calculator", emBreve: "Fase 6" },

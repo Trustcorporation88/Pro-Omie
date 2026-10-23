@@ -6,6 +6,7 @@ import { FormularioDocumento } from "@/components/vendas/formulario-documento";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { hojeISO } from "@/lib/datas";
 import { oportunidadeParaNovaProposta } from "@/modules/crm/consultas";
+import { itemInicialDoProduto } from "@/modules/estoque/consultas";
 import { carregarOpcoesVenda } from "@/modules/vendas/consultas";
 import { valoresNovos } from "@/modules/vendas/valores";
 
@@ -17,8 +18,14 @@ export default async function Pagina({ searchParams }: Props) {
   const u = await exigirUsuario("vendas:editar");
   const sp = await searchParams;
   const oportunidadeId = typeof sp.oportunidade === "string" ? sp.oportunidade : null;
-  const [opcoes, oportunidade] = await Promise.all([carregarOpcoesVenda(), oportunidadeId ? oportunidadeParaNovaProposta(oportunidadeId) : null]);
+  const produtoId = typeof sp.produto === "string" ? sp.produto : null;
+  const [opcoes, oportunidade, item] = await Promise.all([
+    carregarOpcoesVenda(),
+    oportunidadeId ? oportunidadeParaNovaProposta(oportunidadeId) : null,
+    produtoId ? itemInicialDoProduto(produtoId) : null,
+  ]);
   const iniciais = valoresNovos(opcoes, hojeISO(), u.id);
+  if (item) iniciais.itens = [item];
   if (oportunidade) {
     // veio do funil: cliente, responsável e vínculo já preenchidos
     Object.assign(iniciais, {
