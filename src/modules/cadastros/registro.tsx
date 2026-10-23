@@ -116,6 +116,11 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
             estoqueMinimo: numOuNull(p.estoqueMinimo),
             estoqueMaximo: numOuNull(p.estoqueMaximo),
             observacoes: p.observacoes,
+            cfopInterno: p.cfopInterno,
+            cfopInterestadual: p.cfopInterestadual,
+            csosnInterno: p.csosnInterno,
+            csosnInterestadual: p.csosnInterestadual,
+            textoFiscal: p.textoFiscal,
           },
           celulas: [
             <span key="c" className="font-mono text-xs">{p.codigo}</span>,

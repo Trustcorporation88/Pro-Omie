@@ -28,6 +28,7 @@ export function DetalheDocumento({
   podeFaturar,
   podeVerFinanceiro,
   podeVerCrm = false,
+  painelNfe,
 }: {
   doc: DocumentoVenda;
   opcoes: OpcoesVenda;
@@ -35,6 +36,8 @@ export function DetalheDocumento({
   podeFaturar: boolean;
   podeVerFinanceiro: boolean;
   podeVerCrm?: boolean;
+  /** painel da NF-e do pedido (montado no servidor pela página) */
+  painelNfe?: React.ReactNode;
 }) {
   const proposta = doc.tipo === "proposta";
   const base = proposta ? "/vendas/propostas" : "/vendas/pedidos";
@@ -176,6 +179,8 @@ export function DetalheDocumento({
               </Table>
             </Card>
           )}
+
+          {!proposta && painelNfe}
         </div>
 
         <Card className="h-fit">

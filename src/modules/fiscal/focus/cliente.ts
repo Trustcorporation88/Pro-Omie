@@ -33,7 +33,7 @@ export async function chamarFocus(
   token: string,
   ambiente: 1 | 2,
   caminho: string,
-  opcoes: { metodo?: "GET" | "POST" | "PUT"; corpo?: unknown; timeoutMs?: number } = {},
+  opcoes: { metodo?: "GET" | "POST" | "PUT" | "DELETE"; corpo?: unknown; timeoutMs?: number } = {},
 ): Promise<RespostaFocus> {
   const r = await fetch(destino(`${URL_FOCUS[ambiente]}${caminho}`), {
     method: opcoes.metodo ?? "GET",

@@ -56,7 +56,7 @@ export async function buscaGlobal(termo: string): Promise<ResultadoBusca[]> {
   }
 
   if (pode(u.papel, "financeiro:ver")) {
-    const numero = /^\d+$/.test(q) ? Number(q) : null;
+    const numero = /^\d{1,9}$/.test(q) ? Number(q) : null; // número é int: CNPJ ou chave colados não viram filtro de número
     const titulos = await prisma.titulo.findMany({
       where: {
         empresaId: { in: escopo.ids },

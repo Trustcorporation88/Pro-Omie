@@ -177,6 +177,8 @@ model Empresa {
   configuracaoFiscal  ConfiguracaoFiscal?
   cursoresCaptura     CursorCaptura[]
   documentosRecebidos DocumentoRecebido[]
+  notasFiscais        NotaFiscal[]
+  inutilizacoes       InutilizacaoNfe[]
 
   @@map("empresas")
 }
@@ -283,34 +285,40 @@ model Pessoa {
 }
 
 model Produto {
-  id              String         @id @default(cuid())
+  id                 String         @id @default(cuid())
   /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
-  empresaId       String
-  empresa         Empresa        @relation(fields: [empresaId], references: [id])
-  tipo            TipoProduto    @default(PRODUTO)
-  codigo          String
-  descricao       String
-  unidade         String         @default("UN")
-  gtin            String?
-  ncm             String?
-  cest            String?
-  origem          Int            @default(0)
-  codigoServico   String?
-  precoVenda      Decimal        @default(0) @db.Decimal(14, 2)
-  precoCusto      Decimal        @default(0) @db.Decimal(14, 4)
-  controlaEstoque Boolean        @default(true)
-  estoqueMinimo   Decimal?       @db.Decimal(14, 4)
-  estoqueMaximo   Decimal?       @db.Decimal(14, 4)
+  empresaId          String
+  empresa            Empresa        @relation(fields: [empresaId], references: [id])
+  tipo               TipoProduto    @default(PRODUTO)
+  codigo             String
+  descricao          String
+  unidade            String         @default("UN")
+  gtin               String?
+  ncm                String?
+  cest               String?
+  origem             Int            @default(0)
+  codigoServico      String?
+  precoVenda         Decimal        @default(0) @db.Decimal(14, 2)
+  precoCusto         Decimal        @default(0) @db.Decimal(14, 4)
+  controlaEstoque    Boolean        @default(true)
+  estoqueMinimo      Decimal?       @db.Decimal(14, 4)
+  estoqueMaximo      Decimal?       @db.Decimal(14, 4)
   /// grupo do material reciclável (PAPEL, PLASTICO, METAL_FERROSO...); vazio nos demais produtos
-  grupoMaterial   String?
-  observacoes     String?
-  ativo           Boolean        @default(true)
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
-  itensProposta   PropostaItem[]
-  itensPedido     PedidoItem[]
-  itensEstoque    ItemEstoque[]
-  saldosEstoque   SaldoEstoque[]
+  grupoMaterial      String?
+  /// NF-e: CFOP e CSOSN dentro e fora do estado (vazio = padrão do sistema) e texto legal para as informações complementares
+  cfopInterno        String?
+  cfopInterestadual  String?
+  csosnInterno       String?
+  csosnInterestadual String?
+  textoFiscal        String?
+  observacoes        String?
+  ativo              Boolean        @default(true)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  itensProposta      PropostaItem[]
+  itensPedido        PedidoItem[]
+  itensEstoque       ItemEstoque[]
+  saldosEstoque      SaldoEstoque[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, descricao])
@@ -760,6 +768,7 @@ model Pedido {
 
   itens             PedidoItem[]
   lancamentoEstoque LancamentoEstoque?
+  notasFiscais      NotaFiscal[]
 
   @@unique([empresaId, numero])
   @@index([empresaId, status, emissao])
@@ -1052,6 +1061,14 @@ model ConfiguracaoFiscal {
   focusTokenProducao    Bytes?
   focusTokenHomologacao Bytes?
   focusAtivadaEm        DateTime?
+  /// Emissão de NF-e (modelo 55): ambiente nasce em homologação (2) até o administrador trocar
+  nfeAtiva              Boolean     @default(false)
+  nfeAmbiente           Int         @default(2)
+  nfeMotor              MotorFiscal @default(SEFAZ)
+  nfeSerie              Int         @default(1)
+  nfeProximoNumero      Int         @default(1)
+  /// texto padrão das informações complementares (o do Simples Nacional vem preenchido)
+  nfeInformacoes        String?
   atualizadoPorId       String?
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
@@ -1150,4 +1167,108 @@ model EventoDocumento {
   @@unique([empresaId, chaveDocumento, tipoEvento, sequencia])
   @@index([documentoId])
   @@map("eventos_documentos")
+}
+
+// ───────────────────────── Fiscal: emissão de NF-e (Fase 4, etapa 2) ─────────────────────────
+
+enum StatusNotaFiscal {
+  /// enviada, sem resposta definitiva (consultar)
+  PROCESSANDO
+  AUTORIZADA
+  /// recusada pela SEFAZ: o número continua reservado para o reenvio corrigido (ou é inutilizado)
+  REJEITADA
+  DENEGADA
+  CANCELADA
+}
+
+/// NF-e emitida pelo estabelecimento. O XML assinado e o autorizado (nfeProc) ficam guardados.
+model NotaFiscal {
+  id                        String           @id @default(cuid())
+  empresaId                 String
+  empresa                   Empresa          @relation(fields: [empresaId], references: [id])
+  pedidoId                  String?
+  pedido                    Pedido?          @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  modelo                    Int              @default(55)
+  serie                     Int
+  numero                    Int
+  /// 1 produção, 2 homologação
+  ambiente                  Int
+  motor                     MotorFiscal
+  /// 1 normal, 6 contingência SVC-AN
+  tpEmis                    Int              @default(1)
+  chave                     String?
+  status                    StatusNotaFiscal @default(PROCESSANDO)
+  cStat                     String?
+  xMotivo                   String?
+  protocolo                 String?
+  emitidaEm                 DateTime
+  autorizadaEm              DateTime?
+  naturezaOperacao          String
+  destinatarioNome          String
+  destinatarioDocumento     String?
+  valor                     Decimal          @db.Decimal(14, 2)
+  /// XML assinado enviado (NFe) e XML autorizado (nfeProc)
+  xml                       String?
+  xmlAutorizado             String?
+  contingenciaMotivo        String?
+  canceladaEm               DateTime?
+  cancelamentoProtocolo     String?
+  cancelamentoJustificativa String?
+  /// referência da nota na Focus NFe (motor reserva)
+  focusRef                  String?
+  emitidaPorId              String?
+  createdAt                 DateTime         @default(now())
+  updatedAt                 DateTime         @updatedAt
+
+  eventos EventoNotaFiscal[]
+
+  @@unique([empresaId, modelo, serie, numero, ambiente])
+  @@index([pedidoId])
+  @@index([empresaId, emitidaEm])
+  @@index([empresaId, status])
+  @@map("notas_fiscais")
+}
+
+/// Eventos da NF-e emitida (cancelamento 110111, carta de correção 110110).
+model EventoNotaFiscal {
+  id           String     @id @default(cuid())
+  notaId       String
+  nota         NotaFiscal @relation(fields: [notaId], references: [id], onDelete: Cascade)
+  tipoEvento   String
+  sequencia    Int
+  detalhe      String
+  ok           Boolean
+  cStat        String?
+  xMotivo      String?
+  protocolo    String?
+  registradoEm DateTime?
+  /// procEventoNFe (evento + retorno), quando registrado
+  xml          String?
+  usuarioId    String?
+  createdAt    DateTime   @default(now())
+
+  @@index([notaId])
+  @@map("eventos_notas_fiscais")
+}
+
+/// Faixas de numeração inutilizadas na SEFAZ (números que não serão usados).
+model InutilizacaoNfe {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  ambiente      Int
+  serie         Int
+  numeroInicial Int
+  numeroFinal   Int
+  justificativa String
+  ok            Boolean
+  cStat         String?
+  xMotivo       String?
+  protocolo     String?
+  xml           String?
+  usuarioId     String?
+  createdAt     DateTime @default(now())
+
+  @@index([empresaId, serie])
+  @@map("inutilizacoes_nfe")
 }

@@ -19,6 +19,7 @@ const numOpc = z
 const digitos = opc.transform((v) => (v ? soDigitos(v) || null : null));
 const data = z.string().refine(ehISOValido, "Data inválida.").transform(isoParaDate);
 const enumDe = <T extends [string, ...string[]]>(valores: T) => z.enum(valores);
+const CSOSN = ["101", "102", "103", "300", "400", "500", "900"];
 
 export const esquemaPessoa = z
   .object({
@@ -75,6 +76,12 @@ export const esquemaProduto = z.object({
   estoqueMinimo: numOpc,
   estoqueMaximo: numOpc,
   observacoes: opc,
+  // NF-e: vazio = padrão do sistema (reciclável da produção própria ou revenda)
+  cfopInterno: digitos.refine((v) => !v || /^5\d{3}$/.test(v), "CFOP de venda dentro do estado tem 4 dígitos e começa com 5."),
+  cfopInterestadual: digitos.refine((v) => !v || /^6\d{3}$/.test(v), "CFOP de venda para outro estado tem 4 dígitos e começa com 6."),
+  csosnInterno: opc.refine((v) => !v || CSOSN.includes(v), "CSOSN inválido."),
+  csosnInterestadual: opc.refine((v) => !v || CSOSN.includes(v), "CSOSN inválido."),
+  textoFiscal: opc.refine((v) => !v || v.length <= 500, "Até 500 caracteres."),
 });
 
 export const esquemaCategoria = z.object({
