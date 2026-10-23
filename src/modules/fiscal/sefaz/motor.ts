@@ -14,7 +14,8 @@ export function criarMotorSefaz(ctx: { cnpj: string; uf: string | null; ambiente
   const cUF = CODIGO_UF[(ctx.uf ?? "").toUpperCase()] ?? "";
   return {
     motor: "SEFAZ",
-    esperaSemNovidade: (tipo: TipoDoc) => (tipo === "NFSE" ? 0 : ESPERA_SEFAZ_MS),
+    // NF-e e CT-e (NT 2014.002) e NFS-e (manual do ADN): 1 hora depois de "nenhum documento" ou do fim do acervo
+    esperaSemNovidade: (_tipo: TipoDoc) => ESPERA_SEFAZ_MS,
     consultar: (tipo, nsu) =>
       tipo === "NFSE"
         ? consultarAdn(agente, { cnpj: ctx.cnpj, ambiente: ctx.ambiente, ultNsu: nsu })

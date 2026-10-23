@@ -4,7 +4,7 @@ import type { Motor, PaginaCaptura, ResultadoManifestacao, TipoDoc, TipoManifest
 
 export interface MotorCaptacao {
   readonly motor: Motor;
-  /** espera obrigatória depois de "nenhum documento novo" (regra da SEFAZ para NF-e e CT-e), em ms */
+  /** espera obrigatória depois de "nenhum documento novo" (regra da SEFAZ e do ADN), em ms */
   esperaSemNovidade(tipo: TipoDoc): number;
   /** uma página da distribuição a partir do NSU (SEFAZ) ou da versão (Focus) */
   consultar(tipo: TipoDoc, nsu: string): Promise<PaginaCaptura>;
@@ -13,5 +13,5 @@ export interface MotorCaptacao {
   encerrar(): void;
 }
 
-/** Espera depois de 137 no DistDFe (1 h + 1 min de folga) e depois de 656 (consumo indevido). */
+/** Espera depois de "nenhum documento" no DistDFe e no ADN (1 h + 1 min de folga) e depois de 656 (consumo indevido). */
 export const ESPERA_SEFAZ_MS = 61 * 60_000;

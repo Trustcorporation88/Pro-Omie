@@ -3,7 +3,7 @@
 // Regras (do HUBCLONE, que já roda isso em produção):
 // - Uma execução por CNPJ (trava no banco, com validade): consulta paralela faz a SEFAZ bloquear o CNPJ (656).
 // - Depois de "nenhum documento novo" (137) ou de chegar ao fim (ultNSU = maxNSU), e depois de 656, só consultar de novo
-//   1 hora depois — a guarda é local, sem nem tentar a SEFAZ antes do prazo.
+//   1 hora depois (NF-e, CT-e e também NFS-e, pelo manual do ADN) — a guarda é local, sem nem tentar antes do prazo.
 // - Cursor salvo página a página, e só se todos os documentos da página foram gravados (senão a SEFAZ não entrega de novo).
 // - Teto de páginas e de tempo por execução; o que sobrar fica para a próxima.
 import "server-only";
