@@ -8,12 +8,15 @@ import { Selo, SeloAtivo } from "@/components/selos";
 import { contextoAdmin, escopoEmpresa } from "@/lib/auth/empresa";
 import { AcoesFilial, BotaoEditarMatriz, BotaoNovaEmpresa } from "@/components/configuracoes/empresa-controles";
 import { LogotipoEmpresa, type LogoAtual } from "@/components/configuracoes/logotipo-empresa";
+import { CertificadosEmpresa } from "@/components/configuracoes/certificado-empresa";
+import type { CertificadoResumo } from "@/modules/configuracoes/certificado-tipos";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { fmtCep, fmtDocumento, fmtTelefone } from "@/lib/format";
 import { ROTULOS } from "@/lib/rotulos";
 import { empresaParaValores, listarEmpresasDoGrupo } from "@/modules/configuracoes/consultas";
 import { fmtCnae } from "@/modules/configuracoes/formatos";
 import { logosComoDataUrl } from "@/modules/configuracoes/logotipo";
+import { resumosCertificados } from "@/modules/configuracoes/certificado";
 
 export const metadata: Metadata = { title: "Empresas e filiais" };
 
@@ -53,11 +56,13 @@ function CartaoEmpresa({
   ativa,
   adminDoGrupo,
   logo,
+  certificados,
 }: {
   empresa: EmpresaComFiliais;
   ativa: boolean;
   adminDoGrupo: boolean;
   logo: LogoAtual | null;
+  certificados: Record<string, CertificadoResumo>;
 }) {
   const filiais = empresa.filiais;
   const ativas = filiais.filter((f) => f.ativo).length;
@@ -124,6 +129,17 @@ function CartaoEmpresa({
             razaoSocial={empresa.razaoSocial}
             cnpj={fmtDocumento(empresa.cnpj)}
             logo={logo}
+          />
+
+          <CertificadosEmpresa
+            estabelecimentos={[empresa, ...filiais].map((x) => ({
+              id: x.id,
+              nome: x.nomeFantasia || x.razaoSocial,
+              cnpj: x.cnpj,
+              matriz: x.id === empresa.id,
+              ativo: x.ativo,
+            }))}
+            certificados={certificados}
           />
 
           <div className="mt-6 border-t pt-5">
@@ -200,7 +216,11 @@ export default async function EmpresaPage() {
     );
   }
 
-  const [escopo, logos] = await Promise.all([escopoEmpresa().catch(() => null), logosComoDataUrl(empresas.map((e) => e.id))]);
+  const [escopo, logos, certificados] = await Promise.all([
+    escopoEmpresa().catch(() => null),
+    logosComoDataUrl(empresas.map((e) => e.id)),
+    resumosCertificados(empresas.flatMap((e) => [e.id, ...e.filiais.map((f) => f.id)])),
+  ]);
   const ativasNoGrupo = empresas.filter((e) => e.ativo).length;
 
   return (
@@ -218,7 +238,7 @@ export default async function EmpresaPage() {
 
       <div className="space-y-6">
         {empresas.map((e) => (
-          <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} adminDoGrupo={ctx.adminDoGrupo} logo={logos[e.id] ?? null} />
+          <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} adminDoGrupo={ctx.adminDoGrupo} logo={logos[e.id] ?? null} certificados={certificados} />
         ))}
       </div>
     </>

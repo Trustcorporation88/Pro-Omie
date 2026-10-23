@@ -168,7 +168,8 @@ model Empresa {
   oportunidades Oportunidade[]
   atividades    Atividade[]
 
-  logo LogoEmpresa?
+  logo        LogoEmpresa?
+  certificado CertificadoDigital?
 
   lancamentosEstoque LancamentoEstoque[]
   saldosEstoque      SaldoEstoque[]
@@ -956,4 +957,31 @@ model SaldoEstoque {
   @@id([empresaId, produtoId])
   @@index([produtoId])
   @@map("saldos_estoque")
+}
+
+/// Certificado digital A1 do estabelecimento (CNPJ), para emitir NF-e e NFS-e (Fase 4).
+/// Arquivo e senha ficam cifrados (AES-256-GCM, chave CERTIFICADOS_CHAVE do servidor, com o id da empresa
+/// autenticado junto) e nunca saem do servidor. A filial sem certificado próprio usa o da matriz.
+model CertificadoDigital {
+  empresaId        String   @id
+  empresa          Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  arquivoCifrado   Bytes
+  senhaCifrada     Bytes
+  /// nome do titular (CN sem o CNPJ)
+  titular          String
+  /// CNPJ do certificado (14 dígitos)
+  cnpj             String?
+  /// autoridade certificadora emissora
+  emissor          String?
+  numeroSerie      String
+  /// SHA-256 do certificado (hex)
+  impressaoDigital String
+  validoDe         DateTime
+  validoAte        DateTime
+  enviadoPorId     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([validoAte])
+  @@map("certificados_digitais")
 }
