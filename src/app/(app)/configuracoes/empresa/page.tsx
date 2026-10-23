@@ -18,6 +18,8 @@ import { fmtCnae } from "@/modules/configuracoes/formatos";
 import { logosComoDataUrl } from "@/modules/configuracoes/logotipo";
 import { resumosCertificados } from "@/modules/configuracoes/certificado";
 import { CaptacaoEmpresa } from "@/components/fiscal/captacao-empresa";
+import { EmissaoEmpresa } from "@/components/fiscal/emissao-empresa";
+import { estadoEmissao, type EstadoEmissao } from "@/modules/fiscal/nfe/consultas";
 import { estadoCaptacao } from "@/modules/fiscal/consultas";
 import type { EstadoCaptacao } from "@/modules/fiscal/tipos";
 
@@ -61,6 +63,7 @@ function CartaoEmpresa({
   logo,
   certificados,
   captacao,
+  emissao,
 }: {
   empresa: EmpresaComFiliais;
   ativa: boolean;
@@ -68,6 +71,7 @@ function CartaoEmpresa({
   logo: LogoAtual | null;
   certificados: Record<string, CertificadoResumo>;
   captacao: EstadoCaptacao[];
+  emissao: EstadoEmissao[];
 }) {
   const filiais = empresa.filiais;
   const ativas = filiais.filter((f) => f.ativo).length;
@@ -147,6 +151,8 @@ function CartaoEmpresa({
             certificados={certificados}
           />
 
+          <EmissaoEmpresa estados={emissao} />
+
           <CaptacaoEmpresa estados={captacao} />
 
           <div className="mt-6 border-t pt-5">
@@ -223,7 +229,11 @@ export default async function EmpresaPage() {
     );
   }
 
-  const [escopo, logos, certificados, captacao] = await Promise.all([
+  const estabsAtivos = empresas.flatMap((e) => [
+    { id: e.id, nome: e.nomeFantasia || e.razaoSocial, cnpj: e.cnpj },
+    ...e.filiais.filter((f) => f.ativo).map((f) => ({ id: f.id, nome: f.nomeFantasia || f.razaoSocial, cnpj: f.cnpj })),
+  ]);
+  const [escopo, logos, certificados, captacao, emissao] = await Promise.all([
     escopoEmpresa().catch(() => null),
     logosComoDataUrl(empresas.map((e) => e.id)),
     resumosCertificados(empresas.flatMap((e) => [e.id, ...e.filiais.map((f) => f.id)])),
@@ -233,6 +243,7 @@ export default async function EmpresaPage() {
         ...e.filiais.filter((f) => f.ativo).map((f) => ({ id: f.id, nome: f.nomeFantasia || f.razaoSocial, cnpj: f.cnpj, matriz: false })),
       ]),
     ),
+    estadoEmissao(estabsAtivos),
   ]);
   const ativasNoGrupo = empresas.filter((e) => e.ativo).length;
 
@@ -254,6 +265,7 @@ export default async function EmpresaPage() {
           <CartaoEmpresa key={e.id} empresa={e} ativa={escopo?.ativa.id === e.id} adminDoGrupo={ctx.adminDoGrupo} logo={logos[e.id] ?? null}
             certificados={certificados}
             captacao={captacao.filter((c) => c.empresaId === e.id || e.filiais.some((f) => f.id === c.empresaId))}
+            emissao={emissao.filter((c) => c.empresaId === e.id || e.filiais.some((f) => f.id === c.empresaId))}
           />
         ))}
       </div>

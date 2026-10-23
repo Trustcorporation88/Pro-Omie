@@ -175,6 +175,15 @@ export async function certificadoParaEmissao(empresaId: string) {
   return (await abrirCertificadoGuardado(empresa.id)) ?? (empresa.matrizId ? await abrirCertificadoGuardado(empresa.matrizId) : null);
 }
 
+/** Só a validade do certificado que a emissão usaria (o do estabelecimento ou o da matriz), sem decifrar nada. */
+export async function validadeCertificadoEmissao(empresaId: string): Promise<{ validoAte: Date } | null> {
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId }, select: { id: true, matrizId: true } });
+  if (!empresa) return null;
+  const ids = [empresa.id, ...(empresa.matrizId ? [empresa.matrizId] : [])];
+  const lista = await prisma.certificadoDigital.findMany({ where: { empresaId: { in: ids } }, select: { empresaId: true, validoAte: true } });
+  return lista.find((c) => c.empresaId === empresa.id) ?? lista.find((c) => c.empresaId === empresa.matrizId) ?? null;
+}
+
 /** Resumo (sem arquivo e sem senha) dos certificados dos estabelecimentos informados. */
 export async function resumosCertificados(empresaIds: string[]): Promise<Record<string, CertificadoResumo>> {
   if (!empresaIds.length) return {};

@@ -11,15 +11,18 @@ import { escaparAtributo } from "../xml";
 const DSIG = "http://www.w3.org/2000/09/xmldsig#";
 const C14N = "http://www.w3.org/TR/2001/REC-xml-c14n-20010315";
 
-/** Forma canônica do elemento `<tag Id="...">…</tag>` com o namespace herdado no ápice. */
+/**
+ * Forma canônica do elemento `<tag Id="..." [outros atributos]>…</tag>` com o namespace herdado no ápice. O XML montado
+ * pelo sistema já traz os atributos na ordem canônica (Id antes de versao: maiúsculas vêm antes na ordem lexicográfica),
+ * então basta inserir a declaração de namespace logo depois do nome da tag.
+ */
 export function canonicoDoElemento(xml: string, tag: string, id: string, namespaceHerdado: string): string {
-  const abertura = `<${tag} Id="${escaparAtributo(id)}">`;
-  const inicio = xml.indexOf(abertura);
+  const marca = `<${tag} Id="${escaparAtributo(id)}"`;
+  const inicio = xml.indexOf(marca);
   const fechamento = `</${tag}>`;
-  const fim = xml.indexOf(fechamento, inicio);
+  const fim = inicio < 0 ? -1 : xml.indexOf(fechamento, inicio);
   if (inicio < 0 || fim < 0) throw new Error(`Elemento ${tag} com Id ${id} não encontrado para assinar`);
-  const elemento = xml.slice(inicio, fim + fechamento.length);
-  return `<${tag} xmlns="${escaparAtributo(namespaceHerdado)}" Id="${escaparAtributo(id)}">` + elemento.slice(abertura.length);
+  return `<${tag} xmlns="${escaparAtributo(namespaceHerdado)}" ` + xml.slice(inicio + tag.length + 2, fim + fechamento.length);
 }
 
 function signedInfo(id: string, digest: string, comNamespace: boolean): string {

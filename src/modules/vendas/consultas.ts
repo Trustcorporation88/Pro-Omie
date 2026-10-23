@@ -36,7 +36,7 @@ const ABAS_PEDIDO: Record<string, Prisma.PedidoWhereInput> = {
 
 function buscaTexto(q: string) {
   if (!q) return {};
-  const numero = /^\d+$/.test(q) ? Number(q) : null;
+  const numero = /^\d{1,9}$/.test(q) ? Number(q) : null; // número é int: CNPJ ou chave colados não viram filtro de número
   return {
     OR: [
       { pessoa: { nome: { contains: q, mode: "insensitive" as const } } },

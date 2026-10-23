@@ -1,4 +1,5 @@
 // Definição declarativa dos formulários de cadastro. Seguro para client e server.
+import { CSOSN_OPCOES } from "@/modules/fiscal/nfe/tipos";
 import { ROTULOS, opcoes, type Opcao } from "@/lib/rotulos";
 import { UFS } from "@/lib/format";
 
@@ -108,6 +109,26 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
       { nome: "gtin", rotulo: "GTIN/EAN", tipo: "texto", largura: 2, secao: "Fiscal" },
       { nome: "origem", rotulo: "Origem da mercadoria", tipo: "selecao", opcoes: opcoes(ROTULOS.origemProduto), largura: 4, secao: "Fiscal" },
       { nome: "codigoServico", rotulo: "Item LC 116 (serviços)", tipo: "texto", largura: 2, placeholder: "ex.: 01.07", secao: "Fiscal" },
+      {
+        nome: "cfopInterno",
+        rotulo: "CFOP dentro do estado",
+        tipo: "texto",
+        largura: 2,
+        placeholder: "padrão",
+        ajuda: "Vazio = 5101 nos recicláveis da produção, 5102 nos demais.",
+        secao: "NF-e (confirme com o contador)",
+      },
+      { nome: "csosnInterno", rotulo: "CSOSN dentro do estado", tipo: "selecao", opcoes: CSOSN_OPCOES, largura: 4, ajuda: "Vazio = 400 nos recicláveis (diferimento do art. 392 do RICMS-SP), 102 nos demais.", secao: "NF-e (confirme com o contador)" },
+      { nome: "cfopInterestadual", rotulo: "CFOP para outro estado", tipo: "texto", largura: 2, placeholder: "padrão", ajuda: "Vazio = 6101 ou 6102.", secao: "NF-e (confirme com o contador)" },
+      { nome: "csosnInterestadual", rotulo: "CSOSN para outro estado", tipo: "selecao", opcoes: CSOSN_OPCOES, largura: 4, ajuda: "Vazio = 102.", secao: "NF-e (confirme com o contador)" },
+      {
+        nome: "textoFiscal",
+        rotulo: "Texto legal nas vendas dentro do estado",
+        tipo: "area",
+        largura: 6,
+        ajuda: "Vai nas informações complementares da NF-e. Vazio nos recicláveis com CSOSN 400 = texto do diferimento do art. 392 do RICMS/2000.",
+        secao: "NF-e (confirme com o contador)",
+      },
       { nome: "controlaEstoque", rotulo: "Controla estoque", tipo: "booleano", largura: 2, secao: "Estoque" },
       {
         nome: "grupoMaterial",
