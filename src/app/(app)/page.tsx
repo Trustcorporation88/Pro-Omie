@@ -31,6 +31,9 @@ import { diffDias, FUSO, hojeISO, isoParaDate } from "@/lib/datas";
 import { fmtData, fmtMesAno, fmtMoeda } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { carregarPainel, type DadosPainel, type PrimeirosPassos } from "@/modules/relatorios/painel";
+import { escopoEmpresa } from "@/lib/auth/empresa";
+import { certificadosVencendo } from "@/modules/configuracoes/certificado";
+import { AVISO_CERTIFICADO_DIAS, diaSP, situacaoCertificado } from "@/modules/configuracoes/certificado-tipos";
 
 function saudacao(): string {
   const hora = Number(new Intl.DateTimeFormat("en-US", { timeZone: FUSO, hour: "numeric", hourCycle: "h23" }).format(new Date()));
@@ -75,11 +78,19 @@ export default async function PainelPage() {
     );
   }
 
-  const d = await carregarPainel(hoje);
+  const [d, certificados] = await Promise.all([
+    carregarPainel(hoje),
+    pode(u.papel, "config:admin")
+      ? escopoEmpresa()
+          .then((e) => certificadosVencendo(e.ids, AVISO_CERTIFICADO_DIAS))
+          .catch(() => [])
+      : Promise.resolve([]),
+  ]);
   const relatorios = pode(u.papel, "relatorios:ver");
   return (
     <>
       {cabecalho}
+      {certificados.length > 0 && <AvisoCertificados itens={certificados} />}
       {d.primeirosPassos && <Implantacao passos={d.primeirosPassos} />}
       <Indicadores d={d} relatorios={relatorios} />
       <EntradasSaidas d={d} relatorios={relatorios} />
@@ -88,6 +99,40 @@ export default async function PainelPage() {
         <DespesasDoMes d={d} relatorios={relatorios} />
       </div>
     </>
+  );
+}
+
+// ───────────── Certificado digital vencendo ─────────────
+
+function AvisoCertificados({ itens }: { itens: { empresa: string; validoAte: string }[] }) {
+  const algumVencido = itens.some((i) => situacaoCertificado(i.validoAte).tom === "perigo");
+  return (
+    <div
+      role="alert"
+      className={cn(
+        "mb-4 flex flex-col gap-2 rounded-xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+        algumVencido ? "border-destructive/40 bg-destructive/5" : "border-warning/50 bg-warning/10",
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <TriangleAlert className={cn("mt-0.5 size-4 shrink-0", algumVencido ? "text-destructive" : "text-[oklch(0.5_0.13_65)] dark:text-warning")} aria-hidden />
+        <ul className="space-y-0.5">
+          {itens.map((i) => {
+            const s = situacaoCertificado(i.validoAte);
+            const data = diaSP(i.validoAte);
+            return (
+              <li key={`${i.empresa}-${i.validoAte}`}>
+                <span className="font-medium">{`Certificado digital de ${i.empresa}`}</span>
+                {s.tom === "perigo" ? ` venceu em ${data}: sem ele não dá para emitir notas.` : ` vence em ${data} (${s.dias <= 1 ? "em até 1 dia" : `${s.dias} dias`}).`}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <Link href="/configuracoes/empresa" className="shrink-0 font-medium text-primary hover:underline">
+        Enviar o renovado
+      </Link>
+    </div>
   );
 }
 

@@ -9,7 +9,7 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 - Configuração inicial protegida por token (`/setup?token=...`): cria a empresa matriz (dados puxados da Receita pelo CNPJ), o administrador e os cadastros padrão (plano de categorias com grupos da DRE, formas e condições de pagamento, centros de custo, conta Caixa).
 - Cadastros: clientes e fornecedores (consulta de CNPJ na Receita e CEP no ViaCEP), produtos e serviços com dados fiscais (NCM, CEST, origem, item da LC 116), categorias financeiras, centros de custo, contas bancárias com saldo, formas e condições de pagamento.
 - Multiempresa: várias empresas do grupo, cada uma com CNPJ, filiais, contas bancárias, cadastros (clientes e fornecedores, produtos, categorias, centros de custo, formas e condições de pagamento, regras de conciliação), lançamentos e relatórios próprios. Seletor de empresa no menu; empresa nova nasce com o plano de contas padrão e a conta Caixa.
-- Administração: empresas e filiais (com logotipo próprio, que sai no cabeçalho dos PDFs da empresa e das filiais), usuários (senha provisória exibida uma única vez) e trilha de auditoria com diferenças antes/depois. Administrador do grupo (todas as empresas) cria empresas e libera qualquer acesso; administrador de empresa administra só as empresas liberadas a ele (dados, filiais, usuários restritos a elas e auditoria delas).
+- Administração: empresas e filiais (com logotipo próprio, que sai no cabeçalho dos PDFs da empresa e das filiais, e certificado digital A1 por CNPJ), usuários (senha provisória exibida uma única vez) e trilha de auditoria com diferenças antes/depois. Administrador do grupo (todas as empresas) cria empresas e libera qualquer acesso; administrador de empresa administra só as empresas liberadas a ele (dados, filiais, usuários restritos a elas e auditoria delas).
 - Busca global (Ctrl+K), tema claro e escuro.
 
 **Financeiro**
@@ -66,6 +66,8 @@ Regras de negócio do financeiro ficam em `src/modules/financeiro/servicos.ts` e
 
 Logotipo e ícones ficam em `marca/` como texto base64, porque a integração usada para publicar no GitHub só envia arquivos de texto. O `scripts/gerar-marca.mjs` recria os arquivos binários (`public/marca/*.webp`, `src/app/icon.png`, `apple-icon.png` e `favicon.ico`) antes de `npm run dev`, `npm run build` e do build da Vercel. Para trocar o logotipo, substitua esses arquivos e rode `npm run marca:codificar`. Os atuais foram recortados da arte de 2400 px (ícone de 256 px, nome de 663 × 260 px).
 
+**Certificado digital A1** (para a Fase 4): enviado por estabelecimento em Configurações › Empresas e filiais (.pfx ou .p12 com a senha). O servidor abre o arquivo com a senha (node-forge, que lê também o formato RC2 antigo que o OpenSSL 3 recusa), recusa vencido, de outro CNPJ (raiz diferente), sem CNPJ (e-CPF) ou sem chave privada, e guarda arquivo e senha cifrados com AES-256-GCM (`CERTIFICADOS_CHAVE`, com o id da empresa autenticado junto). A senha nunca volta para a tela nem vai para a auditoria. Filial sem certificado usa o da matriz. O painel avisa os administradores 30 dias antes do vencimento. Código em `src/modules/configuracoes/certificado.ts` (`certificadoParaEmissao` entrega o certificado aberto para a emissão).
+
 O logotipo de cada empresa (o que sai nas propostas e pedidos) é outra coisa: o administrador envia em Configurações › Empresas e filiais. O navegador corta as margens vazias, reduz para até 1200 × 600 px e converte para PNG (ou JPEG, se ficar pesado); o servidor aceita até 700 KB, confere o formato e gera um PDF de teste antes de gravar (`src/modules/configuracoes/logotipo.ts`).
 
 ## Desenvolvimento
@@ -98,6 +100,7 @@ Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 | `DATABASE_POOL_MAX` | Opcional. Conexões por instância (padrão 3 na Vercel, 8 fora dela) |
 | `SETUP_TOKEN` | Token da configuração inicial |
 | `CNPJ_API_KEY` | Chave do CNPJ Trust ou da CNPJá: consulta de CNPJ com Simples/MEI e inscrição estadual (sem ela, fontes gratuitas) |
+| `CERTIFICADOS_CHAVE` | 32 bytes em base64 (`openssl rand -base64 32`). Cifra o arquivo e a senha dos certificados A1. Não troque: os certificados já enviados deixam de abrir e precisam ser reenviados |
 
 ## Roteiro
 

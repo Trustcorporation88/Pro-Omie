@@ -13,6 +13,8 @@ import { fmtDocumento } from "@/lib/format";
 import { esquemaEdicaoUsuario, esquemaEmpresa, esquemaNovoUsuario } from "./esquemas";
 import { gerarSenhaProvisoria } from "./senha";
 import { imagemSaiNoPdf, lerImagemLogo } from "./logotipo";
+import { LIMITE_CERTIFICADO_BYTES, abrirCertificadoGuardado, cifrarCertificado, conferirComEmpresa, lerCertificado } from "./certificado";
+import { diaSP, situacaoCertificado } from "./certificado-tipos";
 import type { TipoEmpresa } from "./tipos";
 
 // Regras desta tela (todas as ações exigem "config:admin"):
@@ -235,6 +237,119 @@ export async function removerLogoEmpresa(empresaId: string): Promise<Resultado> 
     revalidar("/configuracoes/empresa");
     return undefined;
   }, "Logotipo removido. Os PDFs voltam a sair só com o nome da empresa.");
+}
+
+// ───────────── Certificado digital ─────────────
+
+/** Estabelecimento (matriz ou filial) que o usuário administra. */
+async function estabelecimentoAdministrado(ctx: ContextoAdmin, empresaId: unknown) {
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: typeof empresaId === "string" ? empresaId : "" },
+    select: { id: true, matrizId: true, cnpj: true, razaoSocial: true, nomeFantasia: true },
+  });
+  if (!empresa) throw new ErroAcao("Empresa não encontrada.");
+  exigirMatrizAdministrada(ctx, empresa.matrizId ?? empresa.id);
+  return empresa;
+}
+
+/**
+ * Recebe o certificado A1 (.pfx ou .p12) e a senha: confere a senha, a validade e o CNPJ (mesma empresa) e guarda
+ * os dois cifrados. A senha nunca é gravada aberta, nunca vai para a auditoria e nunca volta para a tela.
+ */
+export async function enviarCertificado(
+  formData: FormData,
+): Promise<Resultado<{ titular: string; cnpj: string | null; validoAte: string; outroEstabelecimento: boolean }>> {
+  const r = await executar(async () => {
+    const { u, ctx } = await exigirAdmin();
+    const empresa = await estabelecimentoAdministrado(ctx, formData.get("empresaId"));
+    const arquivo = formData.get("arquivo");
+    const senha = formData.get("senha");
+    if (!(arquivo instanceof File) || arquivo.size === 0) throw new ErroAcao("Escolha o arquivo do certificado (.pfx ou .p12).", { arquivo: "Escolha o arquivo." });
+    if (!/\.(pfx|p12)$/i.test(arquivo.name)) throw new ErroAcao("Envie o arquivo .pfx ou .p12 do certificado A1.", { arquivo: "Use .pfx ou .p12." });
+    if (arquivo.size > LIMITE_CERTIFICADO_BYTES) throw new ErroAcao("Arquivo grande demais para um certificado A1 (máximo 100 KB).", { arquivo: "Arquivo grande demais." });
+    if (typeof senha !== "string" || !senha) throw new ErroAcao("Informe a senha do certificado.", { senha: "Informe a senha." });
+    if (senha.length > 200) throw new ErroAcao("Senha longa demais.", { senha: "Senha longa demais." });
+    const pfx = Buffer.from(await arquivo.arrayBuffer());
+    const dados = lerCertificado(pfx, senha);
+    const { outroEstabelecimento } = conferirComEmpresa(dados, empresa);
+    const registro = {
+      ...cifrarCertificado(empresa.id, pfx, senha),
+      titular: dados.titular.slice(0, 300),
+      cnpj: dados.cnpj,
+      emissor: dados.emissor?.slice(0, 300) ?? null,
+      numeroSerie: dados.numeroSerie.slice(0, 100),
+      impressaoDigital: dados.impressaoDigital,
+      validoDe: dados.validoDe,
+      validoAte: dados.validoAte,
+      enviadoPorId: u.id,
+    };
+    const anterior = await prisma.certificadoDigital.findUnique({ where: { empresaId: empresa.id }, select: { impressaoDigital: true, validoAte: true } });
+    await prisma.certificadoDigital.upsert({ where: { empresaId: empresa.id }, create: { empresaId: empresa.id, ...registro }, update: registro });
+    const nome = empresa.nomeFantasia || empresa.razaoSocial;
+    await auditar(
+      anterior ? "trocar_certificado" : "enviar_certificado",
+      "empresa",
+      empresa.id,
+      `Certificado A1 de ${nome}: ${dados.titular}${dados.cnpj ? ` (CNPJ ${fmtDocumento(dados.cnpj)})` : ""}, válido até ${diaSP(dados.validoAte)}`,
+      {
+        titular: dados.titular,
+        cnpj: dados.cnpj,
+        emissor: dados.emissor,
+        numeroSerie: dados.numeroSerie,
+        impressaoDigital: dados.impressaoDigital,
+        validoAte: dados.validoAte.toISOString(),
+        anterior: anterior ? { impressaoDigital: anterior.impressaoDigital, validoAte: anterior.validoAte.toISOString() } : null,
+      },
+      { empresaId: empresa.matrizId ?? empresa.id },
+    );
+    revalidar("/configuracoes/empresa", "/");
+    return { titular: dados.titular, cnpj: dados.cnpj, validoAte: dados.validoAte.toISOString(), outroEstabelecimento };
+  });
+  if (r.ok && r.data) {
+    const sit = situacaoCertificado(r.data.validoAte);
+    const avisos = [
+      r.data.outroEstabelecimento ? "é de outro estabelecimento da mesma empresa (a SEFAZ aceita)" : null,
+      sit.tom === "alerta" ? `vence em ${sit.dias} dia(s): providencie a renovação` : null,
+    ].filter(Boolean);
+    r.mensagem = `Certificado guardado com segurança, válido até ${diaSP(r.data.validoAte)}.${avisos.length ? ` Atenção: ${avisos.join("; ")}.` : ""}`;
+  }
+  return r;
+}
+
+/** Abre o certificado guardado e confere de novo a senha: mostra que está pronto para emitir notas. */
+export async function testarCertificado(empresaId: string): Promise<Resultado<{ validoAte: string; dias: number }>> {
+  const r = await executar(async () => {
+    const { ctx } = await exigirAdmin();
+    const empresa = await estabelecimentoAdministrado(ctx, empresaId);
+    const guardado = await abrirCertificadoGuardado(empresa.id);
+    if (!guardado) throw new ErroAcao("Este estabelecimento não tem certificado próprio.");
+    const dados = lerCertificado(guardado.pfx, guardado.senha);
+    if (dados.impressaoDigital !== guardado.registro.impressaoDigital) throw new ErroAcao("O certificado guardado não confere com o registro. Envie o certificado de novo.");
+    conferirComEmpresa(dados, empresa);
+    return { validoAte: dados.validoAte.toISOString(), dias: situacaoCertificado(dados.validoAte).dias };
+  });
+  if (r.ok && r.data) r.mensagem = `Certificado OK: a senha confere e ele vale até ${diaSP(r.data.validoAte)} (${r.data.dias} dias).`;
+  return r;
+}
+
+export async function removerCertificado(empresaId: string): Promise<Resultado> {
+  return executar(async () => {
+    const { ctx } = await exigirAdmin();
+    const empresa = await estabelecimentoAdministrado(ctx, empresaId);
+    const atual = await prisma.certificadoDigital.findUnique({ where: { empresaId: empresa.id }, select: { titular: true, impressaoDigital: true, validoAte: true } });
+    if (!atual) throw new ErroAcao("Este estabelecimento não tem certificado.");
+    await prisma.certificadoDigital.delete({ where: { empresaId: empresa.id } });
+    await auditar(
+      "remover_certificado",
+      "empresa",
+      empresa.id,
+      `Certificado A1 removido: ${empresa.nomeFantasia || empresa.razaoSocial} (${atual.titular})`,
+      { impressaoDigital: atual.impressaoDigital, validoAte: atual.validoAte.toISOString() },
+      { empresaId: empresa.matrizId ?? empresa.id },
+    );
+    revalidar("/configuracoes/empresa", "/");
+    return undefined;
+  }, "Certificado removido.");
 }
 
 export async function definirAtivoFilial(id: string, ativo: boolean): Promise<Resultado> {
