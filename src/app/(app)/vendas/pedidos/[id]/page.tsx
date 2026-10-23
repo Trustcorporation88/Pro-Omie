@@ -6,7 +6,9 @@ import { pode } from "@/lib/auth/permissoes";
 import { carregarOpcoesVenda, obterDocumento } from "@/modules/vendas/consultas";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { NfePedido } from "@/components/fiscal/nfe-pedido";
+import { NfsePedido } from "@/components/fiscal/nfse-pedido";
 import { painelNfePedido } from "@/modules/fiscal/nfe/consultas";
+import { painelNfsePedido } from "@/modules/fiscal/nfse/consultas";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -21,9 +23,12 @@ export default async function Pagina({ params }: Props) {
   const { id } = await params;
   const [doc, opcoes] = await Promise.all([obterDocumento("pedido", id), carregarOpcoesVenda()]);
   if (!doc) notFound();
-  // painel da NF-e: pedido faturado (ou que já teve nota)
-  const painel = doc.status === "FATURADO" || doc.status === "CANCELADO" ? await painelNfePedido(id).catch(() => null) : null;
-  const mostrarNfe = !!painel && (painel.pedidoFaturado || painel.notas.length > 0);
+  // painéis fiscais: pedido faturado (ou que já teve nota). NF-e para os produtos, NFS-e para os serviços.
+  const fiscal = doc.status === "FATURADO" || doc.status === "CANCELADO";
+  const [painel, painelServicos] = fiscal ? await Promise.all([painelNfePedido(id).catch(() => null), painelNfsePedido(id).catch(() => null)]) : [null, null];
+  const mostrarNfe = !!painel && (painel.pedidoFaturado || painel.notas.length > 0) && (painel.resumo.itens.length > 0 || painel.notas.length > 0);
+  const mostrarNfse = !!painelServicos && (painelServicos.temServicos || painelServicos.notas.length > 0);
+  const podeFiscal = pode(u.papel, "fiscal:editar");
   return (
     <DetalheDocumento
       doc={doc}
@@ -31,7 +36,14 @@ export default async function Pagina({ params }: Props) {
       podeEditar={pode(u.papel, "vendas:editar")}
       podeFaturar={pode(u.papel, "vendas:editar") && pode(u.papel, "financeiro:editar")}
       podeVerFinanceiro={pode(u.papel, "financeiro:ver")}
-      painelNfe={mostrarNfe && painel ? <NfePedido pedidoId={id} painel={painel} podeEditar={pode(u.papel, "fiscal:editar")} /> : null}
+      painelNfe={
+        mostrarNfe || mostrarNfse ? (
+          <>
+            {mostrarNfe && painel && <NfePedido pedidoId={id} painel={painel} podeEditar={podeFiscal} />}
+            {mostrarNfse && painelServicos && <NfsePedido pedidoId={id} painel={painelServicos} podeEditar={podeFiscal} />}
+          </>
+        ) : null
+      }
     />
   );
 }

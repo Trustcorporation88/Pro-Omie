@@ -19,7 +19,9 @@ import { logosComoDataUrl } from "@/modules/configuracoes/logotipo";
 import { resumosCertificados } from "@/modules/configuracoes/certificado";
 import { CaptacaoEmpresa } from "@/components/fiscal/captacao-empresa";
 import { EmissaoEmpresa } from "@/components/fiscal/emissao-empresa";
+import { EmissaoServicosEmpresa } from "@/components/fiscal/emissao-servicos-empresa";
 import { estadoEmissao, type EstadoEmissao } from "@/modules/fiscal/nfe/consultas";
+import { estadoEmissaoNfse, type EstadoEmissaoNfse } from "@/modules/fiscal/nfse/consultas";
 import { estadoCaptacao } from "@/modules/fiscal/consultas";
 import type { EstadoCaptacao } from "@/modules/fiscal/tipos";
 
@@ -64,6 +66,7 @@ function CartaoEmpresa({
   certificados,
   captacao,
   emissao,
+  servicos,
 }: {
   empresa: EmpresaComFiliais;
   ativa: boolean;
@@ -72,6 +75,7 @@ function CartaoEmpresa({
   certificados: Record<string, CertificadoResumo>;
   captacao: EstadoCaptacao[];
   emissao: EstadoEmissao[];
+  servicos: EstadoEmissaoNfse[];
 }) {
   const filiais = empresa.filiais;
   const ativas = filiais.filter((f) => f.ativo).length;
@@ -153,6 +157,8 @@ function CartaoEmpresa({
 
           <EmissaoEmpresa estados={emissao} />
 
+          <EmissaoServicosEmpresa estados={servicos} />
+
           <CaptacaoEmpresa estados={captacao} />
 
           <div className="mt-6 border-t pt-5">
@@ -233,7 +239,7 @@ export default async function EmpresaPage() {
     { id: e.id, nome: e.nomeFantasia || e.razaoSocial, cnpj: e.cnpj },
     ...e.filiais.filter((f) => f.ativo).map((f) => ({ id: f.id, nome: f.nomeFantasia || f.razaoSocial, cnpj: f.cnpj })),
   ]);
-  const [escopo, logos, certificados, captacao, emissao] = await Promise.all([
+  const [escopo, logos, certificados, captacao, emissao, servicos] = await Promise.all([
     escopoEmpresa().catch(() => null),
     logosComoDataUrl(empresas.map((e) => e.id)),
     resumosCertificados(empresas.flatMap((e) => [e.id, ...e.filiais.map((f) => f.id)])),
@@ -244,6 +250,7 @@ export default async function EmpresaPage() {
       ]),
     ),
     estadoEmissao(estabsAtivos),
+    estadoEmissaoNfse(estabsAtivos),
   ]);
   const ativasNoGrupo = empresas.filter((e) => e.ativo).length;
 
@@ -266,6 +273,7 @@ export default async function EmpresaPage() {
             certificados={certificados}
             captacao={captacao.filter((c) => c.empresaId === e.id || e.filiais.some((f) => f.id === c.empresaId))}
             emissao={emissao.filter((c) => c.empresaId === e.id || e.filiais.some((f) => f.id === c.empresaId))}
+            servicos={servicos.filter((c) => c.empresaId === e.id || e.filiais.some((f) => f.id === c.empresaId))}
           />
         ))}
       </div>

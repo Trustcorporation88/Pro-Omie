@@ -4,7 +4,7 @@ import { prisma, Prisma } from "@/lib/db";
 import { escopoEmpresa } from "@/lib/auth/empresa";
 import { ehISOValido, isoParaDate } from "@/lib/datas";
 import { num } from "@/lib/serial";
-import { certificadoParaEmissao } from "@/modules/configuracoes/certificado";
+import { validadeCertificadoEmissao } from "@/modules/configuracoes/certificado";
 import { prepararNfe } from "./dados";
 import type { StatusNota } from "./tipos";
 
@@ -185,7 +185,7 @@ export async function estadoEmissao(estabs: { id: string; nome: string; cnpj: st
         serie: c?.nfeSerie ?? 1,
         proximoNumero: c?.nfeProximoNumero ?? 1,
         informacoes: c?.nfeInformacoes ?? null,
-        temCertificado: !!(await certificadoParaEmissao(e.id).catch(() => null)),
+        temCertificado: !!(await validadeCertificadoEmissao(e.id).catch(() => null)),
         focusAtivada: !!c?.focusTokenProducao,
         emitidas: contagens.find((x) => x.empresaId === e.id)?._count ?? 0,
         ultimaInutilizacao: inut ? { serie: inut.serie, inicio: inut.numeroInicial, fim: inut.numeroFinal, ok: inut.ok, em: inut.createdAt.toISOString() } : null,

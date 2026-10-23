@@ -179,6 +179,7 @@ model Empresa {
   documentosRecebidos DocumentoRecebido[]
   notasFiscais        NotaFiscal[]
   inutilizacoes       InutilizacaoNfe[]
+  notasServico        NotaServico[]
 
   @@map("empresas")
 }
@@ -311,6 +312,10 @@ model Produto {
   csosnInterno       String?
   csosnInterestadual String?
   textoFiscal        String?
+  /// NFS-e nacional (serviços): código de tributação nacional (6 dígitos), municipal e NBS
+  codigoTributacaoNacional  String?
+  codigoTributacaoMunicipal String?
+  codigoNbs                 String?
   observacoes        String?
   ativo              Boolean        @default(true)
   createdAt          DateTime       @default(now())
@@ -769,6 +774,7 @@ model Pedido {
   itens             PedidoItem[]
   lancamentoEstoque LancamentoEstoque?
   notasFiscais      NotaFiscal[]
+  notasServico      NotaServico[]
 
   @@unique([empresaId, numero])
   @@index([empresaId, status, emissao])
@@ -1069,6 +1075,20 @@ model ConfiguracaoFiscal {
   nfeProximoNumero      Int         @default(1)
   /// texto padrão das informações complementares (o do Simples Nacional vem preenchido)
   nfeInformacoes        String?
+  /// Emissão de NFS-e pelo emissor nacional: ambiente 2 = produção restrita (testes), 1 = produção
+  nfseAtiva             Boolean     @default(false)
+  nfseAmbiente          Int         @default(2)
+  nfseMotor             MotorFiscal @default(SEFAZ)
+  nfseSerie             Int         @default(1)
+  nfseProximoNumero     Int         @default(1)
+  /// alíquota efetiva do Simples Nacional (pTotTribSN), em %, informada pelo contador
+  nfseAliquotaSimples   Decimal     @default(6) @db.Decimal(5, 2)
+  /// enviar a inscrição municipal na DPS (só quando o município cadastrou o contribuinte no CNC)
+  nfseEnviarIM          Boolean     @default(false)
+  nfseInformacoes       String?
+  /// última conferência da adesão do município ao Emissor Nacional (ADN)
+  nfseMunicipioAderente    Boolean?
+  nfseMunicipioConferidoEm DateTime?
   atualizadoPorId       String?
   createdAt             DateTime    @default(now())
   updatedAt             DateTime    @updatedAt
@@ -1271,4 +1291,51 @@ model InutilizacaoNfe {
 
   @@index([empresaId, serie])
   @@map("inutilizacoes_nfe")
+}
+
+/// NFS-e emitida pelo emissor nacional (DPS → NFS-e). Uma nota por grupo de serviços do pedido com o mesmo código de tributação.
+model NotaServico {
+  id                       String           @id @default(cuid())
+  empresaId                String
+  empresa                  Empresa          @relation(fields: [empresaId], references: [id])
+  pedidoId                 String?
+  pedido                   Pedido?          @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  /// 1 = produção, 2 = produção restrita
+  ambiente                 Int
+  motor                    MotorFiscal
+  serie                    Int
+  /// nDPS (número da declaração; a NFS-e recebe outro número, dado pelo emissor nacional)
+  numero                   Int
+  idDps                    String?
+  chave                    String?
+  numeroNfse               String?
+  status                   StatusNotaFiscal @default(PROCESSANDO)
+  /// código do erro (E0039...) ou cStat da NFS-e
+  codigo                   String?
+  mensagem                 String?
+  competencia              DateTime
+  emitidaEm                DateTime
+  autorizadaEm             DateTime?
+  tomadorNome              String
+  tomadorDocumento         String?
+  codigoTributacaoNacional String
+  descricao                String
+  valor                    Decimal          @db.Decimal(14, 2)
+  /// DPS assinada (enviada) e NFS-e devolvida pelo emissor nacional
+  xml                      String?
+  xmlAutorizado            String?
+  canceladaEm              DateTime?
+  cancelamentoCodigo       String?
+  cancelamentoMotivo       String?
+  cancelamentoXml          String?
+  focusRef                 String?
+  emitidaPorId             String?
+  createdAt                DateTime         @default(now())
+  updatedAt                DateTime         @updatedAt
+
+  @@unique([empresaId, serie, numero, ambiente])
+  @@index([pedidoId])
+  @@index([empresaId, emitidaEm])
+  @@index([empresaId, status])
+  @@map("notas_servico")
 }

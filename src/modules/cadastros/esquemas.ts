@@ -82,6 +82,10 @@ export const esquemaProduto = z.object({
   csosnInterno: opc.refine((v) => !v || CSOSN.includes(v), "CSOSN inválido."),
   csosnInterestadual: opc.refine((v) => !v || CSOSN.includes(v), "CSOSN inválido."),
   textoFiscal: opc.refine((v) => !v || v.length <= 500, "Até 500 caracteres."),
+  // NFS-e nacional (serviços)
+  codigoTributacaoNacional: digitos.refine((v) => !v || v.length === 6, "Código de tributação nacional tem 6 dígitos (ex.: 010701)."),
+  codigoTributacaoMunicipal: digitos.refine((v) => !v || v.length <= 20, "Código municipal inválido."),
+  codigoNbs: digitos.refine((v) => !v || v.length === 9, "Código NBS tem 9 dígitos."),
 });
 
 export const esquemaCategoria = z.object({

@@ -52,6 +52,7 @@ export const NAVEGACAO: GrupoNav[] = [
     titulo: "Fiscal",
     itens: [
       { titulo: "Notas emitidas", href: "/fiscal/emitidas", icone: "FileText", permissao: "fiscal:ver" },
+      { titulo: "Notas de serviço", href: "/fiscal/servicos", icone: "FileBadge", permissao: "fiscal:ver" },
       { titulo: "Notas recebidas", href: "/fiscal/recebidas", icone: "FileInput", permissao: "fiscal:ver" },
     ],
   },
@@ -71,7 +72,7 @@ export const NAVEGACAO: GrupoNav[] = [
     titulo: "Próximas fases",
     itens: [
       { titulo: "Compras", href: "#", icone: "PackagePlus", emBreve: "Fase 3" },
-      { titulo: "NFS-e e cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
+      { titulo: "Cobrança", href: "#", icone: "Receipt", emBreve: "Fase 4" },
       { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
       { titulo: "Painel do contador", href: "#", icone: "Calculator", emBreve: "Fase 6" },
     ],
