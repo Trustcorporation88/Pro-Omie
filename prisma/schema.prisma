@@ -170,6 +170,9 @@ model Empresa {
 
   logo LogoEmpresa?
 
+  lancamentosEstoque LancamentoEstoque[]
+  saldosEstoque      SaldoEstoque[]
+
   @@map("empresas")
 }
 
@@ -265,6 +268,8 @@ model Pessoa {
   oportunidades Oportunidade[]
   atividades    Atividade[]
 
+  lancamentosEstoque LancamentoEstoque[]
+
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
   @@map("pessoas")
@@ -289,12 +294,16 @@ model Produto {
   controlaEstoque Boolean        @default(true)
   estoqueMinimo   Decimal?       @db.Decimal(14, 4)
   estoqueMaximo   Decimal?       @db.Decimal(14, 4)
+  /// grupo do material reciclável (PAPEL, PLASTICO, METAL_FERROSO...); vazio nos demais produtos
+  grupoMaterial   String?
   observacoes     String?
   ativo           Boolean        @default(true)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   itensProposta   PropostaItem[]
   itensPedido     PedidoItem[]
+  itensEstoque    ItemEstoque[]
+  saldosEstoque   SaldoEstoque[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, descricao])
@@ -734,16 +743,20 @@ model Pedido {
   desconto            Decimal            @default(0) @db.Decimal(14, 2)
   total               Decimal            @default(0) @db.Decimal(14, 2)
   faturadoEm          DateTime?
+  /// data escolhida no faturamento (emissão das contas a receber e da baixa no estoque)
+  dataFaturamento     DateTime?          @db.Date
   canceladoEm         DateTime?
   motivoCancelamento  String?
   criadoPorId         String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 
-  itens PedidoItem[]
+  itens             PedidoItem[]
+  lancamentoEstoque LancamentoEstoque?
 
   @@unique([empresaId, numero])
   @@index([empresaId, status, emissao])
+  @@index([empresaId, status, dataFaturamento])
   @@index([pessoaId])
   @@map("pedidos")
 }
@@ -872,4 +885,75 @@ model LogoEmpresa {
   updatedAt       DateTime @updatedAt
 
   @@map("logos_empresa")
+}
+
+// ───────────────────────── Estoque (Fase 3) ─────────────────────────
+
+enum TipoLancamentoEstoque {
+  /// entrada da produção ou triagem
+  ENTRADA
+  /// saída automática ao faturar o pedido de venda
+  VENDA
+  /// inventário ou correção (cada item pode entrar ou sair)
+  AJUSTE
+}
+
+/// Lançamento de estoque num estabelecimento (matriz ou filial), com um item por material.
+model LancamentoEstoque {
+  id          String                @id @default(cuid())
+  empresaId   String
+  empresa     Empresa               @relation(fields: [empresaId], references: [id])
+  /// numeração própria por estabelecimento
+  numero      Int
+  tipo        TipoLancamentoEstoque
+  data        DateTime              @db.Date
+  /// venda: pedido faturado que gerou a saída (desfazer o faturamento exclui o lançamento)
+  pedidoId    String?               @unique
+  pedido      Pedido?               @relation(fields: [pedidoId], references: [id])
+  /// entrada: cliente de onde veio o material (rastreabilidade)
+  pessoaId    String?
+  pessoa      Pessoa?               @relation(fields: [pessoaId], references: [id], onDelete: SetNull)
+  /// processo de destruição, MTR, lote ou ticket de pesagem
+  referencia  String?
+  /// ajuste: código do motivo (lista fixa no módulo estoque)
+  motivo      String?
+  observacao  String?
+  criadoPorId String?
+  createdAt   DateTime              @default(now())
+
+  itens ItemEstoque[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, tipo, data])
+  @@map("lancamentos_estoque")
+}
+
+model ItemEstoque {
+  id           String            @id @default(cuid())
+  lancamentoId String
+  lancamento   LancamentoEstoque @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
+  produtoId    String
+  produto      Produto           @relation(fields: [produtoId], references: [id])
+  /// positivo entra, negativo sai (na unidade do produto)
+  quantidade   Decimal           @db.Decimal(14, 3)
+  /// ajuste: saldo contado no inventário
+  saldoContado Decimal?          @db.Decimal(14, 3)
+
+  @@index([lancamentoId])
+  @@index([produtoId])
+  @@map("itens_estoque")
+}
+
+/// Saldo atual de cada material por estabelecimento. Sempre igual à soma dos itens; nunca negativo.
+model SaldoEstoque {
+  empresaId  String
+  empresa    Empresa  @relation(fields: [empresaId], references: [id])
+  produtoId  String
+  produto    Produto  @relation(fields: [produtoId], references: [id])
+  quantidade Decimal  @default(0) @db.Decimal(14, 3)
+  updatedAt  DateTime @updatedAt
+
+  @@id([empresaId, produtoId])
+  @@index([produtoId])
+  @@map("saldos_estoque")
 }

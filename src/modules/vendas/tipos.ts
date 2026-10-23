@@ -48,6 +48,10 @@ export type DocumentoVenda = {
   vinculo: { id: string; numero: number } | null;
   /** proposta: oportunidade do CRM de onde saiu */
   oportunidade: { id: string; titulo: string } | null;
+  /** pedido em aberto: materiais com controle de estoque e o saldo no estabelecimento emissor */
+  estoque: { produtoId: string; descricao: string; unidade: string; quantidade: number; saldo: number }[];
+  /** pedido faturado: lançamento de saída no estoque */
+  baixaEstoque: { numero: number; resumo: string } | null;
   /** pedido faturado: títulos gerados */
   titulos: { id: string; numero: number; vencimento: string; valor: number; status: string }[];
   criadoEm: string;

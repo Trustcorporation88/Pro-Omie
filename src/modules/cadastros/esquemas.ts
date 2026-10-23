@@ -67,6 +67,11 @@ export const esquemaProduto = z.object({
   precoVenda: moeda,
   precoCusto: moeda,
   controlaEstoque: bool,
+  grupoMaterial: z
+    .union([z.string(), z.null()])
+    .optional()
+    .transform((v) => (typeof v === "string" && v.trim() ? v.trim() : null))
+    .refine((v) => v === null || ["PAPEL", "PLASTICO", "METAL_NAO_FERROSO", "METAL_FERROSO", "METAL_PRECIOSO", "VIDRO", "ELETRONICO", "OUTROS"].includes(v), "Grupo inválido."),
   estoqueMinimo: numOpc,
   estoqueMaximo: numOpc,
   observacoes: opc,

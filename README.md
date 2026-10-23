@@ -2,7 +2,7 @@
 
 ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vendas, estoque, fiscal, contratos e contabilidade, sem digitar nada duas vezes.
 
-## O que já funciona (Fases 0, 1 e 2)
+## O que já funciona (Fases 0 a 3)
 
 **Fundação**
 - Login próprio com perfis (Administrador, Financeiro, Vendas, Estoque, Contador somente leitura), bloqueio após 5 tentativas, troca obrigatória da senha provisória e sessões revogáveis.
@@ -27,6 +27,15 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 - Indicadores: em aberto, previsão ponderada, ganho e conversão em 90 dias, ticket médio e motivos de perda.
 - Proposta criada a partir da oportunidade já vem com cliente e responsável, avança a etapa para Proposta e, ao ser aprovada, marca a oportunidade como ganha com o valor da proposta.
 
+**Estoque e venda de recicláveis (Fase 3)**
+- Materiais recicláveis escolhidos numa lista (papel, papelão, plásticos, alumínio, cobre, latão, chumbo, ferro, inox, prata, vidro, eletrônicos): cada um vira um produto vendido por kg, com grupo e NCM sugerido para resíduos e sucatas. Outros produtos com controle de estoque também entram.
+- Entrada da produção ou da triagem numa grade com todos os materiais (só o peso do que entrou), com cliente de origem e referência (processo, MTR, lote, ticket de pesagem) para rastrear a origem.
+- Saldo por estabelecimento (matriz e filiais), valor estimado a preço de venda, última entrada e vendido em 30 dias. Atualização rápida do preço por kg de todos os materiais.
+- Faturar o pedido dá baixa no estoque, material por material, no estabelecimento emissor; falta de saldo recusa o faturamento inteiro (o diálogo mostra antes o que sai, o saldo e o que fica). Desfazer o faturamento devolve o material.
+- Ajuste pelo saldo contado (inventário, perda de umidade, correção, destinação sem venda), recusado se o saldo mudou enquanto a pessoa contava. Excluir entrada ou ajuste desfaz o efeito, e é recusado se o material já saiu.
+- Extrato por material com saldo acumulado, resumo de 90 dias e vendas dos últimos 6 meses. Relatório de vendas por material (quantidade, receita, preço médio, compradores) com exportação CSV. Botão Vender abre o pedido já com o material, o saldo e o preço.
+- O saldo é sempre a soma dos lançamentos e nunca fica negativo (trava também no banco). Perfis: Estoque lança e ajusta; Vendas e Contador consultam.
+
 **Vendas (Fase 2)**
 - Propostas comerciais: itens de produto ou serviço (do cadastro ou avulsos), quantidade com até 3 casas (venda por kg), preço com até 4, desconto por item, validade, condição e forma de pagamento, observações para o cliente e internas. Situações: rascunho, enviada, aprovada, recusada (com motivo) e cancelada, com reabertura.
 - Pedidos de venda gerados da proposta aprovada ou criados direto. Faturar o pedido gera as contas a receber pela condição de pagamento, com rateio entre as categorias de produtos e de serviços; desfazer o faturamento é possível enquanto não houver recebimento.
@@ -44,7 +53,7 @@ ERP interno da Trustcorp. Objetivo: igualar e superar o Omie em financeiro, vend
 ```
 prisma/                 schema e migrations
 src/app/(auth)          login, configuração inicial, troca de senha
-src/app/(app)           telas do ERP (painel, financeiro, CRM, vendas, cadastros, configurações)
+src/app/(app)           telas do ERP (painel, financeiro, CRM, vendas, estoque, cadastros, configurações)
 src/modules/<domínio>   regras de negócio, server actions e consultas
 src/components          componentes de interface
 src/lib                 banco, sessão, permissões, auditoria, datas e formatação BR
@@ -93,7 +102,7 @@ Verificações: `npm run lint`, `npm run typecheck`, `npm run build`.
 ## Roteiro
 
 - Fase 2: Vendas e CRM ✔ (funil, atividades, propostas, pedidos e faturamento)
-- Fase 3: Estoque e compras (custo médio, curva ABC, entrada por XML)
+- Fase 3: Estoque ✔ (recicláveis, entradas, baixa na venda, ajustes, relatório por material); falta compras (custo médio, entrada por XML)
 - Fase 4: Fiscal e cobrança (NF-e, NFS-e, boletos e PIX via provedores homologados)
 - Fase 5: Contratos recorrentes e ordens de serviço
 - Fase 6: Painel do contador e exportação contábil

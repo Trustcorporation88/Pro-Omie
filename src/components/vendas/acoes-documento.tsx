@@ -14,6 +14,8 @@ import { fmtData, fmtMoeda } from "@/lib/format";
 import { parcelasPorCondicao } from "@/modules/financeiro/parcelas";
 import { alterarSituacaoProposta, cancelarPedido, desfazerFaturamento, faturarPedido, gerarPedido, type AcaoProposta } from "@/modules/vendas/acoes";
 import type { DocumentoVenda, OpcoesVenda } from "@/modules/vendas/tipos";
+import { fmtQtd } from "@/modules/estoque/tipos";
+import { cn } from "@/lib/utils";
 
 type Confirmacao = { titulo: string; descricao: string; rotulo: string; destrutivo?: boolean; motivo?: boolean; acao: (m?: string) => ReturnType<typeof alterarSituacaoProposta> };
 
@@ -199,6 +201,7 @@ function DialogoFaturar({ doc, opcoes, hoje, onFechar }: { doc: DocumentoVenda; 
   const [erros, setErros] = useState<Record<string, string>>({});
   const [enviando, iniciar] = useTransition();
   const dias = opcoes.condicoes.find((c) => c.valor === condicao)?.dias ?? "0";
+  const faltaEstoque = doc.estoque.filter((e) => e.saldo < e.quantidade);
   const parcelas = useMemo(() => (/^\d{4}-\d{2}-\d{2}$/.test(emissao) ? parcelasPorCondicao(doc.total, dias, emissao) : []), [doc.total, dias, emissao]);
 
   function confirmar() {
@@ -271,11 +274,39 @@ function DialogoFaturar({ doc, opcoes, hoje, onFechar }: { doc: DocumentoVenda; 
             ))}
           </ul>
         </div>
+        {doc.estoque.length > 0 && (
+          <div className={cn("rounded-lg border p-3 text-sm", faltaEstoque.length ? "border-destructive/40 bg-destructive/5" : "bg-muted/30")}>
+            <p className="mb-2 font-medium">Baixa no estoque</p>
+            <ul className="space-y-1">
+              {doc.estoque.map((e) => {
+                const falta = e.saldo < e.quantidade;
+                return (
+                  <li key={e.produtoId} className="flex flex-wrap justify-between gap-x-3 tabular-nums">
+                    <span className="min-w-0 truncate">{e.descricao}</span>
+                    <span className={cn("text-muted-foreground", falta && "font-medium text-destructive")}>
+                      {`sai ${fmtQtd(e.quantidade, e.unidade)} · saldo ${fmtQtd(e.saldo, e.unidade)}`}
+                      {!falta && ` · fica ${fmtQtd(Math.round((e.saldo - e.quantidade) * 1000) / 1000, e.unidade)}`}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+            {faltaEstoque.length > 0 && (
+              <p className="mt-2 text-destructive" role="alert">
+                Falta saldo. Registre a{" "}
+                <Link href="/estoque/entradas/nova" className="font-medium underline">
+                  entrada da produção
+                </Link>
+                , ajuste o estoque ou corrija a quantidade do pedido.
+              </p>
+            )}
+          </div>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={onFechar} disabled={enviando}>
             Cancelar
           </Button>
-          <Button onClick={confirmar} disabled={enviando || !parcelas.length}>
+          <Button onClick={confirmar} disabled={enviando || !parcelas.length || faltaEstoque.length > 0}>
             {enviando && <LoaderCircle className="animate-spin" />} Faturar
           </Button>
         </DialogFooter>

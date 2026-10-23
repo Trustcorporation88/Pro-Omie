@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { usuarioAtual } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
 import { fmtDocumento, fmtMoeda, soDigitos } from "@/lib/format";
+import { saldosParaBusca } from "@/modules/estoque/consultas";
 
 export type ResultadoBusca = { tipo: string; titulo: string; detalhe: string; href: string };
 
@@ -115,7 +116,8 @@ export async function buscarPessoas(termo: string, papel?: "cliente" | "forneced
   }));
 }
 
-export type ProdutoResumo = { id: string; codigo: string; descricao: string; tipo: "PRODUTO" | "SERVICO"; unidade: string; precoVenda: number };
+/** `saldo`: soma do estoque na empresa ativa (matriz e filiais); null quando o produto não controla estoque. */
+export type ProdutoResumo = { id: string; codigo: string; descricao: string; tipo: "PRODUTO" | "SERVICO"; unidade: string; precoVenda: number; saldo: number | null };
 
 /** Busca de produtos e serviços ativos da empresa ativa, para os itens de propostas e pedidos. */
 export async function buscarProdutos(termo: string): Promise<ProdutoResumo[]> {
@@ -132,6 +134,16 @@ export async function buscarProdutos(termo: string): Promise<ProdutoResumo[]> {
     orderBy: { descricao: "asc" },
     take: 20,
   });
-  return produtos.map((p) => ({ id: p.id, codigo: p.codigo, descricao: p.descricao, tipo: p.tipo, unidade: p.unidade, precoVenda: Number(p.precoVenda) }));
+  const comEstoque = produtos.filter((p) => p.tipo === "PRODUTO" && p.controlaEstoque).map((p) => p.id);
+  const saldos = await saldosParaBusca(comEstoque, escopo);
+  return produtos.map((p) => ({
+    id: p.id,
+    codigo: p.codigo,
+    descricao: p.descricao,
+    tipo: p.tipo,
+    unidade: p.unidade,
+    precoVenda: Number(p.precoVenda),
+    saldo: comEstoque.includes(p.id) ? (saldos.get(p.id) ?? 0) : null,
+  }));
 }
 

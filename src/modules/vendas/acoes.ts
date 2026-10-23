@@ -13,6 +13,8 @@ import { num } from "@/lib/serial";
 import { parcelasPorCondicao } from "@/modules/financeiro/parcelas";
 import { criarLancamento, excluirTitulo } from "@/modules/financeiro/servicos";
 import { avancarParaProposta, ganharPelaProposta, oportunidadeParaProposta } from "@/modules/crm/servicos";
+import { baixarEstoqueVenda, estornarEstoqueVenda } from "@/modules/estoque/servicos";
+import { fmtQtd } from "@/modules/estoque/tipos";
 import { fmtNumeroDoc, rateioPorTipo, totaisDocumento, totalItem } from "./calculos";
 import {
   esquemaFaturamento,
@@ -302,8 +304,8 @@ export async function cancelarPedido(id: string, motivo?: string | null): Promis
  * Fatura o pedido: gera as contas a receber (uma por parcela da condição de pagamento), com rateio por tipo de item
  * (produtos e serviços em categorias próprias), origem VENDA. Exige também permissão de editar o financeiro.
  */
-export async function faturarPedido(id: string, entrada: EntradaFaturamento): Promise<Resultado<{ titulos: number }>> {
-  return executar(async () => {
+export async function faturarPedido(id: string, entrada: EntradaFaturamento): Promise<Resultado<{ titulos: number; baixaEstoque: boolean }>> {
+  const resultado = await executar(async () => {
     const u = await exigirPermissao("vendas:editar");
     if (!pode(u.papel, "financeiro:editar")) throw new ErroAcao("Faturar gera contas a receber: peça a alguém do financeiro.");
     const escopo = await escopoEmpresa();
@@ -311,7 +313,11 @@ export async function faturarPedido(id: string, entrada: EntradaFaturamento): Pr
     const matriz = escopo.ativa.id;
     const pedido = await prisma.pedido.findFirst({
       where: { id, empresaId: { in: escopo.ids } },
-      include: { itens: true, pessoa: { select: { nome: true, nomeFantasia: true } }, condicaoPagamento: { select: { dias: true } } },
+      include: {
+        itens: { include: { produto: { select: { tipo: true, controlaEstoque: true, descricao: true, unidade: true } } } },
+        pessoa: { select: { nome: true, nomeFantasia: true } },
+        condicaoPagamento: { select: { dias: true } },
+      },
     });
     if (!pedido) throw new ErroAcao("Pedido não encontrado nesta empresa.");
     if (pedido.status !== "ABERTO") throw new ErroAcao("Só pedidos em aberto podem ser faturados.");
@@ -345,13 +351,22 @@ export async function faturarPedido(id: string, entrada: EntradaFaturamento): Pr
     const parcelas = parcelasPorCondicao(total, condicao?.dias ?? "0", f.emissao);
     const cliente = nome(pedido.pessoa);
 
-    const ids = await prisma.$transaction(async (tx) => {
+    const { ids, estoque } = await prisma.$transaction(async (tx) => {
       const r = await tx.pedido.updateMany({
         where: { id, status: "ABERTO" },
-        data: { status: "FATURADO", faturadoEm: new Date(), condicaoPagamentoId: condicaoId, formaPagamentoId: formaId },
+        data: { status: "FATURADO", faturadoEm: new Date(), dataFaturamento: isoParaDate(f.emissao), condicaoPagamentoId: condicaoId, formaPagamentoId: formaId },
       });
       if (r.count !== 1) throw new ErroAcao("O pedido mudou de situação. Atualize a página.");
-      return criarLancamento(
+      // baixa no estoque dos materiais (falta de saldo desfaz tudo, inclusive as contas a receber)
+      const estoque = await baixarEstoqueVenda(tx, {
+        empresaId: pedido.empresaId,
+        pedidoId: pedido.id,
+        pedidoNumero: fmtNumeroDoc(pedido.numero),
+        data: isoParaDate(f.emissao),
+        usuarioId: u.id,
+        itens: pedido.itens,
+      });
+      const ids = await criarLancamento(
         tx,
         {
           tipo: "RECEBER",
@@ -370,18 +385,25 @@ export async function faturarPedido(id: string, entrada: EntradaFaturamento): Pr
         },
         u.id,
       );
+      return { ids, estoque };
     });
     await auditar("faturar", "pedido", id, `Pedido nº ${fmtNumeroDoc(pedido.numero)} · ${cliente} · ${fmtMoeda(total)} em ${parcelas.length} parcela(s)`, {
       parcelas,
       rateios,
       titulos: ids,
+      estoque: estoque ? { lancamento: estoque.numero, itens: estoque.itens.map((i) => `${i.descricao} ${fmtQtd(i.quantidade, i.unidade)}`) } : null,
     });
     revalidarVendas();
     revalidatePath(`/vendas/pedidos/${id}`);
     revalidatePath("/financeiro/receber");
     revalidatePath("/");
-    return { titulos: ids.length };
-  }, "Pedido faturado: contas a receber geradas.");
+    if (estoque) revalidatePath("/estoque", "layout");
+    return { titulos: ids.length, baixaEstoque: !!estoque };
+  });
+  if (resultado.ok) {
+    resultado.mensagem = resultado.data?.baixaEstoque ? "Pedido faturado: contas a receber geradas e baixa no estoque feita." : "Pedido faturado: contas a receber geradas.";
+  }
+  return resultado;
 }
 
 /** Desfaz o faturamento: exclui as contas a receber geradas (se nenhuma tiver baixa) e reabre o pedido. */
@@ -398,14 +420,20 @@ export async function desfazerFaturamento(id: string): Promise<Resultado> {
     if (comBaixa.length) {
       throw new ErroAcao(`Há recebimento registrado (título nº ${comBaixa.map((t) => t.numero).join(", ")}). Estorne e cancele os títulos manualmente.`);
     }
-    await prisma.$transaction(async (tx) => {
-      const r = await tx.pedido.updateMany({ where: { id, status: "FATURADO" }, data: { status: "ABERTO", faturadoEm: null } });
+    const estoque = await prisma.$transaction(async (tx) => {
+      const r = await tx.pedido.updateMany({ where: { id, status: "FATURADO" }, data: { status: "ABERTO", faturadoEm: null, dataFaturamento: null } });
       if (r.count !== 1) throw new ErroAcao("O pedido mudou de situação. Atualize a página.");
       for (const t of titulos) await excluirTitulo(tx, t.id);
+      return estornarEstoqueVenda(tx, id);
     });
-    await auditar("desfazer_faturamento", "pedido", id, `Pedido nº ${fmtNumeroDoc(pedido.numero)} · ${nome(pedido.pessoa)} · ${titulos.length} título(s) excluído(s)`, {
-      titulos: titulos.map((t) => t.numero),
-    });
+    await auditar(
+      "desfazer_faturamento",
+      "pedido",
+      id,
+      `Pedido nº ${fmtNumeroDoc(pedido.numero)} · ${nome(pedido.pessoa)} · ${titulos.length} título(s) excluído(s)${estoque ? " · material devolvido ao estoque" : ""}`,
+      { titulos: titulos.map((t) => t.numero), estoque: estoque ? { lancamento: estoque.numero } : null },
+    );
+    if (estoque) revalidatePath("/estoque", "layout");
     revalidarVendas();
     revalidatePath(`/vendas/pedidos/${id}`);
     revalidatePath("/financeiro/receber");

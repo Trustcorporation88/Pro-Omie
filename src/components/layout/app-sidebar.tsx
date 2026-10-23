@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  ArrowLeftRight,
   Boxes,
   Building,
   Calculator,
   CalendarClock,
+  ChartColumn,
   ChartLine,
   CircleArrowDown,
   CircleArrowUp,
@@ -18,6 +20,7 @@ import {
   LayoutDashboard,
   ListTodo,
   Package,
+  PackagePlus,
   Receipt,
   Repeat,
   ScrollText,
@@ -49,10 +52,12 @@ import { NAVEGACAO } from "./navegacao";
 import { pode, type PapelUsuario } from "@/lib/auth/permissoes";
 
 const ICONES: Record<string, LucideIcon> = {
+  ArrowLeftRight,
   Boxes,
   Building,
   Calculator,
   CalendarClock,
+  ChartColumn,
   ChartLine,
   CircleArrowDown,
   CircleArrowUp,
@@ -64,6 +69,7 @@ const ICONES: Record<string, LucideIcon> = {
   LayoutDashboard,
   ListTodo,
   Package,
+  PackagePlus,
   Receipt,
   Repeat,
   ScrollText,
@@ -143,7 +149,7 @@ export function AppSidebar({
         })}
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 text-[11px] opacity-50 group-data-[collapsible=icon]:hidden">
-        Fases 0 a 2 · Financeiro, CRM e vendas
+        Fases 0 a 3 · Financeiro, vendas e estoque
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

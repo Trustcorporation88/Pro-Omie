@@ -112,6 +112,7 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
             precoVenda: num(p.precoVenda),
             precoCusto: num(p.precoCusto),
             controlaEstoque: p.controlaEstoque,
+            grupoMaterial: p.grupoMaterial,
             estoqueMinimo: numOuNull(p.estoqueMinimo),
             estoqueMaximo: numOuNull(p.estoqueMaximo),
             observacoes: p.observacoes,
@@ -120,7 +121,11 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
             <span key="c" className="font-mono text-xs">{p.codigo}</span>,
             <div key="d">
               <div className="font-medium">{p.descricao}</div>
-              {sub(ROTULOS.tipoProduto[p.tipo])}
+              {sub(
+                p.grupoMaterial && p.grupoMaterial in ROTULOS.grupoMaterial
+                  ? `${ROTULOS.tipoProduto[p.tipo]} · ${ROTULOS.grupoMaterial[p.grupoMaterial as keyof typeof ROTULOS.grupoMaterial]}`
+                  : ROTULOS.tipoProduto[p.tipo],
+              )}
             </div>,
             p.unidade,
             <span key="n" className="tabular text-sm">{p.tipo === "SERVICO" ? p.codigoServico ?? "—" : p.ncm ?? "—"}</span>,
