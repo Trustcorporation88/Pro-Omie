@@ -1,6 +1,9 @@
 // NFS-e padrão nacional: distribuição por NSU no Ambiente de Dados Nacional (ADN), API "Contribuintes". Só servidor.
 // Base: HUBCLONE (src/lib/sefaz/nfse-adn.ts). GET {base}/DFe/{ultNSU} com mTLS; o ADN usa 200, 400 e 404 com corpo JSON
 // válido (o resultado real vem em StatusProcessamento); lote de até 50 documentos e sem maxNSU (lote cheio = pode haver mais).
+// cnpjConsulta (manual do ADN para contribuintes, fev/2026): sem ele, o ADN devolve os documentos do CNPJ do CERTIFICADO;
+// com ele, os do CNPJ informado, desde que tenha a mesma raiz do certificado. É o que deixa a filial usar o A1 da matriz
+// sem receber as notas da matriz. O mesmo manual pede 1 hora de espera quando não há mais documentos.
 import "server-only";
 import type https from "node:https";
 import type { DocumentoCapturado, PaginaCaptura } from "../tipos";
@@ -56,7 +59,8 @@ export function lerRetornoAdn(status: number, texto: string, cnpj: string, ultNs
 }
 
 export async function consultarAdn(agente: https.Agent, opcoes: { cnpj: string; ambiente: 1 | 2; ultNsu: string }): Promise<PaginaCaptura> {
-  const url = `${URL_ADN[opcoes.ambiente]}/DFe/${nsu15(opcoes.ultNsu)}`;
+  const cnpj = opcoes.cnpj.toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const url = `${URL_ADN[opcoes.ambiente]}/DFe/${nsu15(opcoes.ultNsu)}?cnpjConsulta=${cnpj}`;
   const r = await requisitar(agente, url, { metodo: "GET", cabecalhos: { Accept: "application/json" } });
   return lerRetornoAdn(r.status, r.texto, opcoes.cnpj, opcoes.ultNsu);
 }

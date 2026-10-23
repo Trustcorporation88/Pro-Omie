@@ -76,7 +76,8 @@ Logotipo e ícones ficam em `marca/` como texto base64, porque a integração us
 Regras (vindas do HUBCLONE/ProContador Office, que já roda isso em produção):
 
 - Uma execução por CNPJ (trava no banco).
-- Depois de "nenhum documento" ou do fim do acervo, e depois do erro 656, a próxima consulta de NF-e e CT-e só acontece 1 hora depois. A guarda é local: o sistema nem chama a SEFAZ antes disso.
+- Depois de "nenhum documento" ou do fim do acervo, e depois do erro 656, a próxima consulta só acontece 1 hora depois (NF-e, CT-e e NFS-e). A guarda é local: o sistema nem chama a SEFAZ ou o ADN antes disso.
+- Na NFS-e, a consulta ao ADN leva `cnpjConsulta` com o CNPJ do estabelecimento. Assim a filial pode usar o certificado da matriz (mesma raiz) sem receber as notas da matriz.
 - O cursor é salvo página a página, e só quando todos os documentos da página foram gravados.
 - O resumo nunca substitui o XML completo, e o cancelamento marca a nota.
 
