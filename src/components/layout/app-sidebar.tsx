@@ -17,6 +17,7 @@ import {
   FileBadge,
   FileChartColumn,
   FileInput,
+  FileSpreadsheet,
   FileText,
   GitCompareArrows,
   Landmark,
@@ -71,6 +72,7 @@ const ICONES: Record<string, LucideIcon> = {
   FileBadge,
   FileChartColumn,
   FileInput,
+  FileSpreadsheet,
   FileText,
   GitCompareArrows,
   Landmark,
@@ -105,7 +107,12 @@ export function AppSidebar({
   selos?: Record<string, number>;
 }) {
   const pathname = usePathname();
-  const ativo = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
+  // ativo = o item de caminho mais longo que casa com a página (em /estoque/movimentacoes só "Movimentações" acende, não "Saldos")
+  const casa = (href: string) => (href === "/" ? pathname === "/" : pathname === href || pathname.startsWith(`${href}/`));
+  const maisLongo = NAVEGACAO.flatMap((g) => g.itens)
+    .filter((i) => !i.emBreve && i.href && casa(i.href))
+    .reduce((a, i) => (i.href.length > a.length ? i.href : a), "");
+  const ativo = (href: string) => href === maisLongo;
 
   return (
     <Sidebar collapsible="icon">
@@ -159,7 +166,7 @@ export function AppSidebar({
         })}
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 text-[11px] opacity-50 group-data-[collapsible=icon]:hidden">
-        Fases 0 a 3 · Financeiro, vendas e estoque
+        Financeiro · vendas · estoque · fiscal · serviços
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>
