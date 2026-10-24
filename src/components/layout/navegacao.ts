@@ -47,6 +47,7 @@ export const NAVEGACAO: GrupoNav[] = [
       { titulo: "Saldos", href: "/estoque", icone: "Boxes", permissao: "estoque:ver" },
       { titulo: "Movimentações", href: "/estoque/movimentacoes", icone: "ArrowLeftRight", permissao: "estoque:ver" },
       { titulo: "Vendas por material", href: "/estoque/vendas", icone: "ChartColumn", permissao: "estoque:ver" },
+      { titulo: "Importar planilha", href: "/estoque/importar", icone: "FileSpreadsheet", permissao: "estoque:editar" },
     ],
   },
   {

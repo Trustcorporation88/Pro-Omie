@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowDownToLine, BarChart3, Boxes, PackageOpen, Plus, Scale, ShoppingCart, SlidersHorizontal, Wallet } from "lucide-react";
+import { ArrowDownToLine, BarChart3, Boxes, FileSpreadsheet, PackageOpen, Plus, Scale, ShoppingCart, SlidersHorizontal, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCaption, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,7 +51,16 @@ export default async function Pagina({ searchParams }: Props) {
           titulo="Nenhum material cadastrado"
           descricao="Escolha os recicláveis que a empresa vende (papel, papelão, plástico, alumínio, ferro, cobre, prata e outros). Cada um vira um produto vendido por kg, com saldo próprio."
         >
-          {podeEditar && <BotaoMateriaisPadrao codigosExistentes={[]} destaque rotulo="Escolher materiais" />}
+          {podeEditar && (
+            <div className="flex flex-wrap justify-center gap-2">
+              <BotaoMateriaisPadrao codigosExistentes={[]} destaque rotulo="Escolher materiais" />
+              <Button variant="outline" asChild>
+                <Link href="/estoque/importar">
+                  <FileSpreadsheet /> Importar planilha
+                </Link>
+              </Button>
+            </div>
+          )}
         </EstadoVazio>
       </>
     );
@@ -68,6 +77,13 @@ export default async function Pagina({ searchParams }: Props) {
     <>
       <PageHeader titulo="Estoque" descricao="Materiais no pátio: a produção entra por aqui e a venda faturada dá baixa sozinha.">
         {podePrecos && <BotaoAtualizarPrecos materiais={linhas.filter((l) => l.ativo)} />}
+        {podeEditar && (
+          <Button variant="outline" asChild>
+            <Link href="/estoque/importar">
+              <FileSpreadsheet /> Importar planilha
+            </Link>
+          </Button>
+        )}
         {podeEditar && (
           <Button variant="outline" asChild>
             <Link href="/estoque/ajuste">
