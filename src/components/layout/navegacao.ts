@@ -47,6 +47,7 @@ export const NAVEGACAO: GrupoNav[] = [
       { titulo: "Saldos", href: "/estoque", icone: "Boxes", permissao: "estoque:ver" },
       { titulo: "Movimentações", href: "/estoque/movimentacoes", icone: "ArrowLeftRight", permissao: "estoque:ver" },
       { titulo: "Vendas por material", href: "/estoque/vendas", icone: "ChartColumn", permissao: "estoque:ver" },
+      { titulo: "Compras", href: "/estoque/compras", icone: "PackagePlus", permissao: "fiscal:ver" },
       { titulo: "Importar planilha", href: "/estoque/importar", icone: "FileSpreadsheet", permissao: "estoque:editar" },
     ],
   },
@@ -76,14 +77,6 @@ export const NAVEGACAO: GrupoNav[] = [
       { titulo: "Contas bancárias", href: "/cadastros/contas-bancarias", icone: "Wallet", permissao: "cadastros:ver" },
       { titulo: "Formas de pagamento", href: "/cadastros/formas-de-pagamento", icone: "CreditCard", permissao: "cadastros:ver" },
       { titulo: "Condições de pagamento", href: "/cadastros/condicoes-de-pagamento", icone: "CalendarClock", permissao: "cadastros:ver" },
-    ],
-  },
-  {
-    titulo: "Próximas fases",
-    itens: [
-      { titulo: "Compras", href: "#", icone: "PackagePlus", emBreve: "Fase 3" },
-      { titulo: "Contratos recorrentes", href: "#", icone: "Repeat", emBreve: "Fase 5" },
-      { titulo: "Painel do contador", href: "#", icone: "Calculator", emBreve: "Fase 6" },
     ],
   },
   {
