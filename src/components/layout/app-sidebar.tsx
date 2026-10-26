@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   ArrowLeftRight,
+  BookOpen,
   Boxes,
   Building,
   Calculator,
@@ -59,6 +60,7 @@ import { pode, type PapelUsuario } from "@/lib/auth/permissoes";
 
 const ICONES: Record<string, LucideIcon> = {
   ArrowLeftRight,
+  BookOpen,
   Boxes,
   Building,
   Calculator,

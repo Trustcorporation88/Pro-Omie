@@ -3,6 +3,7 @@ import { Separator } from "@/components/ui/separator";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { BuscaGlobal } from "@/components/layout/busca-global";
 import { MenuUsuario } from "@/components/layout/menu-usuario";
+import { BotaoManual } from "@/components/layout/botao-manual";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { escopoEmpresa } from "@/lib/auth/empresa";
 import { pode } from "@/lib/auth/permissoes";
@@ -42,7 +43,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-5" />
           <BuscaGlobal papel={u.papel} />
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center gap-1">
+            <BotaoManual />
             <MenuUsuario nome={u.nome} email={u.email} papel={u.papel} />
           </div>
         </header>

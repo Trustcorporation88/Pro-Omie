@@ -88,4 +88,8 @@ export const NAVEGACAO: GrupoNav[] = [
       { titulo: "Auditoria", href: "/configuracoes/auditoria", icone: "ScrollText", permissao: "config:admin" },
     ],
   },
+  {
+    titulo: "Ajuda",
+    itens: [{ titulo: "Manual do usuário", href: "/ajuda", icone: "BookOpen" }],
+  },
 ];

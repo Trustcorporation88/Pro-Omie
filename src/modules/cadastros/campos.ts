@@ -58,12 +58,19 @@ export const ENTIDADES: EntidadeCadastro[] = [
 export type MetaEntidade = {
   titulo: string;
   singular: string;
+  /** substantivo feminino: "Nova categoria", "a primeira conta" */
+  feminino?: boolean;
   descricao: string;
   campos: Campo[];
   padrao: Record<string, string | boolean | number>;
 };
 
 const ufs: Opcao[] = UFS.map((u) => ({ valor: u, rotulo: u }));
+
+/** "Novo cliente/fornecedor", "Nova categoria". */
+export const rotuloNovo = (m: Pick<MetaEntidade, "singular" | "feminino">) => `${m.feminino ? "Nova" : "Novo"} ${m.singular}`;
+/** "o primeiro produto/serviço", "a primeira conta". */
+export const oPrimeiro = (m: Pick<MetaEntidade, "singular" | "feminino">) => `${m.feminino ? "a primeira" : "o primeiro"} ${m.singular}`;
 
 export const META: Record<EntidadeCadastro, MetaEntidade> = {
   pessoas: {
@@ -164,6 +171,7 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
   categorias: {
     titulo: "Categorias financeiras",
     singular: "categoria",
+    feminino: true,
     descricao: "Plano de contas gerencial. O grupo da DRE define onde cada lançamento aparece no resultado.",
     padrao: { tipo: "DESPESA", grupoDre: "DESPESAS_ADMINISTRATIVAS" },
     campos: [
@@ -186,6 +194,7 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
   "contas-bancarias": {
     titulo: "Contas bancárias e caixa",
     singular: "conta",
+    feminino: true,
     descricao: "Contas correntes, caixa, cartões e investimentos. O saldo inicial é o ponto de partida do extrato.",
     padrao: { tipo: "CORRENTE" },
     campos: [
@@ -203,6 +212,7 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
   "formas-de-pagamento": {
     titulo: "Formas de pagamento",
     singular: "forma de pagamento",
+    feminino: true,
     descricao: "Meios usados para pagar e receber.",
     padrao: { meio: "PIX" },
     campos: [
@@ -213,6 +223,7 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
   "condicoes-de-pagamento": {
     titulo: "Condições de pagamento",
     singular: "condição de pagamento",
+    feminino: true,
     descricao: "Prazos usados para gerar parcelas automaticamente.",
     padrao: { dias: "30" },
     campos: [
@@ -245,6 +256,7 @@ export const META: Record<EntidadeCadastro, MetaEntidade> = {
   ordens: {
     titulo: "Ordens de serviço",
     singular: "ordem de serviço",
+    feminino: true,
     descricao: "Trabalhos a executar para um cliente. Ao concluir, gere o pedido pela ação da linha: ele fatura e emite a NFS-e.",
     padrao: { status: "ABERTA", quantidade: "1" },
     campos: [

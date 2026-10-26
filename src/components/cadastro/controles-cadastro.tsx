@@ -16,7 +16,7 @@ import {
 import { ConfirmarAcao } from "@/components/confirmar-acao";
 import { FormularioCadastro } from "./formulario-cadastro";
 import { alternarAtivoCadastro, excluirCadastro } from "@/modules/cadastros/acoes";
-import { META, type EntidadeCadastro } from "@/modules/cadastros/campos";
+import { META, rotuloNovo, type EntidadeCadastro } from "@/modules/cadastros/campos";
 import type { Opcao } from "@/lib/rotulos";
 
 type Valores = Record<string, string | number | boolean | null>;
@@ -40,7 +40,7 @@ export function BotaoNovoCadastro({
           setAberto(true);
         }}
       >
-        <Plus /> Novo {META[entidade].singular}
+        <Plus /> {rotuloNovo(META[entidade])}
       </Button>
       {aberto && (
         <FormularioCadastro

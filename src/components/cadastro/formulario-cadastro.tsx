@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { CampoMoeda } from "@/components/campo-moeda";
-import { META, type Campo, type EntidadeCadastro } from "@/modules/cadastros/campos";
+import { META, rotuloNovo, type Campo, type EntidadeCadastro } from "@/modules/cadastros/campos";
 import { salvarCadastro } from "@/modules/cadastros/acoes";
 import { consultarCep, consultarCnpj } from "@/modules/auth/acoes";
 import { fmtCep, fmtDocumento, fmtTelefone, parseMoeda, soDigitos } from "@/lib/format";
@@ -210,7 +210,7 @@ export function FormularioCadastro({
       <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
         <form onSubmit={salvar} className="flex min-h-full flex-col">
           <SheetHeader>
-            <SheetTitle>{id ? `Editar ${meta.singular}` : `Novo ${meta.singular}`}</SheetTitle>
+            <SheetTitle>{id ? `Editar ${meta.singular}` : rotuloNovo(meta)}</SheetTitle>
             <SheetDescription>{meta.descricao}</SheetDescription>
           </SheetHeader>
           <div className="flex-1 space-y-6 px-4">
