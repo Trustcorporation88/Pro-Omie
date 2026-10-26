@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { EstadoVazio, PageHeader } from "@/components/page-header";
 import { AbasFiltro, CampoBusca, Paginacao, SelectFiltro } from "@/components/filtros";
 import { AcoesLinhaCadastro, BotaoNovoCadastro } from "@/components/cadastro/controles-cadastro";
-import { ENTIDADES, META, type EntidadeCadastro } from "@/modules/cadastros/campos";
+import { ENTIDADES, META, oPrimeiro, type EntidadeCadastro } from "@/modules/cadastros/campos";
 import { listarCadastro, opcoesCadastro } from "@/modules/cadastros/registro";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
@@ -80,7 +80,7 @@ export default async function CadastroPage({ params, searchParams }: Props) {
       {listagem.linhas.length === 0 ? (
         <EstadoVazio
           titulo="Nenhum registro encontrado"
-          descricao={sp.q ? "Ajuste a busca ou os filtros." : `Cadastre o primeiro ${meta.singular}.`}
+          descricao={sp.q ? "Ajuste a busca ou os filtros." : `Cadastre ${oPrimeiro(meta)}.`}
         />
       ) : (
         <Card className="gap-0 overflow-hidden py-0">
