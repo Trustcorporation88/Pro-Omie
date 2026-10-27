@@ -238,6 +238,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/financeiro/movimentacoes"],
         blocos: [
           texto("[[/financeiro/movimentacoes]] é o extrato de cada conta do sistema: baixas, transferências e ajustes, com o saldo acumulado. Escolha a conta e o período."),
+          imagem(
+            "movimentacoes",
+            "O extrato do caixa no mês, com uma transferência e um ajuste.",
+            "Tela de movimentações com os botões Ajuste de saldo e Transferência entre contas, os cartões das contas, o período e o extrato com o saldo acumulado.",
+            ["**Ajuste de saldo**.", "**Transferência entre contas**.", "As contas: clique numa delas para ver o extrato.", "O período: **Este mês**, **Mês anterior** ou **Últimos 30 dias** (ou as datas).", "O menu da linha: **Excluir transferência** ou **Excluir ajuste**."],
+          ),
           lista([
             "**Transferência entre contas**: gera a saída numa conta e a entrada na outra, na mesma data (por exemplo, do banco para o caixa).",
             "**Ajuste de saldo**: para tarifas, rendimentos ou correções que não vêm de um título.",
@@ -275,6 +281,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/financeiro/fluxo-de-caixa"],
         blocos: [
           texto("Mostra entradas, saídas e saldo acumulado: o **Realizado** (baixas feitas) e o **Previsto** (títulos em aberto, pelo vencimento)."),
+          imagem(
+            "fluxo",
+            "O fluxo de caixa: o realizado e o previsto, com o saldo projetado.",
+            "Tela de fluxo de caixa com os filtros de período, agrupamento, conta e atrasados, os cartões de saldo e o gráfico de entradas, saídas e saldo acumulado.",
+            ["O **Período**: de e até.", "**Agrupar por** dia, semana ou mês.", "A **Conta** (ou todas).", "**Atrasados na projeção**: **Incluir** ou **Excluir** o que venceu.", "**Exportar CSV**."],
+          ),
           lista([
             "Escolha o **Período**, **Agrupar por** (dia, semana ou mês) e a **Conta** (ou todas).",
             "**Atrasados na projeção** decide se o que está vencido entra na previsão.",
@@ -289,6 +301,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/financeiro/dre"],
         blocos: [
           texto("O resultado da empresa mês a mês: receita bruta, deduções, lucro bruto, despesas, EBITDA e lucro líquido, com as margens."),
+          imagem(
+            "dre",
+            "A DRE do ano, mês a mês, pelo regime de competência.",
+            "Tela da DRE gerencial com o ano, o regime, os filtros de centro de custo e de empresa, os cartões de resultado e a demonstração mês a mês.",
+            ["**Regime**: **Competência** ou **Caixa**.", "**Centro de custo**.", "**Empresa**: matriz e filiais, ou uma delas.", "**Exportar CSV**.", "**Expandir categorias**: mostra as categorias dentro de cada grupo."],
+          ),
           lista([
             "**Regime**: **Competência** (pelo mês da competência do título) ou **Caixa** (pelo mês do recebimento ou pagamento).",
             "Filtre por **Empresa** (matriz e filiais) e por **Centro de custo**.",
@@ -621,6 +639,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/cadastros/contratos"],
         blocos: [
           texto("Para planos e mensalidades: o contrato gera sozinho, a cada competência, o pedido já faturado, a conta a receber e, se marcado, o boleto ou Pix."),
+          imagem(
+            "contratos",
+            "Os contratos recorrentes, com o menu da linha aberto.",
+            "Tela de contratos recorrentes com os botões Gerar competências pendentes e Novo contrato e o menu da linha aberto com a opção Gerar próxima competência agora.",
+            ["**Novo contrato**.", "**Gerar competências pendentes**: gera agora as que estão no prazo.", "**Gerar próxima competência agora**, no menu da linha."],
+          ),
           passos([
             "Em [[/cadastros/contratos]], clique em **Novo contrato**.",
             "Informe o **Cliente**, o **Serviço do cadastro**, a **Descrição** (sai no pedido e na nota), o **Valor de cada competência**, a **Periodicidade** (de mensal a anual) e o **Dia do vencimento** (1 a 28).",
@@ -642,6 +666,12 @@ export const MANUAL: Secao[] = [
             "Acompanhe pela **Situação**: aberta, em andamento, concluída ou cancelada.",
             "Ao terminar, use **Gerar pedido da OS**, no menu da linha: o pedido de venda é criado e a OS fica concluída. **Abrir pedido** leva até ele, para faturar e emitir a nota.",
           ]),
+          imagem(
+            "os",
+            "As ordens de serviço, com o menu da linha aberto.",
+            "Tela de ordens de serviço com o botão Nova ordem de serviço, o filtro de situação e o menu da linha aberto com a opção Gerar pedido da OS.",
+            ["**Nova ordem de serviço**.", "Filtro pela **Situação**.", "**Gerar pedido da OS**, no menu da linha."],
+          ),
           dica("As **Observações** da OS saem no pedido."),
         ],
       },
@@ -1114,6 +1144,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/configuracoes/empresa"],
         blocos: [
           texto("Em [[/configuracoes/empresa]] ficam as empresas do grupo, com as filiais, e os blocos de configuração de cada estabelecimento (CNPJ)."),
+          imagem(
+            "empresa",
+            "A empresa com os dados e o logotipo; embaixo vêm os blocos de configuração de cada estabelecimento e as filiais.",
+            "Tela de empresas e filiais com o botão Nova empresa e o cartão da empresa com os dados fiscais, o endereço, o contato e o bloco do logotipo.",
+            ["**Nova empresa** (só o administrador do grupo).", "**Editar** os dados da empresa.", "**Enviar logotipo**."],
+          ),
           lista([
             "**Editar** os dados: CNPJ (**Buscar na Receita** preenche), **Regime tributário**, **Inscrição estadual** e **Inscrição municipal**, endereço com o **Código do município (IBGE)** e contato. O e-mail da empresa é o que recebe as respostas dos clientes.",
             "**Nova filial**: cadastra um estabelecimento ligado à matriz. Inativar e reativar mantém o histórico.",
@@ -1138,6 +1174,12 @@ export const MANUAL: Secao[] = [
             "**Remover** apaga o certificado do sistema. Sem ele, a empresa não emite notas; numa filial, passa a valer o certificado da matriz, se houver.",
             "O arquivo e a senha ficam guardados cifrados: ninguém consegue baixar o certificado pelo sistema.",
           ]),
+          imagem(
+            "certificado",
+            "O bloco **Certificado digital**: a matriz com o certificado e a filial usando o da matriz.",
+            "Bloco do certificado digital com a matriz e o certificado válido, os botões Trocar e mais ações, e a filial com o botão Enviar certificado.",
+            ["**Trocar**, na renovação.", "Menu: **Testar certificado** e **Remover**.", "**Enviar certificado** próprio da filial."],
+          ),
         ],
       },
       {
@@ -1149,6 +1191,12 @@ export const MANUAL: Secao[] = [
             "Ligue **Buscar notas contra este CNPJ**, escolha **O que buscar** (NF-e, CT-e e NFS-e) e deixe ligado **Dar ciência automaticamente nas NF-e**. Em **Motor**, deixe **SEFAZ direto** (sem custo); a **Focus NFe** fica de reserva.",
             "Clique em **Salvar**. A primeira busca traz as notas dos últimos 90 dias; depois, ela roda a cada hora.",
           ]),
+          imagem(
+            "busca-notas",
+            "O bloco **Notas recebidas**, com a última busca de cada tipo de nota.",
+            "Bloco de notas recebidas com a matriz com a busca ligada, a data da última consulta de NF-e, CT-e e NFS-e, e o botão Configurar.",
+            ["**Configurar** a busca do estabelecimento."],
+          ),
           atencao("Se outro sistema já busca as notas do mesmo CNPJ, não ligue aqui: a SEFAZ bloqueia consultas em duplicidade."),
         ],
       },
@@ -1156,6 +1204,12 @@ export const MANUAL: Secao[] = [
         id: "emissao",
         titulo: "Emissão de NF-e e NFS-e",
         blocos: [
+          imagem(
+            "emissao",
+            "Os blocos **Emissão de NF-e** e **Emissão de NFS-e (emissor nacional)**, um por estabelecimento.",
+            "Blocos de emissão de NF-e e de NFS-e com a matriz ligada em produção, a filial desligada e os botões Configurar, Inutilizar números e Conferir município.",
+            ["**Configurar** a emissão de NF-e.", "**Inutilizar números**.", "**Configurar** a emissão de NFS-e.", "**Conferir município**."],
+          ),
           lista(
             [
               "No bloco **Emissão de NF-e**, **Configurar**: ligue **Emitir NF-e por este estabelecimento**, escolha o **Ambiente** (comece em homologação), a série, o próximo número (se a empresa já emitia em outro sistema, continue a numeração dele) e as informações complementares padrão.",
@@ -1186,6 +1240,12 @@ export const MANUAL: Secao[] = [
             "Deixe ligado **Mandar o e-mail da cobrança ao cliente automaticamente**. **Deixar o Asaas notificar o cliente também** custa por cobrança e vem desligado.",
             "Salve. O sistema registra o aviso de pagamento do Asaas (**Webhook ok**).",
           ]),
+          imagem(
+            "cobranca-asaas",
+            "O bloco **Cobrança (boleto e Pix pelo Asaas)**.",
+            "Bloco de cobrança pelo Asaas com a matriz ligada em produção e o webhook registrado, os botões Testar, Atualizar webhook e Configurar, e a filial desligada.",
+            ["**Configurar**.", "**Testar** a chave da API.", "**Webhook ok**: o aviso de pagamento do Asaas está registrado."],
+          ),
           dica("A chave fica guardada cifrada e não aparece de novo na tela."),
         ],
       },
@@ -1206,6 +1266,12 @@ export const MANUAL: Secao[] = [
             "**Inativar** e **Reativar**: o usuário inativo não entra, e o histórico dele fica.",
             "**Desbloquear**: libera o login bloqueado por tentativas erradas.",
           ]),
+          imagem(
+            "usuarios",
+            "Os usuários, com o menu da linha aberto numa usuária bloqueada por tentativas erradas.",
+            "Tela de usuários com o botão Novo usuário, a lista com papel, empresas e situação, e o menu da linha aberto com as opções Editar, Redefinir senha, Desbloquear e Inativar.",
+            ["**Novo usuário**.", "A situação: ativo, troca de senha pendente ou bloqueado.", "**Redefinir senha**: gera uma nova senha provisória.", "**Desbloquear**: libera o login."],
+          ),
           atencao("O administrador de uma empresa vê e gerencia só os usuários das empresas dele. Ninguém altera o próprio acesso, e sempre sobra um administrador do grupo ativo."),
         ],
       },
