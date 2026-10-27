@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     prisma.empresa.findMany({ where: { id: { in: ids } }, select: { id: true, razaoSocial: true, nomeFantasia: true } }),
   ]);
   const pessoa = new Map(pessoas.map((p) => [p.id, p]));
-  const cab = ["Estabelecimento", "Depositante", "CNPJ/CPF", "Data", "Posições ocupadas", "Reservadas vazias", "Volumes", "Volumes fora de posição", "Endereços", "Origem"];
+  const cab = ["Estabelecimento", "Depositante", "CNPJ/CPF", "Data", "Paletes", "Reservadas vazias", "Volumes", "Caixas fora de posição", "Endereços", "Origem"];
   const linhas: (string | number)[][] = [];
   for (const [empresaId, m] of ocupacao) {
     const e = empresas.find((x) => x.id === empresaId);

@@ -1,6 +1,6 @@
 "use server";
 
-// Ações da cobrança da armazenagem por posição-pallet: tarifas, fotografia, gerar e desfazer o faturamento do mês.
+// Ações da cobrança da armazenagem por palete: tarifas, fotografia, gerar e desfazer o faturamento do período.
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
@@ -13,7 +13,7 @@ import { fmtMoeda } from "@/lib/format";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { urlBase } from "@/modules/email/acoes";
 import { carregarFaturamento, desfazerFaturamentoArmazem, fotografarOcupacao, gerarFaturamentoArmazem, primeiraEntradaDepositante } from "./faturamento";
-import { dataBr, ehDataISO, rotuloPeriodo } from "./tipos";
+import { dataBr, ehDataISO } from "./tipos";
 
 function revalidar() {
   revalidatePath("/servicos/armazem", "layout");
@@ -31,9 +31,9 @@ const esquemaTarifa = z.object({
   id: idOpc,
   estabelecimentoId: z.string().min(1, "Escolha o estabelecimento."),
   depositanteId: z.string().min(1, "Escolha o depositante."),
-  valorPosicao: z.number({ message: "Informe o valor por posição." }).positive("Informe o valor por posição.").max(1_000_000),
-  metodo: z.enum(["PRO_RATA", "PICO"]),
-  minimoPosicoes: z.number().int("Número inteiro de posições.").min(1, "Mínimo de 1 posição (ou deixe vazio).").max(100_000).optional().nullable(),
+  valorPosicao: z.number({ message: "Informe o valor por palete." }).positive("Informe o valor por palete.").max(1_000_000),
+  metodo: z.enum(["FIM_PERIODO", "PRO_RATA", "PICO"]),
+  minimoPosicoes: z.number().int("Número inteiro de paletes.").min(1, "Mínimo de 1 palete (ou deixe vazio).").max(100_000).optional().nullable(),
   cobrarReservadas: z.boolean(),
   periodo: z.enum(["DIAS30", "MES"]),
   inicio: z.string().refine((s) => ehISOValido(s), "Informe o início da cobrança."),
@@ -117,7 +117,7 @@ export async function salvarTarifaArmazem(entrada: EntradaTarifa): Promise<Resul
       d.id ? "editar_tarifa_armazem" : "criar_tarifa_armazem",
       "armazem",
       id,
-      `Tarifa de armazenagem de ${dep.nome}: ${fmtMoeda(d.valorPosicao)} por posição-pallet ${d.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"} desde ${dataBr(d.inicio)} (${d.metodo === "PICO" ? "maior ocupação" : "por dia"}${d.minimoPosicoes ? `, mínimo ${d.minimoPosicoes}` : ""}; vence ${d.prazoPagamento} dias após o período)`,
+      `Tarifa de armazenagem de ${dep.nome}: ${fmtMoeda(d.valorPosicao)} por palete ${d.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"} desde ${dataBr(d.inicio)} (${d.metodo === "FIM_PERIODO" ? "apuração no fim do período" : d.metodo === "PICO" ? "maior quantidade" : "por dia"}${d.minimoPosicoes ? `, mínimo ${d.minimoPosicoes}` : ""}; vence ${d.prazoPagamento} dias após o período)`,
     );
     revalidar();
     return { id };
@@ -164,7 +164,7 @@ async function gerarUm(empresaId: string, depositanteId: string, periodoInicio: 
     "faturar_armazenagem",
     "armazem",
     r.faturamentoId,
-    `Armazenagem de ${rotuloPeriodo(r.periodo)} · ${r.cliente} · ${r.calculo.posicoesDia} posições-dia, pico ${r.calculo.pico} · ${fmtMoeda(r.valor)} → pedido nº ${fmtNumeroDoc(r.numero)}${r.cobrancaId ? " · boleto/Pix gerado" : ""}`,
+    `Armazenagem de ${r.rotulo} · ${r.cliente} · ${r.calculo.apurado} paletes no fim, ${r.calculo.posicoesDia} paletes-dia, pico ${r.calculo.pico} · ${fmtMoeda(r.valor)} → pedido nº ${fmtNumeroDoc(r.numero)}${r.cobrancaId ? " · boleto/Pix gerado" : ""}`,
     { periodo: r.periodo, calculo: r.calculo },
     { usuarioId, empresaId: matrizId },
   );
@@ -181,7 +181,7 @@ export async function gerarFaturamentoArmazemAcao(empresaId: string, depositante
     if (!ehDataISO(periodoInicio)) throw new ErroAcao("Período inválido.");
     const res = await gerarUm(String(empresaId), String(depositanteId), periodoInicio, u.id, await urlBase(), escopo.ativa.id);
     revalidar();
-    mensagem = `Pedido nº ${fmtNumeroDoc(res.numero)} faturado: ${fmtMoeda(res.valor)} (${rotuloPeriodo(res.periodo)}), vencimento ${dataBr(res.vencimento)}.${res.cobrancaId ? " Boleto/Pix gerado e enviado." : res.erroCobranca ? ` Atenção: a cobrança não foi gerada (${res.erroCobranca}).` : ""}`;
+    mensagem = `Pedido nº ${fmtNumeroDoc(res.numero)} faturado: ${fmtMoeda(res.valor)} (${res.rotulo}), vencimento ${dataBr(res.vencimento)}.${res.cobrancaId ? " Boleto/Pix gerado e enviado." : res.erroCobranca ? ` Atenção: a cobrança não foi gerada (${res.erroCobranca}).` : ""}`;
     return { pedidoId: res.pedidoId, numero: res.numero };
   });
   return r.ok ? { ...r, mensagem } : r;
@@ -224,7 +224,7 @@ export async function desfazerFaturamentoArmazemAcao(id: string): Promise<Result
       "desfazer_faturamento_armazenagem",
       "armazem",
       String(id),
-      `Armazenagem de ${rotuloPeriodo(r.periodo)} · ${r.depositante} · ${fmtMoeda(r.valor)} desfeita${r.numero ? ` (pedido nº ${fmtNumeroDoc(r.numero)} cancelado)` : ""}${r.cobrancasCanceladas ? " · cobrança cancelada no Asaas" : ""}`,
+      `Armazenagem de ${r.rotulo} · ${r.depositante} · ${fmtMoeda(r.valor)} desfeita${r.numero ? ` (pedido nº ${fmtNumeroDoc(r.numero)} cancelado)` : ""}${r.cobrancasCanceladas ? " · cobrança cancelada no Asaas" : ""}`,
       undefined,
       { usuarioId: u.id, empresaId: escopo.ativa.id },
     );

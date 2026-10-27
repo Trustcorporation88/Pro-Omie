@@ -1,4 +1,4 @@
-// Cobrança da armazenagem por posição-pallet: fotografia diária das posições ocupadas por depositante, ocupação dia a dia
+// Cobrança da armazenagem por palete: fotografia diária dos paletes de cada depositante, ocupação dia a dia
 // da competência, tela do mês, geração do pedido faturado (conta a receber e cobrança) e desfazer. Só servidor.
 // Nada aqui chama escopoEmpresa() ou auditar() dentro de transação.
 import "server-only";
@@ -13,6 +13,7 @@ import { excluirTitulo } from "@/modules/financeiro/servicos";
 import {
   calcularArmazenagem,
   dataBr,
+  ehMetodo,
   descricaoArmazenagem,
   diasDoIntervalo,
   ehDataISO,
@@ -47,40 +48,48 @@ export async function estabelecimentosComArmazem(ids?: string[]): Promise<string
 }
 
 /**
- * Posições de cada depositante agora. Posição ocupada = endereço (que não seja doca) com volume do depositante que tem itens.
- * Volumes conferidos sem endereço ou na doca não ocupam posição (contam como "fora de posição").
+ * Paletes de cada depositante agora: cada palete conferido conta (em posição, sem endereço ou na doca) e cada posição
+ * (que não seja doca) só com caixas dele vale um. Palete em conferência conta pela posição, se já estiver numa.
+ * Caixa conferida sem endereço ou na doca não conta (fica como "fora de posição"). Posições reservadas vazias à parte.
  */
 export async function ocupacaoAtual(empresaId: string): Promise<Map<string, EstadoOcupacao>> {
   const [volumes, reservas] = await Promise.all([
     prisma.volumeArmazem.findMany({
       where: { empresaId, status: { not: "EXPEDIDO" } },
-      select: { depositanteId: true, status: true, enderecoId: true, endereco: { select: { codigo: true, tipo: true } }, _count: { select: { conteudo: true } } },
+      select: { depositanteId: true, tipo: true, status: true, enderecoId: true, endereco: { select: { codigo: true, tipo: true } }, _count: { select: { conteudo: true } } },
     }),
     prisma.enderecoArmazem.findMany({ where: { empresaId, ativo: true, depositanteId: { not: null }, tipo: { not: "DOCA" } }, select: { id: true, depositanteId: true } }),
   ]);
-  type Acc = { posicoes: Map<string, string>; volumes: number; fora: number; reservadas: Set<string> };
+  type Acc = { posicoes: Map<string, { codigo: string; paletes: number }>; soltos: number; volumes: number; caixasFora: number; reservadas: Set<string> };
   const acc = new Map<string, Acc>();
   const de = (id: string) => {
-    if (!acc.has(id)) acc.set(id, { posicoes: new Map(), volumes: 0, fora: 0, reservadas: new Set() });
+    if (!acc.has(id)) acc.set(id, { posicoes: new Map(), soltos: 0, volumes: 0, caixasFora: 0, reservadas: new Set() });
     return acc.get(id)!;
   };
   for (const v of volumes) {
     if (!v._count.conteudo) continue;
     const a = de(v.depositanteId);
     a.volumes++;
-    if (v.enderecoId && v.endereco && v.endereco.tipo !== "DOCA") a.posicoes.set(v.enderecoId, v.endereco.codigo);
-    else if (v.status === "FECHADO") a.fora++;
+    const fechadoPalete = v.tipo === "PALLET" && v.status === "FECHADO";
+    if (v.enderecoId && v.endereco && v.endereco.tipo !== "DOCA") {
+      const pos = a.posicoes.get(v.enderecoId) ?? { codigo: v.endereco.codigo, paletes: 0 };
+      if (fechadoPalete) pos.paletes++;
+      a.posicoes.set(v.enderecoId, pos);
+    } else if (v.status === "FECHADO") {
+      if (fechadoPalete) a.soltos++;
+      else a.caixasFora++;
+    }
   }
   for (const r of reservas) de(r.depositanteId!).reservadas.add(r.id);
   return new Map(
     [...acc].map(([dep, a]) => [
       dep,
       {
-        posicoes: a.posicoes.size,
+        posicoes: [...a.posicoes.values()].reduce((t, p) => t + Math.max(1, p.paletes), 0) + a.soltos,
         reservadasVazias: [...a.reservadas].filter((id) => !a.posicoes.has(id)).length,
         volumes: a.volumes,
-        volumesForaPosicao: a.fora,
-        enderecos: [...a.posicoes.values()].sort((x, y) => x.localeCompare(y, "pt-BR", { numeric: true })),
+        volumesForaPosicao: a.caixasFora,
+        enderecos: [...a.posicoes.values()].map((p) => p.codigo).sort((x, y) => x.localeCompare(y, "pt-BR", { numeric: true })).concat(a.soltos ? [`${a.soltos} sem posição`] : []),
       },
     ]),
   );
@@ -162,7 +171,7 @@ type TarifaBanco = {
 };
 export const tarifaCalculo = (t: TarifaBanco): TarifaCalculo => ({
   valorPosicao: num(t.valorPosicao as number),
-  metodo: (t.metodo === "PICO" ? "PICO" : "PRO_RATA") as MetodoArmazenagem,
+  metodo: ehMetodo(t.metodo) ? t.metodo : "FIM_PERIODO",
   minimoPosicoes: t.minimoPosicoes,
   cobrarReservadas: t.cobrarReservadas,
   inicio: iso(t.inicio),
@@ -202,6 +211,8 @@ export type LinhaFaturamento = {
     cobrancaId: string | null;
     erro: string | null;
     criadoEm: string;
+    metodo: MetodoArmazenagem;
+    apurado: number;
   } | null;
   situacao: SituacaoLinha;
 };
@@ -271,7 +282,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: t.depositanteId,
       depositante: nomePessoa(t.depositante),
       documento: t.depositante.documento,
-      periodo: { numero: periodo.numero, inicio: periodo.inicio, fim: periodo.fim, rotulo: rotuloPeriodo(periodo), tipo: tc.periodo },
+      periodo: { numero: periodo.numero, inicio: periodo.inicio, fim: periodo.fim, rotulo: rotuloPeriodo(periodo, tc.periodo), tipo: tc.periodo },
       dias,
       foraPosicaoDia: dias.reduce((a, d) => a + d.volumesForaPosicao, 0),
       tarifa: resumoTarifa(t),
@@ -300,7 +311,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: x.depositanteId,
       depositante: nomePessoa(x.depositante),
       documento: x.depositante.documento,
-      periodo: { numero: 0, inicio, fim, rotulo: rotuloPeriodo({ inicio, fim }), tipo: (x.tipoPeriodo === "MES" ? "MES" : "DIAS30") as TipoPeriodo },
+      periodo: { numero: 0, inicio, fim, rotulo: rotuloPeriodo({ inicio, fim }, x.tipoPeriodo === "MES" ? "MES" : "DIAS30"), tipo: (x.tipoPeriodo === "MES" ? "MES" : "DIAS30") as TipoPeriodo },
       dias: [],
       foraPosicaoDia: 0,
       tarifa: t ? resumoTarifa(t) : null,
@@ -320,6 +331,8 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
         erro: x.erro,
         // horário de Brasília (o mês do "faturado este mês" não vira às 21h)
         criadoEm: new Date(x.createdAt.getTime() - 3 * 3_600_000).toISOString(),
+        metodo: ehMetodo(x.metodo) ? x.metodo : "PRO_RATA",
+        apurado: x.apurado,
       },
       situacao: "FATURADO",
     };
@@ -396,7 +409,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositante: nomePessoa(t.depositante),
       documento: t.depositante.documento,
       valorPosicao: num(t.valorPosicao),
-      metodo: (t.metodo === "PICO" ? "PICO" : "PRO_RATA") as MetodoArmazenagem,
+      metodo: (ehMetodo(t.metodo) ? t.metodo : "FIM_PERIODO") as MetodoArmazenagem,
       minimoPosicoes: t.minimoPosicoes,
       cobrarReservadas: t.cobrarReservadas,
       periodo: (t.periodo === "MES" ? "MES" : "DIAS30") as TipoPeriodo,
@@ -443,13 +456,14 @@ export async function gerarFaturamentoArmazem(p: { empresaId: string; depositant
   const tarifa = tarifaCalculo(t);
   const periodo = periodosDaTarifa({ periodo: tarifa.periodo, inicio: tarifa.inicio }, p.periodoInicio).find((x) => x.inicio === p.periodoInicio);
   if (!periodo) throw new ErroAcao(`${dataBr(p.periodoInicio)} não é o começo de um período desta tarifa.`);
-  if (periodo.fim >= hoje) throw new ErroAcao(`O período de ${rotuloPeriodo(periodo)} ainda não terminou: a cobrança é feita vencida, a partir de ${dataBr(somarDias(periodo.fim, 1))}.`);
+  const rotulo = rotuloPeriodo(periodo, tarifa.periodo);
+  if (periodo.fim >= hoje) throw new ErroAcao(`O período de ${rotulo} ainda não terminou: a cobrança é feita vencida, a partir de ${dataBr(somarDias(periodo.fim, 1))}.`);
   const ja = await prisma.faturamentoArmazem.findUnique({ where: { empresaId_depositanteId_periodoInicio: { empresaId: p.empresaId, depositanteId: p.depositanteId, periodoInicio: isoParaDate(periodo.inicio) } }, include: { pedido: { select: { numero: true } } } });
-  if (ja) throw new ErroAcao(`O período de ${rotuloPeriodo(periodo)} já foi faturado${ja.pedido ? ` (pedido nº ${String(ja.pedido.numero).padStart(4, "0")})` : ""}.`);
+  if (ja) throw new ErroAcao(`O período de ${rotulo} já foi faturado${ja.pedido ? ` (pedido nº ${String(ja.pedido.numero).padStart(4, "0")})` : ""}.`);
   const matrizId = t.empresa.matrizId ?? t.empresa.id;
   const dias = (await ocupacaoDoIntervalo([p.empresaId], periodo.inicio, periodo.fim)).get(p.empresaId)?.get(p.depositanteId) ?? [];
   const calculo = calcularArmazenagem(dias, tarifa, periodo);
-  if (calculo.valor <= 0) throw new ErroAcao(`Nada a cobrar no período de ${rotuloPeriodo(periodo)}: o depositante não ocupou posições.`);
+  if (calculo.valor <= 0) throw new ErroAcao(`Nada a cobrar no período de ${rotulo}: o depositante não tinha paletes armazenados.`);
   const categoriaId = await categoriaReceitaPadrao(matrizId, t.categoriaId);
   if (!categoriaId) throw new ErroAcao("Cadastre uma categoria de receita (ou escolha a da tarifa).");
   const vencimento = vencimentoArmazenagem(periodo.fim, t.prazoPagamento, hoje);
@@ -463,8 +477,8 @@ export async function gerarFaturamentoArmazem(p: { empresaId: string; depositant
         cliente,
         produto: t.produto && t.produto.ativo ? { id: t.produto.id, unidade: t.produto.unidade } : null,
         itemDescricao: descricaoArmazenagem(t.descricao, periodo, tarifa.periodo, calculo, tarifa),
-        observacoes: `Armazenagem - período de ${rotuloPeriodo(periodo)}${t.observacoes ? `\n${t.observacoes}` : ""}`,
-        tituloComplemento: `${t.descricao} ${rotuloPeriodo(periodo)}`,
+        observacoes: `Armazenagem - ${tarifa.periodo === "MES" ? "" : "período de "}${rotulo}${t.observacoes ? `\n${t.observacoes}` : ""}`,
+        tituloComplemento: `${t.descricao} ${rotulo}`,
         valor: calculo.valor,
         formaPagamentoId: t.formaPagamentoId,
         contaBancariaId: t.contaBancariaId,
@@ -492,6 +506,7 @@ export async function gerarFaturamentoArmazem(p: { empresaId: string; depositant
           reservadasDia: calculo.reservadasDia,
           pico: calculo.pico,
           posicoesCobradas: calculo.posicoesCobradas,
+          apurado: calculo.apurado,
           valor: calculo.valor,
           vencimento: isoParaDate(vencimento),
           pedidoId: pedido.pedidoId,
@@ -503,7 +518,7 @@ export async function gerarFaturamentoArmazem(p: { empresaId: string; depositant
       return { faturamentoId: fat.id, ...pedido };
     });
   } catch (e) {
-    if ((e as { code?: string }).code === "P2002") throw new ErroAcao(`O período de ${rotuloPeriodo(periodo)} acabou de ser faturado por outra pessoa.`);
+    if ((e as { code?: string }).code === "P2002") throw new ErroAcao(`O período de ${rotulo} acabou de ser faturado por outra pessoa.`);
     throw e;
   }
   let cobrancaId: string | null = null;
@@ -518,7 +533,7 @@ export async function gerarFaturamentoArmazem(p: { empresaId: string; depositant
       await prisma.faturamentoArmazem.update({ where: { id: r.faturamentoId }, data: { erro: `Cobrança não gerada: ${erroCobranca}` } });
     }
   }
-  return { ...r, cliente, valor: calculo.valor, vencimento, calculo, periodo, cobrancaId, erroCobranca };
+  return { ...r, cliente, valor: calculo.valor, vencimento, calculo, periodo, rotulo, cobrancaId, erroCobranca };
 }
 
 /** Desfaz o faturamento: cancela a cobrança em aberto no Asaas, exclui a conta a receber e cancela o pedido. Bloqueado com recebimento ou nota emitida. */
@@ -526,6 +541,7 @@ export async function desfazerFaturamentoArmazem(id: string, escopoIds: string[]
   const f = await prisma.faturamentoArmazem.findFirst({ where: { id, empresaId: { in: escopoIds } }, include: { pedido: { select: { id: true, numero: true, status: true } }, depositante: { select: { nome: true, nomeFantasia: true } } } });
   if (!f) throw new ErroAcao("Faturamento não encontrado nesta empresa.");
   const periodo = { inicio: iso(f.periodoInicio), fim: iso(f.periodoFim) };
+  const rotulo = rotuloPeriodo(periodo, f.tipoPeriodo === "MES" ? "MES" : "DIAS30");
   const pedidoId = f.pedido?.id ?? null;
   if (pedidoId) {
     const [nfse, nfe] = await Promise.all([
@@ -546,8 +562,8 @@ export async function desfazerFaturamentoArmazem(id: string, escopoIds: string[]
   for (const c of abertas) await cancelarCobranca(c.id, escopoIds);
   await prisma.$transaction(async (tx) => {
     for (const t of titulos) await excluirTitulo(tx, t.id);
-    if (pedidoId) await tx.pedido.update({ where: { id: pedidoId }, data: { status: "CANCELADO", canceladoEm: new Date(), motivoCancelamento: `Faturamento da armazenagem de ${rotuloPeriodo(periodo)} desfeito` } });
+    if (pedidoId) await tx.pedido.update({ where: { id: pedidoId }, data: { status: "CANCELADO", canceladoEm: new Date(), motivoCancelamento: `Faturamento da armazenagem de ${rotulo} desfeito` } });
     await tx.faturamentoArmazem.delete({ where: { id: f.id } });
   });
-  return { periodo, numero: f.pedido?.numero ?? null, depositante: nomePessoa(f.depositante), cobrancasCanceladas: abertas.length, valor: num(f.valor) };
+  return { periodo, rotulo, numero: f.pedido?.numero ?? null, depositante: nomePessoa(f.depositante), cobrancasCanceladas: abertas.length, valor: num(f.valor) };
 }

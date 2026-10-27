@@ -7,6 +7,7 @@ import { EstadoVazio, PageHeader } from "@/components/page-header";
 import { AbasFiltro, SelectFiltro } from "@/components/filtros";
 import { CartaoKpi } from "@/components/relatorios/cartao-kpi";
 import { Selo } from "@/components/selos";
+import { BotaoExportarCsv } from "@/components/relatorios/exportar-csv";
 import { AcoesTarifa, BotaoAtualizarFotografia, BotaoFaturar, BotaoGerarTodos, BotaoNovaTarifa, MenuLinhaFaturamento, SeloSituacao, type OpcoesTarifa } from "@/components/armazem/faturamento";
 import { exigirUsuario } from "@/lib/auth/sessao";
 import { pode } from "@/lib/auth/permissoes";
@@ -15,7 +16,7 @@ import { prisma } from "@/lib/db";
 import { fmtData, fmtDataHora, fmtDocumento, fmtMoeda } from "@/lib/format";
 import { carregarOpcoesFinanceiras } from "@/modules/financeiro/opcoes";
 import { carregarFaturamento, lerFiltrosFaturamento, type AbaFaturamento, type LinhaFaturamento } from "@/modules/armazem/faturamento";
-import { ROTULO_METODO_CURTO, somarDias } from "@/modules/armazem/tipos";
+import { ROTULO_METODO_CURTO, somarDias, type MetodoArmazenagem } from "@/modules/armazem/tipos";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 
 export const metadata: Metadata = { title: "Faturamento da armazenagem" };
@@ -25,11 +26,50 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 const num = (n: number, casas = 2) => n.toLocaleString("pt-BR", { maximumFractionDigits: casas });
 const ROTULO_TITULO: Record<string, string> = { ABERTO: "a receber", PARCIAL: "recebido em parte", QUITADO: "recebido", CANCELADO: "título cancelado" };
 const VAZIO: Record<AbaFaturamento, { titulo: string; descricao: string }> = {
-  pendentes: { titulo: "Nenhum período vencido a faturar", descricao: "Cada período é cobrado depois que termina (cobrança vencida). Os que estão correndo ficam em Em andamento." },
-  andamento: { titulo: "Nenhum período em andamento", descricao: "Cadastre a tarifa de cada depositante: os períodos de 30 dias começam a contar no início da tarifa." },
+  pendentes: { titulo: "Nenhum período vencido a faturar", descricao: "Cada mês é cobrado depois que termina, pela apuração dos paletes no último dia. O mês corrente fica em Em andamento." },
+  andamento: { titulo: "Nenhum período em andamento", descricao: "Cadastre a tarifa de cada cliente para começar a apurar." },
   faturados: { titulo: "Nenhum faturamento ainda", descricao: "Os períodos faturados aparecem aqui, com o pedido e a conta a receber." },
-  "sem-tarifa": { titulo: "Todos os depositantes com posições têm tarifa", descricao: "Quem ocupar posições sem tarifa aparece aqui, com as posições dos últimos 30 dias." },
+  "sem-tarifa": { titulo: "Todos os clientes com paletes têm tarifa", descricao: "Quem tiver paletes armazenados sem tarifa aparece aqui, com os paletes dos últimos 30 dias." },
 };
+const paletes = (n: number) => `${num(n, 0)} ${n === 1 ? "palete" : "paletes"}`;
+
+/** O número que vai para a cobrança, conforme o método: paletes no fim do período, paletes-dia ou o pico. */
+function Apuracao({ l }: { l: LinhaFaturamento }) {
+  const sub = (t: string) => <span className="block text-xs whitespace-nowrap text-muted-foreground">{t}</span>;
+  if (l.situacao === "SEM_TARIFA") {
+    const hoje = l.dias.length ? l.dias[l.dias.length - 1].posicoes : 0;
+    return (
+      <>
+        {paletes(hoje)} hoje
+        {sub(`pico de ${l.bruto.pico} nos últimos 30 dias`)}
+      </>
+    );
+  }
+  const fat = l.faturamento;
+  const metodo: MetodoArmazenagem = fat?.metodo ?? l.tarifa?.metodo ?? "FIM_PERIODO";
+  if (fat) {
+    if (metodo === "FIM_PERIODO") return <>{paletes(fat.apurado)}{sub(`em ${fmtData(l.periodo!.fim)}`)}</>;
+    if (metodo === "PICO") return <>{paletes(fat.pico)} (pico){sub(`${num(fat.posicoesDia, 0)} paletes-dia`)}</>;
+    return <>{num(fat.posicoesDia, 0)} paletes-dia{sub(`pico ${fat.pico}`)}</>;
+  }
+  const c = l.calculo;
+  if (!c) return <span className="text-muted-foreground">—</span>;
+  const andamento = l.situacao === "EM_ANDAMENTO";
+  if (metodo === "FIM_PERIODO")
+    return (
+      <>
+        {paletes(c.apurado)}
+        {sub(andamento ? `hoje · apuração em ${fmtData(l.periodo!.fim)}` : `em ${fmtData(c.diaApuracao ?? l.periodo!.fim)}`)}
+      </>
+    );
+  if (metodo === "PICO") return <>{paletes(c.pico)} (pico){sub(`média ${num(c.media)}`)}</>;
+  return (
+    <>
+      {num(c.posicoesDia, 0)} paletes-dia
+      {sub(`média ${num(c.media)} · pico ${c.pico}${c.reservadasDia ? ` · ${c.reservadasDia} de reservadas` : ""}`)}
+    </>
+  );
+}
 
 export default async function Pagina({ searchParams }: Props) {
   const u = await exigirUsuario("armazem:ver");
@@ -75,7 +115,7 @@ export default async function Pagina({ searchParams }: Props) {
       </Link>
       <PageHeader
         titulo="Faturamento da armazenagem"
-        descricao="Cobrança por posição-pallet, vencida: todo dia o sistema fotografa as posições ocupadas; quando o período de 30 dias de cada depositante termina, a tarifa vira o pedido, a conta a receber e o boleto ou Pix."
+        descricao="Cobrança por palete, vencida: todo dia o sistema fotografa os paletes de cada cliente; no fim do mês faz a apuração, e a tarifa vira o pedido, a conta a receber e o boleto ou Pix."
       >
         {podeFotografar && <BotaoAtualizarFotografia />}
         {podeFaturar && <BotaoGerarTodos estab={f.estab} pendentes={dados.contagem.pendentes} total={dados.totais.aFaturar} />}
@@ -86,13 +126,13 @@ export default async function Pagina({ searchParams }: Props) {
           {dados.contagem.pendentes} {dados.contagem.pendentes === 1 ? "período vencido" : "períodos vencidos"}
         </CartaoKpi>
         <CartaoKpi titulo="Em andamento" valor={fmtMoeda(dados.totais.emAndamento)} icone={Hourglass} tom="roxo" href={link("andamento")}>
-          acumulado até hoje em {dados.contagem.andamento} {dados.contagem.andamento === 1 ? "período" : "períodos"}
+          parcial, até hoje, em {dados.contagem.andamento} {dados.contagem.andamento === 1 ? "período" : "períodos"}
         </CartaoKpi>
         <CartaoKpi titulo="Faturado este mês" valor={fmtMoeda(dados.totais.faturadoNoMes)} icone={FileCheck2} tom="sucesso" href={link("faturados")}>
           {dados.totais.faturadosNoMes} pedido(s) gerado(s)
         </CartaoKpi>
         <CartaoKpi titulo="Sem tarifa" valor={String(dados.contagem["sem-tarifa"])} icone={Users} tom={dados.contagem["sem-tarifa"] ? "perigo" : "neutro"} href={link("sem-tarifa")}>
-          ocupam posições, mas não têm preço
+          têm paletes, mas não têm preço
         </CartaoKpi>
       </div>
 
@@ -108,6 +148,25 @@ export default async function Pagina({ searchParams }: Props) {
           ]}
         />
         <div className="flex flex-wrap items-center gap-2">
+          <BotaoExportarCsv
+            arquivo={`armazenagem-${aba}-${dados.hoje}.csv`}
+            cabecalho={["Cliente", "CNPJ/CPF", "Estabelecimento", "Período", "Como conta", "Paletes apurados", "Paletes-dia", "Pico", "Valor", "Vencimento", "Situação", "Pedido"]}
+            linhas={dados.linhas.map((l) => [
+              l.depositante,
+              l.documento ? fmtDocumento(l.documento) : "",
+              l.estabelecimento,
+              l.periodo?.rotulo ?? "últimos 30 dias",
+              l.faturamento ? ROTULO_METODO_CURTO[l.faturamento.metodo] : l.tarifa ? ROTULO_METODO_CURTO[l.tarifa.metodo] : "sem tarifa",
+              l.faturamento?.apurado ?? l.calculo?.apurado ?? (l.dias.length ? l.dias[l.dias.length - 1].posicoes : 0),
+              l.faturamento?.posicoesDia ?? l.calculo?.posicoesDia ?? l.bruto.posicoesDia,
+              l.faturamento?.pico ?? l.calculo?.pico ?? l.bruto.pico,
+              l.faturamento?.valor ?? l.calculo?.valor ?? null,
+              l.faturamento?.vencimento ?? (l.situacao === "PENDENTE" ? l.vencimento : null) ?? "",
+              { PENDENTE: "a faturar", EM_ANDAMENTO: "em andamento", FATURADO: "faturado", SEM_TARIFA: "sem tarifa" }[l.situacao],
+              l.faturamento?.pedido ? fmtNumeroDoc(l.faturamento.pedido.numero) : "",
+            ])}
+            desabilitado={!dados.linhas.length}
+          />
           {dados.depositantes.length > 1 && <SelectFiltro parametro="depositante" rotuloTodos="Todos os depositantes" opcoes={dados.depositantes.map((d) => ({ valor: d.id, rotulo: d.nome }))} />}
           {varios && <SelectFiltro parametro="estab" rotuloTodos="Todos os estabelecimentos" opcoes={dados.estabelecimentos.map((e) => ({ valor: e.id, rotulo: e.nome }))} />}
         </div>
@@ -137,8 +196,7 @@ export default async function Pagina({ searchParams }: Props) {
                 <TableHead className="pl-3">Depositante</TableHead>
                 <TableHead>{semTarifa ? "Desde" : "Período"}</TableHead>
                 {!faturados && !semTarifa && <TableHead>Tarifa</TableHead>}
-                <TableHead className="text-right">Posições-dia</TableHead>
-                <TableHead className="text-right">{faturados || semTarifa ? "Pico" : "Média · pico"}</TableHead>
+                <TableHead className="text-right">Apuração</TableHead>
                 {!semTarifa && <TableHead className="text-right">Valor</TableHead>}
                 <TableHead>Situação</TableHead>
                 <TableHead className="pr-3 text-right">
@@ -149,8 +207,6 @@ export default async function Pagina({ searchParams }: Props) {
             <TableBody>
               {dados.linhas.map((l) => {
                 const fat = l.faturamento;
-                const posDia = fat?.posicoesDia ?? l.calculo?.posicoesDia ?? l.bruto.posicoesDia;
-                const pico = fat?.pico ?? l.calculo?.pico ?? l.bruto.pico;
                 const valor = fat?.valor ?? l.calculo?.valor ?? null;
                 const primeira = dados.primeiraEntrada[`${l.empresaId}|${l.depositanteId}`] ?? null;
                 return (
@@ -163,18 +219,16 @@ export default async function Pagina({ searchParams }: Props) {
                       </span>
                       {l.foraPosicaoDia > 0 && (
                         <span className="mt-0.5 flex items-center gap-1 text-xs text-[oklch(0.5_0.13_65)]">
-                          <CircleAlert className="size-3" aria-hidden /> {l.foraPosicaoDia} {l.foraPosicaoDia === 1 ? "volume-dia" : "volumes-dia"} fora de posição (não cobrados)
+                          <CircleAlert className="size-3" aria-hidden /> {l.foraPosicaoDia} {l.foraPosicaoDia === 1 ? "caixa-dia" : "caixas-dia"} fora de posição (não cobradas)
                         </span>
                       )}
                     </TableCell>
                     <TableCell className="min-w-40 text-sm whitespace-normal">
                       {l.periodo ? (
                         <>
-                          <span className="whitespace-nowrap">
-                            {fmtData(l.periodo.inicio)} a {fmtData(l.periodo.fim)}
-                          </span>
+                          <span className="whitespace-nowrap">{l.periodo.rotulo}</span>
                           <span className="block text-xs text-muted-foreground">
-                            {l.periodo.tipo === "DIAS30" ? "30 dias" : "mês do calendário"}
+                            {l.periodo.tipo === "DIAS30" ? "30 dias" : "mês"}
                             {l.periodo.numero ? ` · ${l.periodo.numero}º período` : ""}
                             {l.situacao === "EM_ANDAMENTO" && l.calculo ? ` · ${l.calculo.diasContados} de ${l.calculo.diasPeriodo} dias` : ""}
                           </span>
@@ -201,11 +255,9 @@ export default async function Pagina({ searchParams }: Props) {
                         )}
                       </TableCell>
                     )}
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {num(posDia, 0)}
-                      {l.calculo && l.calculo.reservadasDia > 0 && <span className="block text-xs text-muted-foreground">{l.calculo.reservadasDia} de reservadas</span>}
+                    <TableCell className="min-w-36 text-right text-sm tabular-nums whitespace-normal">
+                      <Apuracao l={l} />
                     </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">{faturados || semTarifa ? pico : `${num(l.calculo?.media ?? 0)} · ${pico}`}</TableCell>
                     {!semTarifa && (
                       <TableCell className="min-w-36 text-right text-sm tabular-nums whitespace-normal">
                         {valor !== null ? (
@@ -244,7 +296,7 @@ export default async function Pagina({ searchParams }: Props) {
                         {semTarifa && l.tarifa && !l.tarifa.ativo && <Selo>tarifa suspensa</Selo>}
                         <MenuLinhaFaturamento
                           depositante={l.depositante}
-                          rotulo={l.periodo ? `${fmtData(l.periodo.inicio)} a ${fmtData(l.periodo.fim)}` : "últimos 30 dias"}
+                          rotulo={l.periodo ? l.periodo.rotulo : "últimos 30 dias"}
                           csv={csv(l)}
                           dias={l.dias}
                           faturamento={fat ? { id: fat.id, pedidoId: fat.pedido?.id ?? null } : null}
@@ -264,7 +316,7 @@ export default async function Pagina({ searchParams }: Props) {
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 py-4">
           <div className="space-y-1">
             <CardTitle className="text-base">Tarifas</CardTitle>
-            <CardDescription>Preço por posição-pallet de cada depositante. O faturamento guarda a tarifa usada: mudar o preço não muda o que já foi faturado.</CardDescription>
+            <CardDescription>Preço por palete de cada cliente. O faturamento guarda a tarifa usada: mudar o preço não muda o que já foi faturado.</CardDescription>
           </div>
           {podeFaturar && opcoes && <BotaoNovaTarifa opcoes={opcoes} />}
         </CardHeader>
@@ -275,7 +327,7 @@ export default async function Pagina({ searchParams }: Props) {
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="pl-4">Depositante</TableHead>
-                <TableHead className="text-right">Por posição</TableHead>
+                <TableHead className="text-right">Por palete</TableHead>
                 <TableHead>Como conta</TableHead>
                 <TableHead>Período e vencimento</TableHead>
                 <TableHead>Serviço (NFS-e)</TableHead>
@@ -309,7 +361,7 @@ export default async function Pagina({ searchParams }: Props) {
                   </TableCell>
                   <TableCell className="text-sm">
                     <span className="flex items-center gap-1">
-                      <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden /> {t.periodo === "DIAS30" ? "30 dias, vencido" : "mês do calendário"}
+                      <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden /> {t.periodo === "DIAS30" ? "30 dias, vencido" : "mês, vencido"}
                     </span>
                     <span className="block text-xs text-muted-foreground">
                       vence {t.prazoPagamento} {t.prazoPagamento === 1 ? "dia" : "dias"} após o período · {t.gerarCobranca ? "com boleto/Pix" : "sem boleto/Pix"}
