@@ -44,7 +44,8 @@ export async function carregarCompras(f: FiltrosCompras): Promise<{ periodo: Per
   const periodo = periodoDe(f.competencia);
   const estabelecimentos = [escopo.ativa, ...escopo.filiais].map((e) => ({ id: e.id, nome: e.nome }));
   const ids = f.estab && escopo.ids.includes(f.estab) ? [f.estab] : escopo.ids;
-  const where: Prisma.DocumentoRecebidoWhereInput[] = [{ empresaId: { in: ids }, tipo: "NFE", direcao: "ENTRADA", emitidoEm: { gte: periodo.de, lt: periodo.ate } }];
+  // remessa para armazenagem é mercadoria do depositante (Serviços › armazém), não compra
+  const where: Prisma.DocumentoRecebidoWhereInput[] = [{ empresaId: { in: ids }, tipo: "NFE", direcao: "ENTRADA", armazenagem: false, emitidoEm: { gte: periodo.de, lt: periodo.ate } }];
   if (f.q) {
     const dig = f.q.replace(/\D/g, "");
     where.push({

@@ -175,6 +175,7 @@ export async function obterRecebida(id: string) {
     include: {
       empresa: { select: { id: true, razaoSocial: true, nomeFantasia: true, cnpj: true, matrizId: true } },
       pessoa: { select: { id: true, nome: true, documento: true } },
+      documentosArmazem: { select: { recebimento: { select: { id: true, numero: true, status: true } } } },
       eventos: { orderBy: [{ ocorridoEm: "asc" }, { createdAt: "asc" }], select: { id: true, tipoEvento: true, sequencia: true, descricao: true, detalhe: true, ocorridoEm: true, protocolo: true } },
     },
   });
@@ -219,6 +220,8 @@ export async function obterRecebida(id: string) {
     eventos: d.eventos.map((e) => ({ ...e, ocorridoEm: e.ocorridoEm?.toISOString() ?? null })),
     titulos: titulos.map((t) => ({ ...t, valor: num(t.valor), vencimento: t.vencimento.toISOString().slice(0, 10) })),
     detalhe,
+    armazenagem: d.armazenagem,
+    recebimentoArmazem: d.documentosArmazem[0]?.recebimento ?? null,
   };
 }
 

@@ -4,6 +4,7 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import type { DocumentoCapturado, Motor } from "./tipos";
+import { detalheNfe, ehRemessaArmazenagem } from "./leitura";
 
 const CANCELAMENTOS = new Set(["110111", "110112", "101101", "105102"]);
 
@@ -38,8 +39,11 @@ async function gravarEvento(empresaId: string, d: DocumentoCapturado) {
 
 async function gravarDocumento(empresaId: string, motor: Motor, d: DocumentoCapturado) {
   const completo = d.natureza === "DOCUMENTO" && !!d.xml;
+  // remessa para armazenagem (mercadoria do depositante): vai para o armazém geral, não para compras
+  const armazenagem = completo && d.tipo === "NFE" ? ehRemessaArmazenagem(detalheNfe(d.xml)?.itens ?? []) : false;
   const campos = {
     tipo: d.tipo,
+    armazenagem,
     direcao: d.direcao ?? "ENTRADA",
     numero: d.numero ?? null,
     serie: d.serie ?? null,

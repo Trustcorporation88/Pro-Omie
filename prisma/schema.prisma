@@ -174,16 +174,21 @@ model Empresa {
   lancamentosEstoque LancamentoEstoque[]
   saldosEstoque      SaldoEstoque[]
 
-  configuracaoFiscal  ConfiguracaoFiscal?
-  cursoresCaptura     CursorCaptura[]
-  documentosRecebidos DocumentoRecebido[]
-  notasFiscais        NotaFiscal[]
-  inutilizacoes       InutilizacaoNfe[]
-  notasServico        NotaServico[]
+  configuracaoFiscal   ConfiguracaoFiscal?
+  cursoresCaptura      CursorCaptura[]
+  documentosRecebidos  DocumentoRecebido[]
+  notasFiscais         NotaFiscal[]
+  inutilizacoes        InutilizacaoNfe[]
+  notasServico         NotaServico[]
   configuracaoCobranca ConfiguracaoCobranca?
-  cobrancas           Cobranca[]
-  contratos           Contrato[]
-  ordensServico       OrdemServico[]
+  cobrancas            Cobranca[]
+  contratos            Contrato[]
+  ordensServico        OrdemServico[]
+
+  enderecosArmazem    EnderecoArmazem[]
+  produtosDepositante ProdutoDepositante[]
+  recebimentosArmazem RecebimentoArmazem[]
+  volumesArmazem      VolumeArmazem[]
 
   @@map("empresas")
 }
@@ -284,63 +289,68 @@ model Pessoa {
 
   documentosRecebidos DocumentoRecebido[]
 
+  produtosDepositante ProdutoDepositante[]
+  recebimentosArmazem RecebimentoArmazem[]
+  volumesArmazem      VolumeArmazem[]
+  enderecosReservados EnderecoArmazem[]
+  contratos           Contrato[]
+  ordensServico       OrdemServico[]
+
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
   @@map("pessoas")
-  contratos     Contrato[]
-  ordensServico OrdemServico[]
 }
 
 model Produto {
-  id                 String         @id @default(cuid())
+  id                        String                     @id @default(cuid())
   /// Empresa (matriz) dona do cadastro; as filiais usam os cadastros da matriz.
-  empresaId          String
-  empresa            Empresa        @relation(fields: [empresaId], references: [id])
-  tipo               TipoProduto    @default(PRODUTO)
-  codigo             String
-  descricao          String
-  unidade            String         @default("UN")
-  gtin               String?
-  ncm                String?
-  cest               String?
-  origem             Int            @default(0)
-  codigoServico      String?
-  precoVenda         Decimal        @default(0) @db.Decimal(14, 2)
-  precoCusto         Decimal        @default(0) @db.Decimal(14, 4)
-  controlaEstoque    Boolean        @default(true)
-  estoqueMinimo      Decimal?       @db.Decimal(14, 4)
-  estoqueMaximo      Decimal?       @db.Decimal(14, 4)
+  empresaId                 String
+  empresa                   Empresa                    @relation(fields: [empresaId], references: [id])
+  tipo                      TipoProduto                @default(PRODUTO)
+  codigo                    String
+  descricao                 String
+  unidade                   String                     @default("UN")
+  gtin                      String?
+  ncm                       String?
+  cest                      String?
+  origem                    Int                        @default(0)
+  codigoServico             String?
+  precoVenda                Decimal                    @default(0) @db.Decimal(14, 2)
+  precoCusto                Decimal                    @default(0) @db.Decimal(14, 4)
+  controlaEstoque           Boolean                    @default(true)
+  estoqueMinimo             Decimal?                   @db.Decimal(14, 4)
+  estoqueMaximo             Decimal?                   @db.Decimal(14, 4)
   /// grupo do material reciclável (PAPEL, PLASTICO, METAL_FERROSO...); vazio nos demais produtos
-  grupoMaterial      String?
+  grupoMaterial             String?
   /// NF-e: CFOP e CSOSN dentro e fora do estado (vazio = padrão do sistema) e texto legal para as informações complementares
-  cfopInterno        String?
-  cfopInterestadual  String?
-  csosnInterno       String?
-  csosnInterestadual String?
+  cfopInterno               String?
+  cfopInterestadual         String?
+  csosnInterno              String?
+  csosnInterestadual        String?
   /// CST do IBS/CBS (3 dígitos). Vazio = 000 (tributação integral)
-  cstIbsCbs          String?
+  cstIbsCbs                 String?
   /// código de classificação tributária do IBS/CBS (6 dígitos). Vazio = 000001
-  cClassTrib         String?
-  textoFiscal        String?
+  cClassTrib                String?
+  textoFiscal               String?
   /// NFS-e nacional (serviços): código de tributação nacional (6 dígitos), municipal e NBS
   codigoTributacaoNacional  String?
   codigoTributacaoMunicipal String?
   codigoNbs                 String?
-  observacoes        String?
-  ativo              Boolean        @default(true)
-  createdAt          DateTime       @default(now())
-  updatedAt          DateTime       @updatedAt
-  itensProposta      PropostaItem[]
-  itensPedido        PedidoItem[]
-  itensEstoque       ItemEstoque[]
-  saldosEstoque      SaldoEstoque[]
+  observacoes               String?
+  ativo                     Boolean                    @default(true)
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  itensProposta             PropostaItem[]
+  itensPedido               PedidoItem[]
+  itensEstoque              ItemEstoque[]
+  saldosEstoque             SaldoEstoque[]
+  contratos                 Contrato[]
+  ordensServico             OrdemServico[]
+  vinculosFornecedor        VinculoProdutoFornecedor[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, descricao])
   @@map("produtos")
-  contratos     Contrato[]
-  ordensServico OrdemServico[]
-  vinculosFornecedor VinculoProdutoFornecedor[]
 }
 
 model Categoria {
@@ -486,9 +496,9 @@ model Titulo {
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
 
-  rateios TituloRateio[]
-  baixas  Baixa[]
-  anexos  Anexo[]
+  rateios   TituloRateio[]
+  baixas    Baixa[]
+  anexos    Anexo[]
   cobrancas Cobranca[]
 
   @@index([tipo, status, vencimento])
@@ -951,8 +961,8 @@ model LancamentoEstoque {
   pessoa      Pessoa?               @relation(fields: [pessoaId], references: [id], onDelete: SetNull)
   /// processo de destruição, MTR, lote ou ticket de pesagem
   /// nota fiscal recebida que originou a entrada (compra)
-  documentoId String? @unique
-  documento   DocumentoRecebido? @relation(fields: [documentoId], references: [id], onDelete: SetNull)
+  documentoId String?               @unique
+  documento   DocumentoRecebido?    @relation(fields: [documentoId], references: [id], onDelete: SetNull)
   referencia  String?
   /// ajuste: código do motivo (lista fixa no módulo estoque)
   motivo      String?
@@ -968,17 +978,17 @@ model LancamentoEstoque {
 }
 
 model ItemEstoque {
-  id           String            @id @default(cuid())
-  lancamentoId String
-  lancamento   LancamentoEstoque @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
-  produtoId    String
-  produto      Produto           @relation(fields: [produtoId], references: [id])
+  id            String            @id @default(cuid())
+  lancamentoId  String
+  lancamento    LancamentoEstoque @relation(fields: [lancamentoId], references: [id], onDelete: Cascade)
+  produtoId     String
+  produto       Produto           @relation(fields: [produtoId], references: [id])
   /// positivo entra, negativo sai (na unidade do produto)
-  quantidade   Decimal           @db.Decimal(14, 3)
+  quantidade    Decimal           @db.Decimal(14, 3)
   /// ajuste: saldo contado no inventário
   /// custo unitário da entrada (nota fiscal de compra)
-  custoUnitario Decimal? @db.Decimal(14, 4)
-  saldoContado Decimal?          @db.Decimal(14, 3)
+  custoUnitario Decimal?          @db.Decimal(14, 4)
+  saldoContado  Decimal?          @db.Decimal(14, 3)
 
   @@index([lancamentoId])
   @@index([produtoId])
@@ -992,7 +1002,7 @@ model SaldoEstoque {
   produtoId  String
   produto    Produto  @relation(fields: [produtoId], references: [id])
   /// custo médio ponderado (entradas por nota fiscal)
-  custoMedio Decimal @default(0) @db.Decimal(14, 4)
+  custoMedio Decimal  @default(0) @db.Decimal(14, 4)
   quantidade Decimal  @default(0) @db.Decimal(14, 3)
   updatedAt  DateTime @updatedAt
 
@@ -1070,51 +1080,51 @@ enum Manifestacao {
 /// Configuração fiscal por estabelecimento (um CNPJ). A captação nasce desligada: dois sistemas consultando a
 /// SEFAZ para o mesmo CNPJ levam a bloqueio por consumo indevido (cStat 656).
 model ConfiguracaoFiscal {
-  empresaId             String      @id
-  empresa               Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  captacaoAtiva         Boolean     @default(false)
-  motor                 MotorFiscal @default(SEFAZ)
+  empresaId                String      @id
+  empresa                  Empresa     @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  captacaoAtiva            Boolean     @default(false)
+  motor                    MotorFiscal @default(SEFAZ)
   /// 1 = produção, 2 = homologação
-  ambiente              Int         @default(1)
-  captarNfe             Boolean     @default(true)
-  captarCte             Boolean     @default(true)
-  captarNfse            Boolean     @default(true)
-  cienciaAutomatica     Boolean     @default(true)
+  ambiente                 Int         @default(1)
+  captarNfe                Boolean     @default(true)
+  captarCte                Boolean     @default(true)
+  captarNfse               Boolean     @default(true)
+  cienciaAutomatica        Boolean     @default(true)
   /// trava de captura: uma execução por CNPJ (dono e validade)
-  travaToken            String?
-  travaAte              DateTime?
+  travaToken               String?
+  travaAte                 DateTime?
   /// Focus NFe (motor reserva): id da empresa lá e tokens cifrados (AES-256-GCM)
-  focusEmpresaId        String?
-  focusTokenProducao    Bytes?
-  focusTokenHomologacao Bytes?
-  focusAtivadaEm        DateTime?
+  focusEmpresaId           String?
+  focusTokenProducao       Bytes?
+  focusTokenHomologacao    Bytes?
+  focusAtivadaEm           DateTime?
   /// Emissão de NF-e (modelo 55): ambiente nasce em homologação (2) até o administrador trocar
-  nfeAtiva              Boolean     @default(false)
-  nfeAmbiente           Int         @default(2)
-  nfeMotor              MotorFiscal @default(SEFAZ)
+  nfeAtiva                 Boolean     @default(false)
+  nfeAmbiente              Int         @default(2)
+  nfeMotor                 MotorFiscal @default(SEFAZ)
   /// grupo IBS/CBS (LC 214/2025, NT 2025.002): NAO = não informar; HOMOLOGACAO = só em notas de homologação; SEMPRE = em toda nota
-  nfeIbsCbs             String      @default("NAO")
-  nfeSerie              Int         @default(1)
-  nfeProximoNumero      Int         @default(1)
+  nfeIbsCbs                String      @default("NAO")
+  nfeSerie                 Int         @default(1)
+  nfeProximoNumero         Int         @default(1)
   /// texto padrão das informações complementares (o do Simples Nacional vem preenchido)
-  nfeInformacoes        String?
+  nfeInformacoes           String?
   /// Emissão de NFS-e pelo emissor nacional: ambiente 2 = produção restrita (testes), 1 = produção
-  nfseAtiva             Boolean     @default(false)
-  nfseAmbiente          Int         @default(2)
-  nfseMotor             MotorFiscal @default(SEFAZ)
-  nfseSerie             Int         @default(1)
-  nfseProximoNumero     Int         @default(1)
+  nfseAtiva                Boolean     @default(false)
+  nfseAmbiente             Int         @default(2)
+  nfseMotor                MotorFiscal @default(SEFAZ)
+  nfseSerie                Int         @default(1)
+  nfseProximoNumero        Int         @default(1)
   /// alíquota efetiva do Simples Nacional (pTotTribSN), em %, informada pelo contador
-  nfseAliquotaSimples   Decimal     @default(6) @db.Decimal(5, 2)
+  nfseAliquotaSimples      Decimal     @default(6) @db.Decimal(5, 2)
   /// enviar a inscrição municipal na DPS (só quando o município cadastrou o contribuinte no CNC)
-  nfseEnviarIM          Boolean     @default(false)
-  nfseInformacoes       String?
+  nfseEnviarIM             Boolean     @default(false)
+  nfseInformacoes          String?
   /// última conferência da adesão do município ao Emissor Nacional (ADN)
   nfseMunicipioAderente    Boolean?
   nfseMunicipioConferidoEm DateTime?
-  atualizadoPorId       String?
-  createdAt             DateTime    @default(now())
-  updatedAt             DateTime    @updatedAt
+  atualizadoPorId          String?
+  createdAt                DateTime    @default(now())
+  updatedAt                DateTime    @updatedAt
 
   @@map("configuracoes_fiscais")
 }
@@ -1177,11 +1187,15 @@ model DocumentoRecebido {
   /// lançado no contas a pagar (títulos com origem NOTA_FISCAL e origemId = este id)
   lancadoEm             DateTime?
   lancadoPorId          String?
+  /// NF-e de remessa para armazenagem (CFOP 5.905/6.905 ou remessa simbólica 5.934/6.934): mercadoria do depositante, não é compra
+  armazenagem           Boolean             @default(false)
   createdAt             DateTime            @default(now())
   updatedAt             DateTime            @updatedAt
 
-  eventos EventoDocumento[]
+  eventos           EventoDocumento[]
   lancamentoEstoque LancamentoEstoque?
+
+  documentosArmazem DocumentoArmazem[]
 
   @@unique([empresaId, chave])
   @@index([empresaId, tipo, emitidoEm])
@@ -1421,28 +1435,28 @@ enum TipoCobranca {
 
 /// Cobrança pelo Asaas, por estabelecimento (uma conta Asaas por CNPJ). A chave da API fica cifrada (AES-256-GCM).
 model ConfiguracaoCobranca {
-  empresaId             String   @id
-  empresa               Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  ativa                 Boolean  @default(false)
+  empresaId             String       @id
+  empresa               Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  ativa                 Boolean      @default(false)
   /// 1 = produção (api.asaas.com), 2 = sandbox (api-sandbox.asaas.com)
-  ambiente              Int      @default(2)
+  ambiente              Int          @default(2)
   chaveCifrada          Bytes?
   chaveFinal            String?
   /// conta onde o dinheiro recebido pelo Asaas é lançado na baixa
   contaBancariaId       String?
   formaPadrao           TipoCobranca @default(UNDEFINED)
-  multaPercentual       Decimal  @default(2) @db.Decimal(5, 2)
-  jurosMensal           Decimal  @default(1) @db.Decimal(5, 2)
+  multaPercentual       Decimal      @default(2) @db.Decimal(5, 2)
+  jurosMensal           Decimal      @default(1) @db.Decimal(5, 2)
   /// o Asaas também notifica o cliente (custa por cobrança); por padrão o ERP manda o próprio e-mail
-  notificarPeloAsaas    Boolean  @default(false)
-  enviarEmailAutomatico Boolean  @default(true)
+  notificarPeloAsaas    Boolean      @default(false)
+  enviarEmailAutomatico Boolean      @default(true)
   webhookToken          String?
   webhookId             String?
   webhookRegistradoEm   DateTime?
   testadaEm             DateTime?
   atualizadoPorId       String?
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  createdAt             DateTime     @default(now())
+  updatedAt             DateTime     @updatedAt
 
   @@map("configuracoes_cobranca")
 }
@@ -1585,29 +1599,29 @@ enum StatusOs {
 
 /// Ordem de serviço: trabalho a executar para um cliente; ao concluir vira pedido (que fatura e emite a NFS-e).
 model OrdemServico {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   empresaId     String
-  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  empresa       Empresa   @relation(fields: [empresaId], references: [id])
   numero        Int
   pessoaId      String
-  pessoa        Pessoa   @relation(fields: [pessoaId], references: [id])
+  pessoa        Pessoa    @relation(fields: [pessoaId], references: [id])
   produtoId     String?
-  produto       Produto? @relation(fields: [produtoId], references: [id])
+  produto       Produto?  @relation(fields: [produtoId], references: [id])
   descricao     String
   detalhes      String?
-  status        StatusOs @default(ABERTA)
+  status        StatusOs  @default(ABERTA)
   responsavelId String?
-  abertura      DateTime @db.Date
+  abertura      DateTime  @db.Date
   previsao      DateTime? @db.Date
   conclusao     DateTime? @db.Date
-  quantidade    Decimal  @default(1) @db.Decimal(14, 3)
-  valorUnitario Decimal  @default(0) @db.Decimal(14, 4)
-  pedidoId      String?  @unique
+  quantidade    Decimal   @default(1) @db.Decimal(14, 3)
+  valorUnitario Decimal   @default(0) @db.Decimal(14, 4)
+  pedidoId      String?   @unique
   observacoes   String?
-  ativo         Boolean  @default(true)
+  ativo         Boolean   @default(true)
   criadoPorId   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@unique([empresaId, numero])
   @@index([empresaId, status])
@@ -1616,15 +1630,236 @@ model OrdemServico {
 
 /// Memória do "de-para": código do produto no fornecedor → produto do cadastro (entrada no estoque pela nota recebida).
 model VinculoProdutoFornecedor {
-  id                   String   @id @default(cuid())
-  empresaId            String
-  fornecedorDocumento  String
-  codigoFornecedor     String
-  produtoId            String
-  produto              Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
+  id                  String   @id @default(cuid())
+  empresaId           String
+  fornecedorDocumento String
+  codigoFornecedor    String
+  produtoId           String
+  produto             Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@unique([empresaId, fornecedorDocumento, codigoFornecedor])
   @@map("vinculos_produto_fornecedor")
+}
+
+// ───────────────────────── Armazém geral (mercadorias de terceiros) ─────────────────────────
+
+enum StatusRecebimentoArmazem {
+  CONFERENCIA
+  CONCLUIDO
+}
+
+enum TipoVolumeArmazem {
+  CAIXA
+  PALLET
+}
+
+/// ABERTO: em montagem na conferência (conteúdo muda livremente). FECHADO: armazenado (mudança de conteúdo é ajuste, com motivo).
+enum StatusVolumeArmazem {
+  ABERTO
+  FECHADO
+  EXPEDIDO
+}
+
+/// Posição do armazém (rua, módulo, nível…) onde ficam caixas e pallets. Por estabelecimento.
+model EnderecoArmazem {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  /// código impresso na posição (ex.: A-01-02); único no estabelecimento
+  codigo        String
+  /// rua, área ou zona (filtro e etiqueta)
+  zona          String?
+  tipo          String   @default("PORTA_PALLET")
+  /// quantos volumes cabem (vazio = sem limite)
+  capacidade    Int?
+  /// posição reservada para um depositante: só volumes dele entram
+  depositanteId String?
+  depositante   Pessoa?  @relation(fields: [depositanteId], references: [id], onDelete: SetNull)
+  observacao    String?
+  ativo         Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  volumes VolumeArmazem[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId, zona])
+  @@map("enderecos_armazem")
+}
+
+/// Produto do depositante, pelo código dele (vem da NF-e de remessa ou da conferência). Cadastro da matriz.
+model ProdutoDepositante {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id])
+  depositanteId String
+  depositante   Pessoa   @relation(fields: [depositanteId], references: [id])
+  codigo        String
+  descricao     String
+  unidade       String   @default("UN")
+  ncm           String?
+  gtin          String?
+  /// valor unitário declarado na última NF-e (seguro e nota de retorno)
+  valorUnitario Decimal? @db.Decimal(14, 4)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  itensEsperados ItemRecebimentoArmazem[]
+  conteudos      ConteudoVolume[]
+
+  @@unique([empresaId, depositanteId, codigo])
+  @@map("produtos_depositante")
+}
+
+/// Entrada física de mercadorias de um depositante (por NF-e, CT-e ou sem documento), conferida em caixas e pallets.
+model RecebimentoArmazem {
+  id            String                   @id @default(cuid())
+  /// estabelecimento que recebe (o armazém)
+  empresaId     String
+  empresa       Empresa                  @relation(fields: [empresaId], references: [id])
+  numero        Int
+  depositanteId String
+  depositante   Pessoa                   @relation(fields: [depositanteId], references: [id])
+  status        StatusRecebimentoArmazem @default(CONFERENCIA)
+  chegadaEm     DateTime                 @db.Date
+  observacao    String?
+  concluidoEm   DateTime?
+  criadoPorId   String?
+  createdAt     DateTime                 @default(now())
+  updatedAt     DateTime                 @updatedAt
+
+  documentos DocumentoArmazem[]
+  itens      ItemRecebimentoArmazem[]
+  volumes    VolumeArmazem[]
+  conteudos  ConteudoVolume[]
+
+  @@unique([empresaId, numero])
+  @@index([empresaId, status])
+  @@map("recebimentos_armazem")
+}
+
+/// NF-e (remessa para armazenagem) ou CT-e (transporte) de um recebimento.
+model DocumentoArmazem {
+  id                  String              @id @default(cuid())
+  recebimentoId       String
+  recebimento         RecebimentoArmazem  @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
+  /// estabelecimento do recebimento: a mesma chave não entra duas vezes no mesmo armazém
+  empresaId           String
+  tipo                TipoDocumentoFiscal
+  chave               String
+  numero              String?
+  serie               String?
+  emitenteDocumento   String?
+  emitenteNome        String?
+  emitidoEm           DateTime?
+  valor               Decimal?            @db.Decimal(14, 2)
+  /// CT-e: chaves das NF-e transportadas, peso e quantidade de volumes declarados
+  nfesReferenciadas   String[]            @default([])
+  pesoKg              Decimal?            @db.Decimal(15, 3)
+  volumesDeclarados   Int?
+  /// nota capturada pela busca de notas (Notas recebidas), quando veio de lá
+  documentoRecebidoId String?
+  documentoRecebido   DocumentoRecebido?  @relation(fields: [documentoRecebidoId], references: [id], onDelete: SetNull)
+  /// XML enviado pelo usuário (o da nota capturada fica em documentos_recebidos)
+  xml                 String?
+  createdAt           DateTime            @default(now())
+
+  itens ItemRecebimentoArmazem[]
+
+  @@unique([empresaId, chave])
+  @@index([recebimentoId])
+  @@map("documentos_armazem")
+}
+
+/// Item esperado de um recebimento (da NF-e; com lote quando a nota traz o rastro).
+model ItemRecebimentoArmazem {
+  id            String             @id @default(cuid())
+  recebimentoId String
+  recebimento   RecebimentoArmazem @relation(fields: [recebimentoId], references: [id], onDelete: Cascade)
+  documentoId   String?
+  documento     DocumentoArmazem?  @relation(fields: [documentoId], references: [id], onDelete: Cascade)
+  /// nº do item na NF-e (nItem), para a nota de retorno
+  numeroItem    Int?
+  produtoId     String
+  produto       ProdutoDepositante @relation(fields: [produtoId], references: [id])
+  lote          String             @default("")
+  quantidade    Decimal            @db.Decimal(15, 3)
+  valorUnitario Decimal?           @db.Decimal(14, 4)
+  cfop          String?
+
+  @@index([recebimentoId])
+  @@map("itens_recebimento_armazem")
+}
+
+/// Caixa ou pallet numerado, com mercadorias de um só depositante.
+model VolumeArmazem {
+  id                    String              @id @default(cuid())
+  empresaId             String
+  empresa               Empresa             @relation(fields: [empresaId], references: [id])
+  tipo                  TipoVolumeArmazem
+  /// numeração própria por estabelecimento e tipo (CX-0001, PL-0001)
+  numero                Int
+  depositanteId         String
+  depositante           Pessoa              @relation(fields: [depositanteId], references: [id])
+  /// recebimento em que o volume foi montado (vazio quando nasceu de uma transferência com várias origens)
+  recebimentoId         String?
+  recebimento           RecebimentoArmazem? @relation(fields: [recebimentoId], references: [id], onDelete: SetNull)
+  status                StatusVolumeArmazem @default(ABERTO)
+  enderecoId            String?
+  endereco              EnderecoArmazem?    @relation(fields: [enderecoId], references: [id], onDelete: SetNull)
+  enderecadoEm          DateTime?
+  /// número ou identificação que o depositante usa para a caixa
+  referenciaDepositante String?
+  observacao            String?
+  expedidoEm            DateTime?
+  documentoSaida        String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  conteudo   ConteudoVolume[]
+  movimentos MovimentoArmazem[]
+
+  @@unique([empresaId, tipo, numero])
+  @@index([empresaId, status])
+  @@index([enderecoId])
+  @@index([depositanteId])
+  @@map("volumes_armazem")
+}
+
+/// O que há dentro de um volume: produto do depositante, lote e quantidade, com o recebimento de origem.
+model ConteudoVolume {
+  id            String             @id @default(cuid())
+  volumeId      String
+  volume        VolumeArmazem      @relation(fields: [volumeId], references: [id], onDelete: Cascade)
+  produtoId     String
+  produto       ProdutoDepositante @relation(fields: [produtoId], references: [id])
+  lote          String             @default("")
+  quantidade    Decimal            @db.Decimal(15, 3)
+  recebimentoId String
+  recebimento   RecebimentoArmazem @relation(fields: [recebimentoId], references: [id])
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@unique([volumeId, produtoId, lote, recebimentoId])
+  @@index([produtoId, lote])
+  @@index([recebimentoId])
+  @@map("conteudos_volume")
+}
+
+/// Histórico de cada volume: conteúdo conferido ou ajustado, endereçamento, transferências e saída.
+model MovimentoArmazem {
+  id        String        @id @default(cuid())
+  empresaId String
+  volumeId  String
+  volume    VolumeArmazem @relation(fields: [volumeId], references: [id], onDelete: Cascade)
+  tipo      String
+  resumo    String
+  dados     Json?
+  usuarioId String?
+  createdAt DateTime      @default(now())
+
+  @@index([volumeId, createdAt])
+  @@map("movimentos_armazem")
 }

@@ -252,6 +252,8 @@ export function lerDocumento(tipo: TipoDoc, xml: string, interessado: string, ba
 
 // ───────────────────────── Detalhe da NF-e (tela e contas a pagar) ─────────────────────────
 
+export type LoteNota = { numero: string; quantidade: number; fabricacao?: string; validade?: string };
+
 export type ItemNota = {
   numero: number;
   codigo: string;
@@ -263,11 +265,30 @@ export type ItemNota = {
   quantidade: number;
   valorUnitario: number;
   valorTotal: number;
+  /** grupo rastro (lote, quantidade do lote, fabricação e validade), quando a nota traz */
+  lotes: LoteNota[];
 };
+
+export type EnderecoParte = { logradouro?: string; numero?: string; complemento?: string; bairro?: string; cidade?: string; codigoMunicipio?: string; uf?: string; cep?: string; telefone?: string };
+
+function enderecoDe(end: No | undefined): EnderecoParte {
+  const e = (end ?? {}) as No;
+  return {
+    logradouro: opc(e.xLgr),
+    numero: opc(e.nro),
+    complemento: opc(e.xCpl),
+    bairro: opc(e.xBairro),
+    cidade: opc(e.xMun),
+    codigoMunicipio: opc(e.cMun),
+    uf: opc(e.UF),
+    cep: opc(e.CEP),
+    telefone: opc(e.fone),
+  };
+}
 
 export type DetalheNota = {
   naturezaOperacao?: string;
-  emitente: { documento?: string; nome?: string; fantasia?: string; ie?: string; endereco?: string; uf?: string; cidade?: string; cep?: string; telefone?: string };
+  emitente: { documento?: string; nome?: string; fantasia?: string; ie?: string; endereco?: string; uf?: string; cidade?: string; cep?: string; telefone?: string; partes: EnderecoParte };
   destinatario: { documento?: string; nome?: string };
   itens: ItemNota[];
   totais: { produtos?: number; frete?: number; desconto?: number; icms?: number; ipi?: number; outras?: number; total?: number };
@@ -279,7 +300,7 @@ export type DetalheNota = {
 export function detalheNfe(xml: string): DetalheNota | null {
   let p: No;
   try {
-    p = lerXml(xml, { isArray: (nome) => nome === "det" || nome === "dup" });
+    p = lerXml(xml, { isArray: (nome) => nome === "det" || nome === "dup" || nome === "rastro" });
   } catch {
     return null;
   }
@@ -300,6 +321,7 @@ export function detalheNfe(xml: string): DetalheNota | null {
       uf: opc(end.UF),
       cep: opc(end.CEP),
       telefone: opc(end.fone),
+      partes: enderecoDe(end),
     },
     destinatario: { documento: parte(inf.dest) || undefined, nome: opc(inf.dest?.xNome) },
     itens: lista<No>(inf.det).map((d, i) => ({
@@ -313,6 +335,9 @@ export function detalheNfe(xml: string): DetalheNota | null {
       quantidade: Number(txt(d.prod?.qCom)) || 0,
       valorUnitario: Number(txt(d.prod?.vUnCom)) || 0,
       valorTotal: numero(d.prod?.vProd) ?? 0,
+      lotes: lista<No>(d.prod?.rastro)
+        .map((r) => ({ numero: txt(r.nLote), quantidade: Number(txt(r.qLote)) || 0, fabricacao: opc(r.dFab), validade: opc(r.dVal) }))
+        .filter((r) => r.numero),
     })),
     totais: {
       produtos: numero(tot.vProd),
@@ -327,5 +352,81 @@ export function detalheNfe(xml: string): DetalheNota | null {
       .map((d) => ({ numero: txt(d.nDup), vencimento: txt(d.dVenc), valor: numero(d.vDup) ?? 0 }))
       .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.vencimento) && d.valor > 0),
     informacoes: opc(inf.infAdic?.infCpl),
+  };
+}
+
+// ───────────────────────── Armazém geral ─────────────────────────
+
+/** CFOP da NF-e do depositante que manda mercadoria para o armazém geral: remessa para depósito (5.905/6.905) ou remessa simbólica (5.934/6.934). */
+export const CFOP_ARMAZENAGEM = new Set(["5905", "6905", "5934", "6934"]);
+
+/** A nota é remessa para armazenagem quando todos os itens têm CFOP de remessa para armazém geral (a mercadoria é do depositante, não é compra). */
+export function ehRemessaArmazenagem(itens: { cfop: string }[]): boolean {
+  return itens.length > 0 && itens.every((i) => CFOP_ARMAZENAGEM.has(i.cfop.replace(/\D/g, "")));
+}
+
+export type ParteCte = { documento?: string; nome?: string; ie?: string; endereco: EnderecoParte };
+
+export type DetalheCte = {
+  chave: string;
+  numero?: string;
+  serie?: string;
+  emitidoEm?: Date;
+  emitente: { documento?: string; nome?: string };
+  remetente: ParteCte;
+  destinatario: ParteCte;
+  recebedor: ParteCte | null;
+  tomadorDocumento: string;
+  valorPrestacao?: number;
+  valorCarga?: number;
+  produtoPredominante?: string;
+  pesoKg?: number;
+  volumes?: number;
+  /** chaves das NF-e transportadas (infDoc/infNFe) */
+  nfes: string[];
+};
+
+/** Dados do CT-e para o armazém: remetente (depositante, em geral), carga declarada e NF-e transportadas. Null para outro documento. */
+export function detalheCte(xml: string): DetalheCte | null {
+  let p: No;
+  try {
+    p = lerXml(xml, { isArray: (nome) => nome === "infNFe" || nome === "infQ" || nome === "infNF" });
+  } catch {
+    return null;
+  }
+  const inf = (p.cteProc?.CTe?.infCte ?? p.CTe?.infCte) as No | undefined;
+  if (!inf) return null;
+  const parteCte = (x: No | undefined): ParteCte => ({ documento: parte(x) || undefined, nome: opc(x?.xNome), ie: opc(x?.IE), endereco: enderecoDe((x?.enderReme ?? x?.enderDest ?? x?.enderReceb ?? x?.enderExped) as No | undefined) });
+  const norm = (inf.infCTeNorm ?? {}) as No;
+  const carga = (norm.infCarga ?? {}) as No;
+  let pesoKg: number | undefined;
+  let volumes: number | undefined;
+  for (const q of lista<No>(carga.infQ)) {
+    const unidade = txt(q.cUnid);
+    const valor = Number(txt(q.qCarga)) || 0;
+    if (!valor) continue;
+    if (unidade === "01" && pesoKg === undefined) pesoKg = valor;
+    else if (unidade === "02" && pesoKg === undefined) pesoKg = valor * 1000;
+    else if (unidade === "03" && volumes === undefined) volumes = Math.round(valor);
+  }
+  const chave = documento(txt(inf["@_Id"]).replace(/^CTe/, ""));
+  return {
+    chave,
+    numero: opc(inf.ide?.nCT),
+    serie: opc(inf.ide?.serie),
+    emitidoEm: dataFiscal(inf.ide?.dhEmi),
+    emitente: { documento: parte(inf.emit) || undefined, nome: opc(inf.emit?.xNome) },
+    remetente: parteCte(inf.rem as No | undefined),
+    destinatario: parteCte(inf.dest as No | undefined),
+    recebedor: inf.receb ? parteCte(inf.receb as No) : null,
+    tomadorDocumento: tomadorDoCte(inf),
+    valorPrestacao: numero(inf.vPrest?.vTPrest),
+    valorCarga: numero(carga.vCarga),
+    produtoPredominante: opc(carga.proPred),
+    pesoKg,
+    volumes,
+    nfes: lista<No>(norm.infDoc?.infNFe)
+      .map((n) => documento(txt(n.chave)))
+      .filter((c) => /^[0-9A-Z]{44}$/.test(c)),
   };
 }
