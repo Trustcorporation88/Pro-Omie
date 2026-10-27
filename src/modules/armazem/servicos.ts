@@ -330,7 +330,7 @@ export async function ocupacaoEndereco(tx: Tx | typeof prisma, enderecoId: strin
 /** Confere se os volumes podem ir para o endereço: mesmo estabelecimento, ativo, reserva do depositante e capacidade. */
 export async function validarEnderecamento(
   tx: Tx,
-  endereco: { id: string; codigo: string; empresaId: string; ativo: boolean; capacidade: number | null; depositanteId: string | null; depositante?: { nome: string } | null },
+  endereco: { id: string; codigo: string; empresaId: string; ativo: boolean; capacidade: number | null; depositanteId: string | null; tipo?: string; depositante?: { nome: string } | null },
   volumes: { id: string; tipo: TipoVolume; numero: number; empresaId: string; depositanteId: string; status: string; enderecoId: string | null }[],
 ) {
   if (!endereco.ativo) throw new ErroAcao(`O endereço ${endereco.codigo} está inativo.`);
@@ -339,6 +339,16 @@ export async function validarEnderecamento(
     if (v.empresaId !== endereco.empresaId) throw new ErroAcao(`${codigoVolume(v.tipo, v.numero)} é de outro estabelecimento.`);
     if (endereco.depositanteId && endereco.depositanteId !== v.depositanteId)
       throw new ErroAcao(`O endereço ${endereco.codigo} é reservado para ${endereco.depositante?.nome ?? "outro depositante"}; ${codigoVolume(v.tipo, v.numero)} é de outro depositante.`);
+  }
+  // uma posição guarda volumes de um só depositante (a cobrança é por posição); a doca é área de passagem e aceita vários
+  if (endereco.tipo !== "DOCA") {
+    const deps = [...new Set(volumes.map((v) => v.depositanteId))];
+    if (deps.length > 1) throw new ErroAcao(`Os volumes são de depositantes diferentes: a posição ${endereco.codigo} guarda volumes de um só depositante (a doca aceita vários).`);
+    const outro = await tx.volumeArmazem.findFirst({
+      where: { enderecoId: endereco.id, status: { not: "EXPEDIDO" }, id: { notIn: volumes.map((v) => v.id) }, depositanteId: { notIn: deps } },
+      select: { depositante: { select: { nome: true, nomeFantasia: true } } },
+    });
+    if (outro) throw new ErroAcao(`A posição ${endereco.codigo} já tem volumes de ${outro.depositante.nomeFantasia || outro.depositante.nome}. Cada posição guarda volumes de um só depositante (a doca aceita vários).`);
   }
   if (endereco.capacidade !== null) {
     const novos = volumes.filter((v) => v.enderecoId !== endereco.id).length;

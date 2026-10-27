@@ -190,6 +190,9 @@ model Empresa {
   recebimentosArmazem RecebimentoArmazem[]
   volumesArmazem      VolumeArmazem[]
 
+  tarifasArmazem      TarifaArmazem[]
+  faturamentosArmazem FaturamentoArmazem[]
+
   @@map("empresas")
 }
 
@@ -296,6 +299,9 @@ model Pessoa {
   contratos           Contrato[]
   ordensServico       OrdemServico[]
 
+  tarifasArmazem      TarifaArmazem[]
+  faturamentosArmazem FaturamentoArmazem[]
+
   @@unique([empresaId, documento])
   @@index([empresaId, nome])
   @@map("pessoas")
@@ -347,6 +353,8 @@ model Produto {
   contratos                 Contrato[]
   ordensServico             OrdemServico[]
   vinculosFornecedor        VinculoProdutoFornecedor[]
+
+  tarifasArmazem TarifaArmazem[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId, descricao])
@@ -799,6 +807,8 @@ model Pedido {
   lancamentoEstoque LancamentoEstoque?
   notasFiscais      NotaFiscal[]
   notasServico      NotaServico[]
+
+  faturamentoArmazem FaturamentoArmazem?
 
   @@unique([empresaId, numero])
   @@index([empresaId, status, emissao])
@@ -1862,4 +1872,119 @@ model MovimentoArmazem {
 
   @@index([volumeId, createdAt])
   @@map("movimentos_armazem")
+}
+
+// ───────────────────────── Armazém geral: cobrança por posição-pallet ─────────────────────────
+
+/// Tarifa de armazenagem do depositante no estabelecimento: R$ por posição-pallet por mês e como contar as posições.
+model TarifaArmazem {
+  id               String   @id @default(cuid())
+  /// estabelecimento que presta o serviço (emite o pedido e a nota)
+  empresaId        String
+  empresa          Empresa  @relation(fields: [empresaId], references: [id])
+  depositanteId    String
+  depositante      Pessoa   @relation(fields: [depositanteId], references: [id])
+  /// R$ por posição-pallet por mês
+  valorPosicao     Decimal  @db.Decimal(14, 2)
+  /// PRO_RATA: soma das posições de cada dia ÷ dias do mês (posição-dia). PICO: maior ocupação do mês.
+  metodo           String   @default("PRO_RATA")
+  /// mínimo de posições cobradas no mês (posições contratadas)
+  minimoPosicoes   Int?
+  /// posições reservadas para o depositante contam mesmo vazias
+  cobrarReservadas Boolean  @default(true)
+  /// início da cobrança: os dias antes dele não entram
+  inicio           DateTime @db.Date
+  /// serviço do cadastro (dá o código de tributação da NFS-e)
+  produtoId        String?
+  produto          Produto? @relation(fields: [produtoId], references: [id])
+  descricao        String   @default("Armazenagem de mercadorias")
+  /// dia do vencimento no mês seguinte ao da competência (1 a 28)
+  diaVencimento    Int      @default(10)
+  categoriaId      String?
+  contaBancariaId  String?
+  formaPagamentoId String?
+  gerarCobranca    Boolean  @default(false)
+  observacoes      String?
+  ativo            Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  faturamentos FaturamentoArmazem[]
+
+  @@unique([empresaId, depositanteId])
+  @@map("tarifas_armazem")
+}
+
+/// Faturamento mensal da armazenagem de um depositante: o cálculo usado (cópia da tarifa) e o pedido gerado.
+model FaturamentoArmazem {
+  id               String         @id @default(cuid())
+  empresaId        String
+  empresa          Empresa        @relation(fields: [empresaId], references: [id])
+  depositanteId    String
+  depositante      Pessoa         @relation(fields: [depositanteId], references: [id])
+  tarifaId         String?
+  tarifa           TarifaArmazem? @relation(fields: [tarifaId], references: [id], onDelete: SetNull)
+  /// primeiro dia do mês da competência
+  competencia      DateTime       @db.Date
+  metodo           String
+  valorPosicao     Decimal        @db.Decimal(14, 2)
+  minimoPosicoes   Int?
+  cobrarReservadas Boolean
+  diasMes          Int
+  diasVigencia     Int
+  /// dias sem fotografia (repetiram o dia anterior)
+  diasRepetidos    Int            @default(0)
+  /// soma das posições de cada dia (com as reservadas, se cobradas)
+  posicoesDia      Int
+  /// parte da soma que veio de posições reservadas vazias
+  reservadasDia    Int            @default(0)
+  pico             Int
+  posicoesCobradas Decimal        @db.Decimal(12, 4)
+  valor            Decimal        @db.Decimal(14, 2)
+  vencimento       DateTime       @db.Date
+  pedidoId         String?        @unique
+  pedido           Pedido?        @relation(fields: [pedidoId], references: [id], onDelete: SetNull)
+  tituloId         String?
+  cobrancaId       String?
+  erro             String?
+  criadoPorId      String?
+  createdAt        DateTime       @default(now())
+
+  @@unique([empresaId, depositanteId, competencia])
+  @@index([empresaId, competencia])
+  @@map("faturamentos_armazem")
+}
+
+/// Fotografia das posições ocupadas por depositante num dia (a última do dia vale). Base da cobrança por posição-pallet.
+model OcupacaoArmazem {
+  id                 String   @id @default(cuid())
+  /// estabelecimento
+  empresaId          String
+  depositanteId      String
+  dia                DateTime @db.Date
+  /// endereços ocupados por volumes do depositante (a doca não conta)
+  posicoes           Int
+  /// posições reservadas para o depositante e vazias
+  reservadasVazias   Int      @default(0)
+  /// volumes com itens no armazém (não expedidos)
+  volumes            Int      @default(0)
+  /// volumes conferidos sem endereço ou na doca: não entram na cobrança
+  volumesForaPosicao Int      @default(0)
+  /// códigos dos endereços ocupados
+  enderecos          String[] @default([])
+  atualizadoEm       DateTime @updatedAt
+
+  @@unique([empresaId, depositanteId, dia])
+  @@index([empresaId, dia])
+  @@map("ocupacoes_armazem")
+}
+
+/// Dia fotografado no estabelecimento. Dia sem fotografia repete o último fotografado.
+model FotografiaArmazem {
+  empresaId String
+  dia       DateTime @db.Date
+  feitaEm   DateTime @updatedAt
+
+  @@id([empresaId, dia])
+  @@map("fotografias_armazem")
 }

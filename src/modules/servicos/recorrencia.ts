@@ -23,6 +23,78 @@ export function vencimentoDe(competencia: Date, dia: number): Date {
 }
 export const competenciaSeguinte = (competencia: Date, periodicidade: string) => new Date(Date.UTC(competencia.getUTCFullYear(), competencia.getUTCMonth() + (MESES[periodicidade] ?? 1), 1));
 
+/** Categoria de receita do faturamento automático: a escolhida ou a primeira de receita da empresa. */
+export async function categoriaReceitaPadrao(empresaId: string, escolhida: string | null): Promise<string | null> {
+  if (escolhida) return escolhida;
+  const c = await prisma.categoria.findFirst({ where: { empresaId, tipo: "RECEITA", ativo: true, OR: [{ nome: { contains: "servi", mode: "insensitive" } }, {}] }, orderBy: { codigo: "asc" }, select: { id: true } });
+  return c?.id ?? null;
+}
+
+export type PedidoServicoFaturado = {
+  /** estabelecimento que emite o pedido (e a nota) */
+  empresaId: string;
+  pessoaId: string;
+  /** nome do cliente para a descrição do título */
+  cliente: string;
+  produto: { id: string; unidade: string } | null;
+  itemDescricao: string;
+  observacoes: string | null;
+  /** fim da descrição do título: "Pedido nº 0001 · Cliente · <isto>" */
+  tituloComplemento: string;
+  valor: number;
+  formaPagamentoId: string | null;
+  contaBancariaId: string | null;
+  categoriaId: string;
+  /** AAAA-MM-DD */
+  competencia: string;
+  vencimento: string;
+  usuarioId: string | null;
+};
+
+/** Pedido já faturado com um item de serviço e a conta a receber (origem VENDA), numa transação. Contratos e armazenagem. */
+export async function criarPedidoServicoFaturado(tx: Prisma.TransactionClient, p: PedidoServicoFaturado) {
+  const hoje = isoDia(hojeBr());
+  const numero = await proximoNumero(tx, p.empresaId, "pedido");
+  const pedido = await tx.pedido.create({
+    data: {
+      empresaId: p.empresaId,
+      numero,
+      status: "FATURADO",
+      pessoaId: p.pessoaId,
+      emissao: new Date(`${hoje}T00:00:00Z`),
+      formaPagamentoId: p.formaPagamentoId,
+      observacoes: p.observacoes ? p.observacoes.slice(0, 2000) : null,
+      subtotal: p.valor,
+      desconto: 0,
+      total: p.valor,
+      faturadoEm: new Date(),
+      dataFaturamento: new Date(`${hoje}T00:00:00Z`),
+      criadoPorId: p.usuarioId,
+      itens: { create: [{ ordem: 1, produtoId: p.produto?.id ?? null, tipo: "SERVICO", descricao: p.itemDescricao.slice(0, 300), unidade: p.produto?.unidade ?? "UN", quantidade: 1, precoUnitario: p.valor, descontoPercentual: 0, total: p.valor }] },
+    },
+  });
+  const ids = await criarLancamento(
+    tx,
+    {
+      tipo: "RECEBER",
+      empresaId: p.empresaId,
+      pessoaId: p.pessoaId,
+      descricao: `Pedido nº ${fmtNumeroDoc(numero)} · ${p.cliente} · ${p.tituloComplemento}`.slice(0, 300),
+      documento: `PED-${fmtNumeroDoc(numero)}`,
+      contaBancariaId: p.contaBancariaId,
+      formaPagamentoId: p.formaPagamentoId,
+      emissao: hoje,
+      competencia: p.competencia,
+      rateios: [{ categoriaId: p.categoriaId, centroCustoId: null, percentual: 100 }],
+      parcelas: [{ vencimento: p.vencimento, valor: p.valor }],
+      origem: "VENDA",
+      origemId: pedido.id,
+    },
+    p.usuarioId,
+  );
+  return { pedidoId: pedido.id, numero, tituloId: ids[0] };
+}
+
 /** Gera a competência atual de um contrato: pedido faturado (só serviços) + conta a receber + cobrança opcional. */
 export async function gerarCompetencia(contratoId: string, opcoes: { usuarioId: string | null; urlBase: string; forcar?: boolean }) {
   const c = await prisma.contrato.findUniqueOrThrow({ where: { id: contratoId }, include: { pessoa: { select: { nome: true, nomeFantasia: true, email: true } }, produto: { select: { id: true, codigo: true, descricao: true, unidade: true } }, empresa: { select: { id: true } } } });
@@ -34,52 +106,31 @@ export async function gerarCompetencia(contratoId: string, opcoes: { usuarioId: 
   if (!opcoes.forcar && hojeBr() < limite) throw new ErroAcao(`A competência ${isoDia(competencia).slice(0, 7)} só é gerada a partir de ${isoDia(limite).split("-").reverse().join("/")}.`);
   const existente = await prisma.contratoGeracao.findUnique({ where: { contratoId_competencia: { contratoId, competencia } } });
   if (existente?.pedidoId) throw new ErroAcao("Esta competência já foi gerada.");
-  const categoria = c.categoriaId ?? (await prisma.categoria.findFirst({ where: { empresaId: c.empresaId, tipo: "RECEITA", ativo: true, OR: [{ nome: { contains: "servi", mode: "insensitive" } }, {}] }, orderBy: { codigo: "asc" }, select: { id: true } }))?.id;
+  const categoria = await categoriaReceitaPadrao(c.empresaId, c.categoriaId);
   if (!categoria) throw new ErroAcao("Cadastre uma categoria de receita (ou escolha a do contrato).");
   const cliente = c.pessoa.nomeFantasia || c.pessoa.nome;
   const competenciaRotulo = `${isoDia(competencia).slice(5, 7)}/${isoDia(competencia).slice(0, 4)}`;
-  const hoje = isoDia(hojeBr());
   const valor = num(c.valor);
 
   const r = await prisma.$transaction(async (tx) => {
-    const numero = await proximoNumero(tx, c.empresaId, "pedido");
-    const pedido = await tx.pedido.create({
-      data: {
-        empresaId: c.empresaId,
-        numero,
-        status: "FATURADO",
-        pessoaId: c.pessoaId,
-        emissao: new Date(`${hoje}T00:00:00Z`),
-        formaPagamentoId: c.formaPagamentoId,
-        observacoes: `${c.descricao} - competência ${competenciaRotulo} (contrato ${String(c.numero).padStart(4, "0")})${c.observacoes ? `\n${c.observacoes}` : ""}`.slice(0, 2000),
-        subtotal: valor,
-        desconto: 0,
-        total: valor,
-        faturadoEm: new Date(),
-        dataFaturamento: new Date(`${hoje}T00:00:00Z`),
-        criadoPorId: opcoes.usuarioId,
-        itens: { create: [{ ordem: 1, produtoId: c.produto?.id ?? null, tipo: "SERVICO", descricao: `${c.descricao} - ${competenciaRotulo}`.slice(0, 300), unidade: c.produto?.unidade ?? "UN", quantidade: 1, precoUnitario: valor, descontoPercentual: 0, total: valor }] },
-      },
+    const { pedidoId, numero, tituloId } = await criarPedidoServicoFaturado(tx, {
+      empresaId: c.empresaId,
+      pessoaId: c.pessoaId,
+      cliente,
+      produto: c.produto ? { id: c.produto.id, unidade: c.produto.unidade } : null,
+      itemDescricao: `${c.descricao} - ${competenciaRotulo}`,
+      observacoes: `${c.descricao} - competência ${competenciaRotulo} (contrato ${String(c.numero).padStart(4, "0")})${c.observacoes ? `\n${c.observacoes}` : ""}`,
+      tituloComplemento: `${c.descricao} ${competenciaRotulo}`,
+      valor,
+      formaPagamentoId: c.formaPagamentoId,
+      contaBancariaId: c.contaBancariaId,
+      categoriaId: categoria,
+      competencia: isoDia(competencia),
+      vencimento: isoDia(vencimento),
+      usuarioId: opcoes.usuarioId,
     });
-    const ids = await criarLancamento(
-      tx,
-      {
-        tipo: "RECEBER",
-        empresaId: c.empresaId,
-        pessoaId: c.pessoaId,
-        descricao: `Pedido nº ${fmtNumeroDoc(numero)} · ${cliente} · ${c.descricao} ${competenciaRotulo}`.slice(0, 300),
-        documento: `PED-${fmtNumeroDoc(numero)}`,
-        contaBancariaId: c.contaBancariaId,
-        formaPagamentoId: c.formaPagamentoId,
-        emissao: hoje,
-        competencia: isoDia(competencia),
-        rateios: [{ categoriaId: categoria, centroCustoId: null, percentual: 100 }],
-        parcelas: [{ vencimento: isoDia(vencimento), valor }],
-        origem: "VENDA",
-        origemId: pedido.id,
-      },
-      opcoes.usuarioId,
-    );
+    const pedido = { id: pedidoId };
+    const ids = [tituloId];
     const geracao = existente
       ? await tx.contratoGeracao.update({ where: { id: existente.id }, data: { pedidoId: pedido.id, tituloId: ids[0], erro: null } })
       : await tx.contratoGeracao.create({ data: { contratoId, competencia, pedidoId: pedido.id, tituloId: ids[0] } });

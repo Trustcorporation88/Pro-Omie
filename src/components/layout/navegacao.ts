@@ -60,6 +60,7 @@ export const NAVEGACAO: GrupoNav[] = [
       { titulo: "Recebimentos (armazém)", href: "/servicos/armazem/recebimentos", icone: "ClipboardCheck", permissao: "armazem:ver" },
       { titulo: "Caixas e pallets", href: "/servicos/armazem/volumes", icone: "PackageOpen", permissao: "armazem:ver" },
       { titulo: "Endereços do armazém", href: "/servicos/armazem/enderecos", icone: "MapPin", permissao: "armazem:ver" },
+      { titulo: "Faturamento da armazenagem", href: "/servicos/armazem/faturamento", icone: "Receipt", permissao: "armazem:ver" },
     ],
   },
   {

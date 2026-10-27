@@ -40,6 +40,7 @@ export const TIPOS_ENDERECO = {
   PRATELEIRA: "Prateleira",
   PISO: "Piso / blocado",
   MEZANINO: "Mezanino",
+  DOCA: "Doca / área de passagem",
   OUTRO: "Outro",
 } as const;
 export type TipoEndereco = keyof typeof TIPOS_ENDERECO;
@@ -235,4 +236,178 @@ export function linhasDoItemNota(quantidade: number, lotes: { numero: string; qu
   }
   if (resto > 0) linhas.set("", arred3((linhas.get("") ?? 0) + resto));
   return [...linhas].map(([lote, q]) => ({ lote, quantidade: q }));
+}
+
+// ───────────────────────── Cobrança por posição-pallet ─────────────────────────
+
+export type MetodoArmazenagem = "PRO_RATA" | "PICO";
+export const ROTULO_METODO: Record<MetodoArmazenagem, string> = { PRO_RATA: "Proporcional aos dias (posição-dia)", PICO: "Maior ocupação do mês" };
+export const ROTULO_METODO_CURTO: Record<MetodoArmazenagem, string> = { PRO_RATA: "por dia", PICO: "pico do mês" };
+
+const MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+export const ehCompetencia = (s: unknown): s is string => typeof s === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+export function diasNoMes(competencia: string): number {
+  const [a, m] = competencia.split("-").map(Number);
+  return new Date(Date.UTC(a, m, 0)).getUTCDate();
+}
+/** "2026-09" → "setembro de 2026" */
+export function rotuloCompetencia(competencia: string): string {
+  const [a, m] = competencia.split("-").map(Number);
+  return `${MESES_PT[m - 1]} de ${a}`;
+}
+/** "2026-09" → "09/2026" */
+export const competenciaCurta = (competencia: string) => `${competencia.slice(5, 7)}/${competencia.slice(0, 4)}`;
+export function mudarCompetencia(competencia: string, meses: number): string {
+  const [a, m] = competencia.split("-").map(Number);
+  const d = new Date(Date.UTC(a, m - 1 + meses, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+function somarDias(iso: string, n: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+/** Dias (AAAA-MM-DD) da competência, até `ate` (inclusive), se informado. */
+export function diasDaCompetencia(competencia: string, ate?: string): string[] {
+  const n = diasNoMes(competencia);
+  const dias: string[] = [];
+  for (let i = 1; i <= n; i++) {
+    const d = `${competencia}-${String(i).padStart(2, "0")}`;
+    if (ate && d > ate) break;
+    dias.push(d);
+  }
+  return dias;
+}
+
+export type EstadoOcupacao = { posicoes: number; reservadasVazias: number; volumes: number; volumesForaPosicao: number; enderecos: string[] };
+export type OrigemDia = "FOTOGRAFIA" | "REPETIDO" | "SEM_DADOS";
+export type DiaOcupacao = EstadoOcupacao & { dia: string; origem: OrigemDia };
+export const ESTADO_VAZIO: EstadoOcupacao = { posicoes: 0, reservadasVazias: 0, volumes: 0, volumesForaPosicao: 0, enderecos: [] };
+
+/**
+ * Ocupação dia a dia de cada depositante. Dia fotografado: vale o que a fotografia registrou (depositante ausente = zero).
+ * Dia sem fotografia: repete o último dia fotografado (inclusive de antes do mês, em `anterior`). Antes da primeira fotografia: zero.
+ */
+export function ocupacaoDiaADia(
+  dias: string[],
+  fotografados: Set<string>,
+  registros: { dia: string; depositanteId: string; estado: EstadoOcupacao }[],
+  anterior: Map<string, EstadoOcupacao> | null,
+): Map<string, DiaOcupacao[]> {
+  const porDia = new Map<string, Map<string, EstadoOcupacao>>();
+  for (const r of registros) {
+    if (!porDia.has(r.dia)) porDia.set(r.dia, new Map());
+    porDia.get(r.dia)!.set(r.depositanteId, r.estado);
+  }
+  const depositantes = new Set<string>([...registros.map((r) => r.depositanteId), ...(anterior ? [...anterior.keys()] : [])]);
+  const saida = new Map<string, DiaOcupacao[]>([...depositantes].map((d) => [d, []]));
+  let ultimo: Map<string, EstadoOcupacao> | null = anterior;
+  for (const dia of dias) {
+    let estados: Map<string, EstadoOcupacao>;
+    let origem: OrigemDia;
+    if (fotografados.has(dia)) {
+      estados = porDia.get(dia) ?? new Map();
+      origem = "FOTOGRAFIA";
+      ultimo = estados;
+    } else if (ultimo) {
+      estados = ultimo;
+      origem = "REPETIDO";
+    } else {
+      estados = new Map();
+      origem = "SEM_DADOS";
+    }
+    for (const d of depositantes) saida.get(d)!.push({ dia, origem, ...(estados.get(d) ?? ESTADO_VAZIO) });
+  }
+  return saida;
+}
+
+export type TarifaCalculo = { valorPosicao: number; metodo: MetodoArmazenagem; minimoPosicoes: number | null; cobrarReservadas: boolean; inicio: string };
+
+export type CalculoArmazenagem = {
+  diasMes: number;
+  /** dias do mês a partir do início da tarifa */
+  diasVigencia: number;
+  /** dias com dados (até hoje, no mês em andamento) */
+  diasContados: number;
+  diasRepetidos: number;
+  /** soma das posições de cada dia (com as reservadas vazias, se cobradas) */
+  posicoesDia: number;
+  reservadasDia: number;
+  pico: number;
+  /** média do mês: posições-dia ÷ dias do mês */
+  media: number;
+  posicoesCobradas: number;
+  minimoAplicado: boolean;
+  valor: number;
+};
+
+const arred2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
+const arred4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000;
+
+/**
+ * Valor da armazenagem do mês. PRO_RATA: posições-dia × valor ÷ dias do mês, com o mínimo valendo para os dias de vigência.
+ * PICO: maior ocupação (ou o mínimo) × valor, proporcional aos dias de vigência. Dias antes do início da tarifa não entram.
+ */
+export function calcularArmazenagem(dias: Pick<DiaOcupacao, "dia" | "posicoes" | "reservadasVazias" | "origem">[], t: TarifaCalculo, competencia: string): CalculoArmazenagem {
+  const diasMes = diasNoMes(competencia);
+  const primeiro = `${competencia}-01`;
+  const ultimo = `${competencia}-${String(diasMes).padStart(2, "0")}`;
+  const inicio = t.inicio > primeiro ? t.inicio : primeiro;
+  const diasVigencia = inicio > ultimo ? 0 : Math.round((Date.parse(`${ultimo}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`)) / 86_400_000) + 1;
+  const vigentes = dias.filter((d) => d.dia >= inicio && d.dia <= ultimo);
+  const porDia = vigentes.map((d) => d.posicoes + (t.cobrarReservadas ? d.reservadasVazias : 0));
+  const posicoesDia = porDia.reduce((a, n) => a + n, 0);
+  const reservadasDia = t.cobrarReservadas ? vigentes.reduce((a, d) => a + d.reservadasVazias, 0) : 0;
+  const pico = porDia.reduce((a, n) => Math.max(a, n), 0);
+  const minimo = Math.max(0, t.minimoPosicoes ?? 0);
+  let posicoesCobradas = 0;
+  let valor = 0;
+  let minimoAplicado = false;
+  if (diasVigencia > 0) {
+    if (t.metodo === "PICO") {
+      minimoAplicado = minimo > pico;
+      posicoesCobradas = Math.max(pico, minimo);
+      valor = arred2((posicoesCobradas * t.valorPosicao * diasVigencia) / diasMes);
+    } else {
+      const minimoDia = minimo * diasVigencia;
+      minimoAplicado = minimoDia > posicoesDia;
+      const base = Math.max(posicoesDia, minimoDia);
+      posicoesCobradas = arred4(base / diasMes);
+      valor = arred2((base * t.valorPosicao) / diasMes);
+    }
+  }
+  return {
+    diasMes,
+    diasVigencia,
+    diasContados: vigentes.length,
+    diasRepetidos: vigentes.filter((d) => d.origem === "REPETIDO").length,
+    posicoesDia,
+    reservadasDia,
+    pico,
+    media: arred2(posicoesDia / diasMes),
+    posicoesCobradas,
+    minimoAplicado,
+    valor,
+  };
+}
+
+/** Vencimento: o dia combinado no mês seguinte ao da competência; se ele já passou (ou falta menos de 3 dias), hoje + 5 dias. */
+export function vencimentoArmazenagem(competencia: string, dia: number, hoje: string): string {
+  const seguinte = mudarCompetencia(competencia, 1);
+  const combinado = `${seguinte}-${String(Math.min(28, Math.max(1, Math.trunc(dia) || 10))).padStart(2, "0")}`;
+  return combinado < somarDias(hoje, 3) ? somarDias(hoje, 5) : combinado;
+}
+
+/** Texto do item do pedido (sai na NFS-e): o cálculo por extenso. */
+export function descricaoArmazenagem(descricao: string, competencia: string, c: CalculoArmazenagem, t: Pick<TarifaCalculo, "metodo" | "valorPosicao" | "minimoPosicoes">): string {
+  const num = (n: number, casas = 2) => n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
+  const preco = t.valorPosicao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\s/g, " ");
+  const base =
+    t.metodo === "PICO"
+      ? `maior ocupação de ${num(c.pico)} ${c.pico === 1 ? "posição" : "posições"}-pallet`
+      : `${num(c.posicoesDia)} posições-pallet-dia (média de ${num(c.media)} ${c.media === 1 ? "posição" : "posições"})`;
+  const minimo = c.minimoAplicado ? `; mínimo contratado de ${t.minimoPosicoes} posições` : "";
+  const proporcional = c.diasVigencia < c.diasMes ? `; proporcional a ${c.diasVigencia} de ${c.diasMes} dias` : "";
+  return `${descricao} - ${competenciaCurta(competencia)}: ${base}${minimo}${proporcional} × ${preco} por posição/mês`;
 }
