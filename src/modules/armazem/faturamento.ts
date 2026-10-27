@@ -168,6 +168,7 @@ type TarifaBanco = {
   periodo: string;
   prazoPagamento: number;
   ativo: boolean;
+  faturarAutomatico?: boolean;
 };
 export const tarifaCalculo = (t: TarifaBanco): TarifaCalculo => ({
   valorPosicao: num(t.valorPosicao as number),
@@ -189,12 +190,14 @@ export type LinhaFaturamento = {
   depositanteId: string;
   depositante: string;
   documento: string | null;
+  /** e-mail do depositante (para o demonstrativo) */
+  email: string | null;
   /** período cobrado (nulo em "sem tarifa": os últimos 30 dias) */
   periodo: { numero: number; inicio: string; fim: string; rotulo: string; tipo: TipoPeriodo } | null;
   dias: DiaOcupacao[];
   /** soma dos volumes-dia fora de posição (sem endereço ou na doca) */
   foraPosicaoDia: number;
-  tarifa: { id: string; valorPosicao: number; metodo: MetodoArmazenagem; minimoPosicoes: number | null; cobrarReservadas: boolean; periodo: TipoPeriodo; ativo: boolean } | null;
+  tarifa: { id: string; valorPosicao: number; metodo: MetodoArmazenagem; minimoPosicoes: number | null; cobrarReservadas: boolean; periodo: TipoPeriodo; ativo: boolean; faturarAutomatico: boolean } | null;
   calculo: CalculoArmazenagem | null;
   /** posições-dia e pico quando não há cálculo (sem tarifa) */
   bruto: { posicoesDia: number; pico: number };
@@ -227,7 +230,7 @@ export function lerFiltrosFaturamento(sp: Record<string, string | string[] | und
 
 const resumoTarifa = (t: TarifaBanco) => {
   const c = tarifaCalculo(t);
-  return { id: t.id, valorPosicao: c.valorPosicao, metodo: c.metodo, minimoPosicoes: c.minimoPosicoes, cobrarReservadas: c.cobrarReservadas, periodo: c.periodo, ativo: t.ativo };
+  return { id: t.id, valorPosicao: c.valorPosicao, metodo: c.metodo, minimoPosicoes: c.minimoPosicoes, cobrarReservadas: c.cobrarReservadas, periodo: c.periodo, ativo: t.ativo, faturarAutomatico: t.faturarAutomatico ?? true };
 };
 
 /** Períodos da tarifa ainda não faturados que já começaram: os fechados (a faturar) e o em andamento. */
@@ -238,8 +241,9 @@ function periodosAbertos(t: TarifaBanco, faturados: Set<string>, hoje: string): 
     .map((p) => ({ periodo: p, fechado: p.fim < hoje }));
 }
 
-export async function carregarFaturamento(f: FiltrosFaturamento) {
-  const escopo = await escopoEmpresa();
+/** idsFixos: os estabelecimentos da rotina automática (sem sessão); sem eles, o escopo de quem está logado. */
+export async function carregarFaturamento(f: FiltrosFaturamento, idsFixos?: string[]) {
+  const escopo = { ids: idsFixos ?? (await escopoEmpresa()).ids };
   const estabelecimentos = (
     await prisma.empresa.findMany({ where: { id: { in: escopo.ids } }, select: { id: true, razaoSocial: true, nomeFantasia: true, matrizId: true, ativo: true } })
   )
@@ -250,12 +254,12 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
   const [tarifas, faturamentos, ultima] = await Promise.all([
     prisma.tarifaArmazem.findMany({
       where: { empresaId: { in: ids } },
-      include: { depositante: { select: { nome: true, nomeFantasia: true, documento: true } }, produto: { select: { codigo: true, descricao: true } }, empresa: { select: { nomeFantasia: true, razaoSocial: true } } },
+      include: { depositante: { select: { nome: true, nomeFantasia: true, documento: true, email: true } }, produto: { select: { codigo: true, descricao: true } }, empresa: { select: { nomeFantasia: true, razaoSocial: true } } },
       orderBy: { createdAt: "asc" },
     }),
     prisma.faturamentoArmazem.findMany({
       where: { empresaId: { in: ids } },
-      include: { pedido: { select: { id: true, numero: true, status: true } }, depositante: { select: { nome: true, nomeFantasia: true, documento: true } } },
+      include: { pedido: { select: { id: true, numero: true, status: true } }, depositante: { select: { nome: true, nomeFantasia: true, documento: true, email: true } } },
       orderBy: [{ periodoFim: "desc" }, { createdAt: "desc" }],
     }),
     prisma.fotografiaArmazem.findFirst({ where: { empresaId: { in: ids } }, orderBy: { feitaEm: "desc" }, select: { feitaEm: true, dia: true } }),
@@ -282,6 +286,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: t.depositanteId,
       depositante: nomePessoa(t.depositante),
       documento: t.depositante.documento,
+      email: t.depositante.email,
       periodo: { numero: periodo.numero, inicio: periodo.inicio, fim: periodo.fim, rotulo: rotuloPeriodo(periodo, tc.periodo, tc.metodo), tipo: tc.periodo },
       dias,
       foraPosicaoDia: dias.reduce((a, d) => a + d.volumesForaPosicao, 0),
@@ -311,6 +316,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: x.depositanteId,
       depositante: nomePessoa(x.depositante),
       documento: x.depositante.documento,
+      email: x.depositante.email,
       periodo: { numero: 0, inicio, fim, rotulo: rotuloPeriodo({ inicio, fim }, x.tipoPeriodo === "MES" ? "MES" : "DIAS30", ehMetodo(x.metodo) ? x.metodo : undefined), tipo: (x.tipoPeriodo === "MES" ? "MES" : "DIAS30") as TipoPeriodo },
       dias: [],
       foraPosicaoDia: 0,
@@ -353,6 +359,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
         depositanteId,
         depositante: "",
         documento: null,
+        email: null,
         periodo: null,
         dias,
         foraPosicaoDia: dias.reduce((a, d) => a + d.volumesForaPosicao, 0),
@@ -366,11 +373,12 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
     }
   }
   if (semTarifaLinhas.length) {
-    const pessoas = await prisma.pessoa.findMany({ where: { id: { in: semTarifaLinhas.map((l) => l.depositanteId) } }, select: { id: true, nome: true, nomeFantasia: true, documento: true } });
+    const pessoas = await prisma.pessoa.findMany({ where: { id: { in: semTarifaLinhas.map((l) => l.depositanteId) } }, select: { id: true, nome: true, nomeFantasia: true, documento: true, email: true } });
     for (const l of semTarifaLinhas) {
       const p = pessoas.find((x) => x.id === l.depositanteId);
       l.depositante = p ? nomePessoa(p) : "Depositante";
       l.documento = p?.documento ?? null;
+      l.email = p?.email ?? null;
     }
   }
   const primeiraEntrada = new Map(
@@ -408,6 +416,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: t.depositanteId,
       depositante: nomePessoa(t.depositante),
       documento: t.depositante.documento,
+      email: t.depositante.email,
       valorPosicao: num(t.valorPosicao),
       metodo: (ehMetodo(t.metodo) ? t.metodo : "FIM_PERIODO") as MetodoArmazenagem,
       minimoPosicoes: t.minimoPosicoes,
@@ -422,6 +431,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       contaBancariaId: t.contaBancariaId,
       formaPagamentoId: t.formaPagamentoId,
       gerarCobranca: t.gerarCobranca,
+      faturarAutomatico: t.faturarAutomatico,
       observacoes: t.observacoes,
       ativo: t.ativo,
       ultimoFaturado: (() => {

@@ -301,6 +301,14 @@ export default async function Pagina({ searchParams }: Props) {
                           dias={l.dias}
                           faturamento={fat ? { id: fat.id, pedidoId: fat.pedido?.id ?? null } : null}
                           podeFaturar={podeFaturar}
+                          demonstrativo={
+                            fat
+                              ? `/api/armazem/demonstrativo?faturamento=${fat.id}`
+                              : l.periodo && l.tarifa
+                                ? `/api/armazem/demonstrativo?${new URLSearchParams({ estab: l.empresaId, depositante: l.depositanteId, inicio: l.periodo.inicio })}`
+                                : null
+                          }
+                          emailCliente={l.email}
                         />
                       </span>
                     </TableCell>
@@ -364,7 +372,8 @@ export default async function Pagina({ searchParams }: Props) {
                       <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden /> {t.periodo === "DIAS30" ? "30 dias, vencido" : "mês, vencido"}
                     </span>
                     <span className="block text-xs text-muted-foreground">
-                      vence {t.prazoPagamento} {t.prazoPagamento === 1 ? "dia" : "dias"} após o período · {t.gerarCobranca ? "com boleto/Pix" : "sem boleto/Pix"}
+                      vence {t.prazoPagamento} {t.prazoPagamento === 1 ? "dia" : "dias"} após o período · {t.gerarCobranca ? "com boleto/Pix" : "sem boleto/Pix"} ·{" "}
+                      {t.faturarAutomatico ? "fatura sozinho" : "faturamento manual"}
                     </span>
                   </TableCell>
                   <TableCell className="max-w-56 truncate text-sm">{t.produto ?? <span className="text-[oklch(0.5_0.13_65)]">sem serviço: a NFS-e não sai</span>}</TableCell>

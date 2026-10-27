@@ -26,6 +26,10 @@
     {
       "path": "/api/cron/armazem",
       "schedule": "52 * * * *"
+    },
+    {
+      "path": "/api/cron/armazem-faturamento",
+      "schedule": "40 9 * * *"
     }
   ]
 }
