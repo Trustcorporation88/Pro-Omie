@@ -8,7 +8,7 @@ const ESPERAS_MIN = [5, 30, 120, 720, 1440];
 const MAX_TENTATIVAS = ESPERAS_MIN.length;
 const SENSIVEIS = new Set(["senha_provisoria", "redefinir_senha"]);
 /** E-mails que vão para clientes: saem com o nome da empresa no "De:" (avisos do sistema seguem com o remetente configurado). */
-const COM_NOME_DA_EMPRESA = new Set(["proposta", "pedido", "nfe", "nfse", "cobranca", "teste"]);
+const COM_NOME_DA_EMPRESA = new Set(["proposta", "pedido", "nfe", "nfse", "cobranca", "demonstrativo_armazenagem", "teste"]);
 
 export const emailsValidos = (lista: string) =>
   lista

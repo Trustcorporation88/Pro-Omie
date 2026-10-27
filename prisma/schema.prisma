@@ -1878,38 +1878,40 @@ model MovimentoArmazem {
 
 /// Tarifa de armazenagem do depositante no estabelecimento: R$ por palete no período e como contar os paletes.
 model TarifaArmazem {
-  id               String   @id @default(cuid())
+  id                String   @id @default(cuid())
   /// estabelecimento que presta o serviço (emite o pedido e a nota)
-  empresaId        String
-  empresa          Empresa  @relation(fields: [empresaId], references: [id])
-  depositanteId    String
-  depositante      Pessoa   @relation(fields: [depositanteId], references: [id])
+  empresaId         String
+  empresa           Empresa  @relation(fields: [empresaId], references: [id])
+  depositanteId     String
+  depositante       Pessoa   @relation(fields: [depositanteId], references: [id])
   /// R$ por palete (posição-pallet) no período
-  valorPosicao     Decimal  @db.Decimal(14, 2)
+  valorPosicao      Decimal  @db.Decimal(14, 2)
   /// FIM_PERIODO: paletes no último dia do período (apuração do fim do mês). PRO_RATA: palete-dia ÷ dias do período. PICO: maior quantidade do período.
-  metodo           String   @default("FIM_PERIODO")
+  metodo            String   @default("FIM_PERIODO")
   /// mínimo de posições cobradas no mês (posições contratadas)
-  minimoPosicoes   Int?
+  minimoPosicoes    Int?
   /// posições reservadas para o depositante contam mesmo vazias
-  cobrarReservadas Boolean  @default(false)
+  cobrarReservadas  Boolean  @default(false)
   /// DIAS30: períodos de 30 dias contados do início (cobrados vencidos, ao fim de cada período). MES: mês do calendário.
-  periodo          String   @default("MES")
+  periodo           String   @default("MES")
   /// início da cobrança: os períodos de 30 dias contam a partir dele (em geral, a primeira entrada); os dias antes não entram
-  inicio           DateTime @db.Date
+  inicio            DateTime @db.Date
   /// serviço do cadastro (dá o código de tributação da NFS-e)
-  produtoId        String?
-  produto          Produto? @relation(fields: [produtoId], references: [id])
-  descricao        String   @default("Armazenagem de mercadorias")
+  produtoId         String?
+  produto           Produto? @relation(fields: [produtoId], references: [id])
+  descricao         String   @default("Armazenagem de mercadorias")
   /// prazo de pagamento: dias depois do fim do período
-  prazoPagamento   Int      @default(10)
-  categoriaId      String?
-  contaBancariaId  String?
-  formaPagamentoId String?
-  gerarCobranca    Boolean  @default(false)
-  observacoes      String?
-  ativo            Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  prazoPagamento    Int      @default(10)
+  categoriaId       String?
+  contaBancariaId   String?
+  formaPagamentoId  String?
+  gerarCobranca     Boolean  @default(false)
+  /// fatura sozinho no dia seguinte ao fim do período (rotina diária às 6h40) e avisa os administradores por e-mail
+  faturarAutomatico Boolean  @default(true)
+  observacoes       String?
+  ativo             Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   faturamentos FaturamentoArmazem[]
 

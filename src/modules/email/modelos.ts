@@ -91,17 +91,64 @@ export function modeloTeste(p: { nome: string; empresa: string }): Modelo {
   };
 }
 
-export function modeloCobranca(p: { empresa: string; cliente: string; descricao: string; valor: string; vencimento: string; urlFatura: string | null; urlBoleto: string | null; linhaDigitavel: string | null; pixPayload: string | null; sandbox: boolean }): Modelo {
+export function modeloCobranca(p: { empresa: string; cliente: string; descricao: string; valor: string; vencimento: string; urlFatura: string | null; urlBoleto: string | null; linhaDigitavel: string | null; pixPayload: string | null; observacao?: string | null; sandbox: boolean }): Modelo {
   const paragrafos = [
     `Olá, ${p.cliente}.`,
     `${p.empresa} enviou a cobrança de ${p.valor} com vencimento em ${p.vencimento}, referente a: ${p.descricao}.`,
     ...(p.linhaDigitavel ? [`Linha digitável do boleto: ${p.linhaDigitavel}`] : []),
     ...(p.pixPayload ? [`Pix copia e cola: ${p.pixPayload}`] : []),
     ...(p.urlBoleto ? [`Boleto em PDF: ${p.urlBoleto}`] : []),
+    ...(p.observacao ? [p.observacao] : []),
     "Depois do pagamento, a baixa é automática. Qualquer dúvida, é só responder este e-mail.",
   ];
   return {
     assunto: `${p.sandbox ? "[TESTE] " : ""}Cobrança de ${p.valor} - ${p.empresa}`,
     ...layout({ titulo: `Cobrança de ${p.valor}`, paragrafos, botao: p.urlFatura ? { texto: "Pagar com boleto ou Pix", url: p.urlFatura } : null, aviso: p.sandbox ? "Cobrança de teste (sandbox), sem valor." : null, rodape: rodapeEmpresa(p.empresa) }),
+  };
+}
+
+/** Demonstrativo da armazenagem enviado ao depositante (o PDF vai anexo). */
+export function modeloDemonstrativo(p: { empresa: string; cliente: string; periodo: string; resumo: string; valor: string; vencimento: string; mensagem?: string | null }): Modelo {
+  return {
+    assunto: `Demonstrativo de armazenagem - ${p.periodo} - ${p.empresa}`,
+    ...layout({
+      titulo: `Armazenagem de ${p.periodo}`,
+      paragrafos: [
+        `Olá, ${p.cliente}.`,
+        `Segue em anexo o demonstrativo da armazenagem de ${p.periodo}: ${p.resumo}. Total de ${p.valor}, com vencimento em ${p.vencimento}.`,
+        ...(p.mensagem ? [p.mensagem] : []),
+        "O demonstrativo traz os paletes de cada dia e as posições no dia da apuração. Qualquer dúvida, é só responder este e-mail.",
+      ],
+      rodape: rodapeEmpresa(p.empresa),
+    }),
+  };
+}
+
+/** Resumo do faturamento automático da armazenagem, para os administradores. */
+export function modeloArmazenagemAutomatica(p: {
+  empresa: string;
+  data: string;
+  gerados: { cliente: string; periodo: string; resumo: string; valor: string; vencimento: string; pedido: string; cobranca: string }[];
+  erros: { cliente: string; periodo: string; erro: string }[];
+  total: string;
+  url: string;
+}): Modelo {
+  const n = p.gerados.length;
+  const assunto = n
+    ? `Armazenagem faturada: ${n} ${n === 1 ? "cliente" : "clientes"}, ${p.total}${p.erros.length ? ` (${p.erros.length} com erro)` : ""}`
+    : `Armazenagem: ${p.erros.length} ${p.erros.length === 1 ? "faturamento não saiu" : "faturamentos não saíram"}`;
+  const paragrafos = [
+    n
+      ? `Hoje (${p.data}) o Pro Omie faturou sozinho a armazenagem de ${n} ${n === 1 ? "cliente" : "clientes"} de ${p.empresa}, no total de ${p.total}:`
+      : `Hoje (${p.data}) o faturamento automático da armazenagem de ${p.empresa} não conseguiu gerar:`,
+    ...p.gerados.map((g) => `• ${g.cliente} · ${g.periodo} · ${g.resumo} · ${g.valor} · vence ${g.vencimento} · pedido nº ${g.pedido} · ${g.cobranca}`),
+    ...(p.erros.length
+      ? [n ? "Não faturou (o sistema tenta de novo amanhã; corrija o que a mensagem indicar ou fature pela tela):" : "O sistema tenta de novo amanhã; corrija o que a mensagem indicar ou fature pela tela:", ...p.erros.map((e) => `• ${e.cliente} · ${e.periodo}: ${e.erro}`)]
+      : []),
+    "Falta emitir a NFS-e de cada pedido, pelo próprio pedido.",
+  ];
+  return {
+    assunto,
+    ...layout({ titulo: n ? "Armazenagem faturada" : "Faturamento da armazenagem com erro", paragrafos, botao: { texto: "Abrir o faturamento da armazenagem", url: p.url }, rodape: "Pro Omie · aviso automático para administradores" }),
   };
 }

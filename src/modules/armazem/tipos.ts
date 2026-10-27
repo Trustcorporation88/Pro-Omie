@@ -471,3 +471,10 @@ export function descricaoArmazenagem(descricao: string, p: Periodo, tipo: TipoPe
   const periodo = tipo === "DIAS30" ? `período de ${rotuloPeriodo(p)} (30 dias)` : rotuloPeriodo(p, "MES", t.metodo);
   return `${descricao} - ${periodo}: ${base}${minimo}${proporcional} × ${preco} por palete ${tipo === "DIAS30" ? "a cada 30 dias" : "por mês"}`;
 }
+
+/** Resumo do que foi cobrado, conforme o método: "12 paletes em 30/11/2026", "330 paletes-dia" ou "pico de 12 paletes" (+ o mínimo). */
+export function resumoApuracao(metodo: MetodoArmazenagem, c: Pick<CalculoArmazenagem, "apurado" | "diaApuracao" | "posicoesDia" | "pico" | "minimoAplicado" | "posicoesCobradas">, fimPeriodo: string): string {
+  const paletes = (n: number) => `${n.toLocaleString("pt-BR")} ${n === 1 ? "palete" : "paletes"}`;
+  const base = metodo === "FIM_PERIODO" ? `${paletes(c.apurado)} em ${dataBr(c.diaApuracao ?? fimPeriodo)}` : metodo === "PICO" ? `pico de ${paletes(c.pico)}` : `${c.posicoesDia.toLocaleString("pt-BR")} paletes-dia`;
+  return c.minimoAplicado ? `${base} (cobrado o mínimo de ${paletes(Math.round(c.posicoesCobradas))})` : base;
+}

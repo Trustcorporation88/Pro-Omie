@@ -12,6 +12,9 @@ import { ehISOValido, isoParaDate } from "@/lib/datas";
 import { fmtMoeda } from "@/lib/format";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { urlBase } from "@/modules/email/acoes";
+import { emailsValidos, enfileirar } from "@/modules/email/fila";
+import { modeloDemonstrativo } from "@/modules/email/modelos";
+import { configuracaoEmail } from "@/modules/email/provedor";
 import { carregarFaturamento, desfazerFaturamentoArmazem, fotografarOcupacao, gerarFaturamentoArmazem, primeiraEntradaDepositante } from "./faturamento";
 import { dataBr, ehDataISO } from "./tipos";
 
@@ -44,6 +47,7 @@ const esquemaTarifa = z.object({
   contaBancariaId: idOpc,
   formaPagamentoId: idOpc,
   gerarCobranca: z.boolean(),
+  faturarAutomatico: z.boolean().default(true),
   observacoes: z
     .string()
     .trim()
@@ -90,6 +94,7 @@ export async function salvarTarifaArmazem(entrada: EntradaTarifa): Promise<Resul
       contaBancariaId: d.contaBancariaId,
       formaPagamentoId: d.formaPagamentoId,
       gerarCobranca: d.gerarCobranca,
+      faturarAutomatico: d.faturarAutomatico,
       observacoes: d.observacoes,
     };
     let id: string;
@@ -117,7 +122,7 @@ export async function salvarTarifaArmazem(entrada: EntradaTarifa): Promise<Resul
       d.id ? "editar_tarifa_armazem" : "criar_tarifa_armazem",
       "armazem",
       id,
-      `Tarifa de armazenagem de ${dep.nome}: ${fmtMoeda(d.valorPosicao)} por palete ${d.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"} desde ${dataBr(d.inicio)} (${d.metodo === "FIM_PERIODO" ? "apuração no fim do período" : d.metodo === "PICO" ? "maior quantidade" : "por dia"}${d.minimoPosicoes ? `, mínimo ${d.minimoPosicoes}` : ""}; vence ${d.prazoPagamento} dias após o período)`,
+      `Tarifa de armazenagem de ${dep.nome}: ${fmtMoeda(d.valorPosicao)} por palete ${d.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"} desde ${dataBr(d.inicio)} (${d.metodo === "FIM_PERIODO" ? "apuração no fim do período" : d.metodo === "PICO" ? "maior quantidade" : "por dia"}${d.minimoPosicoes ? `, mínimo ${d.minimoPosicoes}` : ""}; vence ${d.prazoPagamento} dias após o período${d.faturarAutomatico ? "; fatura sozinho" : "; faturamento manual"})`,
     );
     revalidar();
     return { id };
@@ -231,4 +236,41 @@ export async function desfazerFaturamentoArmazemAcao(id: string): Promise<Result
     revalidar();
     return undefined;
   }, "Faturamento desfeito: o pedido foi cancelado e a conta a receber, excluída.");
+}
+
+const esquemaEnvioDemonstrativo = z.object({
+  para: z.string().trim().min(3, "Informe o e-mail do cliente."),
+  mensagem: z.string().trim().max(2000).optional().nullable(),
+});
+
+/** Manda o demonstrativo de um período faturado ao cliente, em PDF (útil para a tarifa sem boleto/Pix). */
+export async function enviarDemonstrativoPorEmail(faturamentoId: string, entrada: z.input<typeof esquemaEnvioDemonstrativo>): Promise<Resultado> {
+  let mensagem = "";
+  const r = await executar(async () => {
+    const u = await exigirPermissao("financeiro:editar");
+    const escopo = await escopoEmpresa();
+    if (!configuracaoEmail().configurado) throw new ErroAcao("O envio de e-mails ainda não está configurado. Um administrador configura em Configurações › E-mails.");
+    const d = esquemaEnvioDemonstrativo.parse(entrada);
+    const para = emailsValidos(d.para);
+    if (!para.length) throw new ErroAcao("Informe um e-mail válido.", { para: "E-mail inválido." });
+    const { anexoDemonstrativo } = await import("./demonstrativo");
+    const { dados, anexo } = await anexoDemonstrativo(String(faturamentoId), escopo.ids);
+    const modelo = modeloDemonstrativo({
+      empresa: dados.empresaNome,
+      cliente: dados.cliente.nome,
+      periodo: dados.periodo.rotulo,
+      resumo: dados.resumo,
+      valor: fmtMoeda(dados.valor),
+      vencimento: dataBr(dados.vencimento),
+      mensagem: d.mensagem,
+    });
+    const e = await enfileirar({ empresaId: dados.matrizId, tipo: "demonstrativo_armazenagem", origemId: String(faturamentoId), para, responderPara: dados.emailEmpresa, anexos: [anexo], usuarioId: u.id, ...modelo });
+    await auditar("enviar_demonstrativo_armazenagem", "armazem", String(faturamentoId), `Demonstrativo da armazenagem de ${dados.periodo.rotulo} · ${dados.cliente.nome} enviado para ${para.join(", ")}`, null, {
+      usuarioId: u.id,
+      empresaId: escopo.ativa.id,
+    });
+    mensagem = e.status === "ENVIADO" ? `Demonstrativo enviado para ${para.join(", ")}.` : `Demonstrativo na fila para ${para.join(", ")}; o envio será tentado de novo em instantes.`;
+    return undefined;
+  });
+  return r.ok ? { ...r, mensagem } : r;
 }

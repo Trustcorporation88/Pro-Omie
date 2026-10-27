@@ -136,6 +136,16 @@ export async function enviarEmailCobranca(cobrancaId: string, para?: string[]): 
   const destinatarios = para ?? (c.titulo.pessoa?.email ? [c.titulo.pessoa.email] : []);
   if (!destinatarios.length) throw new ErroAcao("O cliente não tem e-mail cadastrado.");
   const empresa = c.titulo.empresa.nomeFantasia || c.titulo.empresa.razaoSocial;
+  // cobrança da armazenagem: o demonstrativo (paletes de cada dia) vai junto; se o PDF falhar, a cobrança sai mesmo assim
+  const faturamento = await prisma.faturamentoArmazem.findFirst({ where: { tituloId: c.tituloId }, select: { id: true } });
+  const demonstrativo = faturamento
+    ? await import("@/modules/armazem/demonstrativo")
+        .then((m) => m.anexoDemonstrativo(faturamento.id))
+        .catch((erro) => {
+          console.error(`[cobranca] demonstrativo da armazenagem não anexado (${faturamento.id}):`, erro);
+          return null;
+        })
+    : null;
   const modelo = modeloCobranca({
     empresa,
     cliente: c.titulo.pessoa?.nome ?? "",
@@ -147,8 +157,17 @@ export async function enviarEmailCobranca(cobrancaId: string, para?: string[]): 
     linhaDigitavel: c.linhaDigitavel,
     pixPayload: c.pixPayload,
     sandbox: false,
+    observacao: demonstrativo ? `Em anexo, o demonstrativo da armazenagem de ${demonstrativo.dados.periodo.rotulo}, com os paletes de cada dia.` : null,
   });
-  const e = await enfileirar({ empresaId: c.titulo.empresa.matrizId ?? c.titulo.empresa.id, tipo: "cobranca", origemId: c.id, para: destinatarios, responderPara: c.titulo.empresa.email, ...modelo });
+  const e = await enfileirar({
+    empresaId: c.titulo.empresa.matrizId ?? c.titulo.empresa.id,
+    tipo: "cobranca",
+    origemId: c.id,
+    para: destinatarios,
+    responderPara: c.titulo.empresa.email,
+    anexos: demonstrativo ? [demonstrativo.anexo] : undefined,
+    ...modelo,
+  });
   return e.status === "ENVIADO";
 }
 

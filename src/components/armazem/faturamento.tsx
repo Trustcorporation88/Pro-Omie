@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarDays, Camera, Download, FilePlus2, LoaderCircle, MoreHorizontal, Pencil, Plus, Power, ReceiptText, Undo2 } from "lucide-react";
+import { CalendarDays, Camera, Download, FilePlus2, FileText, LoaderCircle, Mail, MoreHorizontal, Pencil, Plus, Power, ReceiptText, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -19,7 +19,7 @@ import { ConfirmarAcao } from "@/components/confirmar-acao";
 import { Selo } from "@/components/selos";
 import { fmtData, fmtMoeda } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { alternarTarifaArmazem, atualizarFotografiaArmazem, desfazerFaturamentoArmazemAcao, gerarFaturamentoArmazemAcao, gerarTodosFaturamentosArmazem, inicioSugeridoArmazem, salvarTarifaArmazem } from "@/modules/armazem/faturamento-acoes";
+import { alternarTarifaArmazem, atualizarFotografiaArmazem, desfazerFaturamentoArmazemAcao, enviarDemonstrativoPorEmail, gerarFaturamentoArmazemAcao, gerarTodosFaturamentosArmazem, inicioSugeridoArmazem, salvarTarifaArmazem } from "@/modules/armazem/faturamento-acoes";
 import { ROTULO_METODO, dataBr, type DiaOcupacao, type MetodoArmazenagem, type TipoPeriodo } from "@/modules/armazem/tipos";
 
 type Opcao = { valor: string; rotulo: string };
@@ -42,6 +42,7 @@ export type TarifaEdicao = {
   contaBancariaId: string | null;
   formaPagamentoId: string | null;
   gerarCobranca: boolean;
+  faturarAutomatico: boolean;
   observacoes: string | null;
   ativo: boolean;
   /** fim do último período faturado (o início só muda para depois dele) */
@@ -90,6 +91,7 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
     contaBancariaId: tarifa?.contaBancariaId ?? "",
     formaPagamentoId: tarifa?.formaPagamentoId ?? "",
     gerarCobranca: tarifa?.gerarCobranca ?? false,
+    faturarAutomatico: tarifa?.faturarAutomatico ?? true,
     observacoes: tarifa?.observacoes ?? "",
   });
   const [erros, setErros] = useState<Record<string, string>>({});
@@ -125,6 +127,7 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
         contaBancariaId: v.contaBancariaId || null,
         formaPagamentoId: v.formaPagamentoId || null,
         gerarCobranca: v.gerarCobranca,
+        faturarAutomatico: v.faturarAutomatico,
         observacoes: v.observacoes || null,
       });
       if (!r.ok) {
@@ -241,6 +244,16 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
           <Switch id="tar-cobranca" checked={v.gerarCobranca} onCheckedChange={(x) => set("gerarCobranca", x)} />
           <Label htmlFor="tar-cobranca" className="cursor-pointer text-sm font-normal">
             Gerar boleto/Pix (Asaas) e enviar ao depositante no faturamento
+          </Label>
+        </div>
+        <div className="flex items-start gap-3 rounded-lg border px-3 py-2.5 sm:col-span-2">
+          <Switch id="tar-automatico" checked={v.faturarAutomatico} onCheckedChange={(x) => set("faturarAutomatico", x)} className="mt-0.5" />
+          <Label htmlFor="tar-automatico" className="cursor-pointer flex-col items-start gap-1 text-sm font-normal">
+            Faturar sozinho
+            <span className="text-xs leading-snug text-muted-foreground">
+              No dia seguinte ao fim do período (no mês do calendário, no dia 1º), às 6h40: gera o pedido, a conta a receber e o boleto/Pix com o demonstrativo, e avisa os
+              administradores por e-mail.
+            </span>
           </Label>
         </div>
         <Campo id="tar-obs" rotulo="Observações (saem no pedido)" className="sm:col-span-2">
@@ -371,6 +384,8 @@ export function MenuLinhaFaturamento({
   dias,
   faturamento,
   podeFaturar,
+  demonstrativo,
+  emailCliente,
 }: {
   depositante: string;
   rotulo: string;
@@ -378,8 +393,11 @@ export function MenuLinhaFaturamento({
   dias: DiaOcupacao[];
   faturamento: { id: string; pedidoId: string | null } | null;
   podeFaturar: boolean;
+  /** endereço do PDF (do faturado, ou a prévia do período ainda não faturado); nulo em "sem tarifa" */
+  demonstrativo: string | null;
+  emailCliente: string | null;
 }) {
-  const [dialogo, setDialogo] = useState<null | "dias" | "desfazer">(null);
+  const [dialogo, setDialogo] = useState<null | "dias" | "desfazer" | "email">(null);
   return (
     <>
       <DropdownMenu>
@@ -392,6 +410,18 @@ export function MenuLinhaFaturamento({
           {dias.length > 0 && (
             <DropdownMenuItem onSelect={() => setDialogo("dias")}>
               <CalendarDays /> Ver dia a dia
+            </DropdownMenuItem>
+          )}
+          {demonstrativo && (
+            <DropdownMenuItem asChild>
+              <a href={demonstrativo} target="_blank" rel="noopener">
+                <FileText /> {faturamento ? "Demonstrativo (PDF)" : "Prévia do demonstrativo (PDF)"}
+              </a>
+            </DropdownMenuItem>
+          )}
+          {faturamento && podeFaturar && (
+            <DropdownMenuItem onSelect={() => setDialogo("email")}>
+              <Mail /> Enviar demonstrativo por e-mail
             </DropdownMenuItem>
           )}
           <DropdownMenuItem asChild>
@@ -417,6 +447,9 @@ export function MenuLinhaFaturamento({
         </DropdownMenuContent>
       </DropdownMenu>
       <DialogoDias aberto={dialogo === "dias"} onAbertoChange={(x) => !x && setDialogo(null)} depositante={depositante} rotulo={rotulo} dias={dias} />
+      {faturamento && dialogo === "email" && (
+        <DialogoEnviarDemonstrativo onFechar={() => setDialogo(null)} faturamentoId={faturamento.id} depositante={depositante} rotulo={rotulo} paraPadrao={emailCliente ?? ""} />
+      )}
       {faturamento && (
         <ConfirmarAcao
           aberto={dialogo === "desfazer"}
@@ -429,6 +462,56 @@ export function MenuLinhaFaturamento({
         />
       )}
     </>
+  );
+}
+
+/** Manda o demonstrativo do período faturado ao cliente (o PDF vai anexo). */
+function DialogoEnviarDemonstrativo({ onFechar, faturamentoId, depositante, rotulo, paraPadrao }: { onFechar: () => void; faturamentoId: string; depositante: string; rotulo: string; paraPadrao: string }) {
+  const [para, setPara] = useState(paraPadrao);
+  const [mensagem, setMensagem] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
+  const [pendente, iniciar] = useTransition();
+  return (
+    <Dialog open onOpenChange={(x) => !x && !pendente && onFechar()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Enviar demonstrativo por e-mail</DialogTitle>
+          <DialogDescription>
+            O demonstrativo da armazenagem de {rotulo} vai em PDF para {depositante}, com o e-mail da empresa como “responder para”.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <Campo id="dem-para" rotulo="Para" obrigatorio erro={erro ?? undefined} ajuda="Vários e-mails: separe por vírgula">
+            <Input id="dem-para" type="text" value={para} onChange={(e) => setPara(e.target.value)} placeholder="financeiro@cliente.com.br" />
+          </Campo>
+          <Campo id="dem-mensagem" rotulo="Mensagem (opcional)">
+            <Textarea id="dem-mensagem" value={mensagem} onChange={(e) => setMensagem(e.target.value)} rows={3} />
+          </Campo>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onFechar} disabled={pendente}>
+            Cancelar
+          </Button>
+          <Button
+            disabled={pendente || !para.trim()}
+            onClick={() =>
+              iniciar(async () => {
+                const r = await enviarDemonstrativoPorEmail(faturamentoId, { para, mensagem: mensagem || null });
+                if (!r.ok) {
+                  setErro(r.campos?.para ?? null);
+                  toast.error(r.erro);
+                  return;
+                }
+                toast.success(r.mensagem ?? "Demonstrativo enviado.");
+                onFechar();
+              })
+            }
+          >
+            {pendente ? <LoaderCircle className="animate-spin" /> : <Mail />} Enviar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
