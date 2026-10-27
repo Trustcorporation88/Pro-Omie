@@ -30,3 +30,5 @@ npm-debug.log*
 /src/app/icon.png
 /src/app/apple-icon.png
 /src/app/favicon.ico
+# imagens do manual: recriadas a partir de manual-imagens/*.png.b64 pelo mesmo script
+/public/manual/

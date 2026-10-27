@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["pg", "@prisma/adapter-pg", "@react-pdf/renderer"],
+  // as imagens do manual entram no pacote da rota do PDF, que lê os arquivos do disco
+  outputFileTracingIncludes: { "/api/ajuda/pdf": ["./public/manual/**/*"] },
   experimental: {
     serverActions: {
       // anexos (até 4 MB) e arquivos OFX; a Vercel aceita até 4,5 MB por requisição

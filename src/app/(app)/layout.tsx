@@ -38,7 +38,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider>
       <AppSidebar papel={u.papel} empresa={escopo.ativa} empresas={escopo.disponiveis} selos={{ "/crm/atividades": pendentes, "/fiscal/recebidas": notas }} />
-      <SidebarInset>
+      {/* min-w-0: tabela larga rola dentro do cartão, sem empurrar a página para os lados (estourava em 1280 px) */}
+      <SidebarInset className="min-w-0">
         <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-5" />

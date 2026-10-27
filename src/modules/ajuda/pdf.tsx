@@ -1,11 +1,30 @@
 // Manual do usuário em PDF (react-pdf, Helvetica): capa, sumário com links, uma seção por página e rodapé com
 // a numeração. O conteúdo é o mesmo da tela /ajuda. Só servidor.
 import "server-only";
-import { Document, Link, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+// Image do react-pdf com outro nome: a regra de acessibilidade (alt) é para o <img> da web, não para o PDF
+import { Document, Image as ImagemPdf, Link, Page, StyleSheet, Text, View, renderToBuffer } from "@react-pdf/renderer";
+import { IMAGENS_MANUAL, type IdImagem } from "./imagens";
 import { partesTexto, type Bloco, type Secao } from "./tipos";
 
 const AZUL = "#1e3a8a";
 const CINZA = "#4b5563";
+const LARANJA = "#ea580c";
+/** largura útil da página A4 (595 pt menos as margens) e altura máxima de uma imagem */
+const LARGURA_UTIL = 595.28 - 2 * 52;
+const ALTURA_MAX_IMAGEM = 360;
+
+// As imagens ficam em public/manual; na Vercel, next.config (outputFileTracingIncludes) as põe no pacote desta rota.
+const imagens = new Map<IdImagem, Buffer>();
+function arquivoImagem(id: IdImagem): Buffer {
+  let b = imagens.get(id);
+  if (!b) {
+    b = readFileSync(join(process.cwd(), "public", "manual", `${id}.png`));
+    imagens.set(id, b);
+  }
+  return b;
+}
 
 const s = StyleSheet.create({
   // sem lineHeight: na página ele some com o rodapé absoluto e, no texto, deixa as linhas frouxas (react-pdf)
@@ -35,6 +54,9 @@ const s = StyleSheet.create({
   rodape: { position: "absolute", bottom: 24, left: 52, right: 52, flexDirection: "row", justifyContent: "space-between", fontSize: 7.5, color: "#9ca3af" },
   sumarioSecao: { fontSize: 11, fontFamily: "Helvetica-Bold", color: AZUL, marginTop: 9 },
   sumarioTopicos: { fontSize: 8.5, color: CINZA, marginTop: 1.5 },
+  figura: { marginVertical: 6 },
+  legenda: { fontSize: 8.5, color: CINZA, marginTop: 4, marginBottom: 3 },
+  marca: { width: 14, fontFamily: "Helvetica-Bold", color: LARANJA },
 });
 
 function Inline({ texto }: { texto: string }) {
@@ -78,6 +100,32 @@ function BlocoPdf({ b }: { b: Bloco }) {
         ))}
       </View>
     );
+  if (b.tipo === "imagem") {
+    const d = IMAGENS_MANUAL[b.imagem];
+    // tamanho natural (capturada em 2x; 1 px de tela = 0,75 pt), limitado à largura da página e a uma altura máxima
+    let w = Math.min(LARGURA_UTIL, (d.largura / 2) * 0.75);
+    let h = (w * d.altura) / d.largura;
+    if (h > ALTURA_MAX_IMAGEM) {
+      h = ALTURA_MAX_IMAGEM;
+      w = (h * d.largura) / d.altura;
+    }
+    return (
+      <View wrap={false} style={s.figura}>
+        <ImagemPdf src={{ data: arquivoImagem(b.imagem), format: "png" }} style={{ width: w, height: h, borderWidth: 0.6, borderColor: "#d1d5db" }} />
+        <Text style={s.legenda}>
+          <Inline texto={b.legenda} />
+        </Text>
+        {b.marcas?.map((m, i) => (
+          <View key={i} style={s.item}>
+            <Text style={s.marca}>{i + 1}</Text>
+            <Text style={s.itemTexto}>
+              <Inline texto={m} />
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  }
   if (b.tipo === "dica" || b.tipo === "atencao") {
     const dica = b.tipo === "dica";
     return (

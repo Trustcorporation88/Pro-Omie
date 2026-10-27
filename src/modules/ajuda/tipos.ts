@@ -6,6 +6,7 @@
 //   [[ajuda:secao#topico|texto]]      → link para outra parte do manual
 import { NAVEGACAO } from "@/components/layout/navegacao";
 import { pode, type PapelUsuario, type Permissao } from "@/lib/auth/permissoes";
+import type { IdImagem } from "./imagens";
 
 export type Bloco =
   | { tipo: "texto"; texto: string }
@@ -13,7 +14,9 @@ export type Bloco =
   | { tipo: "lista"; titulo?: string; itens: string[] }
   | { tipo: "dica"; texto: string }
   | { tipo: "atencao"; texto: string }
-  | { tipo: "tabela"; colunas: string[]; linhas: string[][] };
+  | { tipo: "tabela"; colunas: string[]; linhas: string[][] }
+  /** imagem da tela (public/manual/<imagem>.png); marcas = o que é cada número laranja da imagem, na ordem */
+  | { tipo: "imagem"; imagem: IdImagem; legenda: string; alt: string; marcas?: string[] };
 
 export type Topico = {
   id: string;
@@ -107,5 +110,6 @@ export function destinoDaTela(secoes: Secao[], caminho: string): { secao: Secao;
 export function textoDoBloco(b: Bloco): string {
   if (b.tipo === "texto" || b.tipo === "dica" || b.tipo === "atencao") return textoPlano(b.texto);
   if (b.tipo === "passos" || b.tipo === "lista") return [b.titulo ?? "", ...b.itens.map(textoPlano)].join(" ");
+  if (b.tipo === "imagem") return [b.legenda, ...(b.marcas ?? [])].map(textoPlano).join(" ");
   return [...b.colunas, ...b.linhas.flat()].map(textoPlano).join(" ");
 }
