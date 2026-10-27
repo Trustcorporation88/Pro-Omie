@@ -1,6 +1,7 @@
 // Conteúdo do Manual do usuário (rota /ajuda e PDF). Seguro para client e server.
 // Marcação: **negrito** para botões e campos; [[/rota]] para o caminho do menu (o nome vem da navegação);
 // [[ajuda:secao#topico|texto]] para outra parte do manual. Os testes conferem que toda referência existe.
+import type { IdImagem } from "./imagens";
 import type { Bloco, Secao } from "./tipos";
 
 const texto = (t: string): Bloco => ({ tipo: "texto", texto: t });
@@ -9,6 +10,8 @@ const lista = (itens: string[], titulo?: string): Bloco => ({ tipo: "lista", ite
 const dica = (t: string): Bloco => ({ tipo: "dica", texto: t });
 const atencao = (t: string): Bloco => ({ tipo: "atencao", texto: t });
 const tabela = (colunas: string[], linhas: string[][]): Bloco => ({ tipo: "tabela", colunas, linhas });
+/** imagem da tela (public/manual/<id>.png); marcas = o que é cada número laranja, na ordem em que aparecem na imagem */
+const imagem = (id: IdImagem, legenda: string, alt: string, marcas?: string[]): Bloco => ({ tipo: "imagem", imagem: id, legenda, alt, marcas });
 
 export const MANUAL: Secao[] = [
   {
@@ -63,6 +66,12 @@ export const MANUAL: Secao[] = [
             "**Manual**: o botão **Manual**, no topo de todas as telas, abre a parte deste manual sobre a tela em que você está.",
             "No menu com o seu nome, no canto de cima: **Trocar senha**, **Tema escuro** (ou **Tema claro**, para voltar às cores normais) e **Sair**.",
           ]),
+          imagem(
+            "navegar",
+            "O painel, a primeira tela depois de entrar.",
+            "Tela do Pro Omie com o menu lateral à esquerda, a busca e o botão Manual no topo e o painel ao centro.",
+            ["Empresa ativa: clique para trocar de empresa ou de filial.", "**Menu lateral**: as telas, agrupadas por assunto.", "**Busca rápida** (ou **Ctrl K**).", "**Manual**: a ajuda da tela em que você está.", "Seu nome: **Trocar senha**, **Tema escuro** e **Sair**."],
+          ),
         ],
       },
       {
@@ -110,6 +119,12 @@ export const MANUAL: Secao[] = [
             "**Despesas do mês por categoria**.",
             "**Próximos vencimentos**: os 10 próximos títulos em aberto, a receber e a pagar.",
           ]),
+          imagem(
+            "painel",
+            "Os cartões do painel levam à lista correspondente.",
+            "Painel com os cartões de saldo em contas, a receber, a pagar e em atraso, e o gráfico de entradas e saídas dos últimos seis meses.",
+            ["**Saldo em contas**: bancos e caixa.", "**A receber · hoje e 7 dias** (ao lado, o mesmo para pagar).", "**Em atraso**: o que venceu e não foi baixado."],
+          ),
           dica("Os cartões levam à lista correspondente: por exemplo, **Em atraso** abre as contas a receber vencidas."),
         ],
       },
@@ -138,6 +153,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/financeiro/receber", "/financeiro/pagar", "/financeiro/titulos"],
         blocos: [
           texto("Cada conta é um **título**: valor, vencimento, cliente ou fornecedor, categoria e situação (em aberto, parcial, quitado, vencido ou cancelado). Elas ficam em [[/financeiro/receber]] e [[/financeiro/pagar]], com busca e filtro por vencimento e situação. Os cartões do topo (**Em aberto**, **Vencido**, **Vence hoje**, **Próximos 7 dias** e **Quitado no mês**) somam os títulos; clique num cartão para filtrar a lista."),
+          imagem(
+            "contas-receber",
+            "A tela de contas a receber; a de pagar é igual.",
+            "Tela Contas a receber com o botão Nova conta a receber, os cartões de resumo, as abas por situação e a lista de títulos.",
+            ["**Nova conta a receber**.", "Os cartões do topo: clique num deles para filtrar a lista.", "Abas por situação; ao lado, a busca e os filtros.", "O menu da linha: **Receber**, **Editar**, **Duplicar** e mais."],
+          ),
           passos(
             [
               "Clique em **Nova conta a receber** (ou **Nova conta a pagar**).",
@@ -148,6 +169,12 @@ export const MANUAL: Secao[] = [
               "Salve. Cada parcela vira um título.",
             ],
             "Lançar uma conta",
+          ),
+          imagem(
+            "nova-conta",
+            "O formulário de **Nova conta a receber** (o de pagar é igual).",
+            "Formulário de nova conta a receber com cliente, descrição, valor, vencimento, classificação, repetição e recebimento.",
+            ["**Categoria**: é ela que leva o valor para a DRE.", "**Ratear entre categorias e centros de custo**, para dividir o valor.", "**Repetição**: **Única**, **Parcelada** ou **Recorrente**.", "**Já foi recebido**: registra o recebimento junto."],
           ),
           dica("Anexe a nota, o boleto ou o comprovante no título: PDF, imagem, XML, planilha ou documento, até 4 MB por arquivo."),
         ],
@@ -185,6 +212,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/financeiro/cobrancas"],
         blocos: [
           texto("Com a cobrança ligada (veja [[ajuda:administracao#cobranca|Cobrança pelo Asaas]]), qualquer conta a receber pode virar boleto ou Pix. Quando o cliente paga, o título é baixado sozinho na conta configurada."),
+          imagem(
+            "cobranca",
+            "O bloco **Cobrança (boleto e Pix)** na tela da conta.",
+            "Bloco de cobrança de uma conta a receber com a linha digitável do boleto, o Pix copia e cola e os botões Fatura, Boleto PDF, Conferir, E-mail e Cancelar.",
+            ["**copiar** a linha digitável (embaixo, o Pix copia e cola).", "**Conferir**: consulta o Asaas na hora.", "**E-mail**: reenvia a cobrança ao cliente."],
+          ),
           passos([
             "Abra a conta a receber.",
             "No bloco **Cobrança (boleto e Pix)**, clique em **Gerar boleto ou Pix**.",
@@ -219,6 +252,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/financeiro/conciliacao"],
         blocos: [
           texto("A conciliação compara o extrato do banco com o que foi lançado no sistema, para o saldo bater."),
+          imagem(
+            "conciliacao",
+            "A conciliação de uma conta, com o extrato importado.",
+            "Tela de conciliação bancária com a conta escolhida, os saldos do sistema e do extrato, a diferença e os lançamentos pendentes do extrato.",
+            ["Escolha a conta e clique em **Importar OFX**.", "A **Diferença** entre o extrato e o sistema precisa chegar a zero.", "Lançamento do extrato sem sugestão: **Criar lançamento** (com sugestão, **Conciliar**).", "**Regras**: sugestões automáticas para descrições parecidas.", "**Conciliar automaticamente** aceita todas as sugestões."],
+          ),
           passos([
             "No internet banking, exporte o extrato no formato **OFX**.",
             "Em [[/financeiro/conciliacao]], escolha a conta e clique em **Importar OFX** (até 2 MB). Lançamentos já importados não duplicam.",
@@ -276,6 +315,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/crm/funil", "/crm/oportunidades"],
         blocos: [
           texto("Cada **oportunidade** é um negócio em andamento com um cliente. O funil tem as etapas **Descoberta** (20%), **Proposta** (50%) e **Negociação** (80%); a previsão soma o valor de cada oportunidade multiplicado pela chance da etapa."),
+          imagem(
+            "funil",
+            "O funil, com as oportunidades em cada etapa.",
+            "Funil de vendas com os indicadores no topo e as colunas Descoberta, Proposta e Negociação com os cartões das oportunidades.",
+            ["**Nova oportunidade**.", "Indicadores: em aberto, previsão ponderada, ganho e conversão em 90 dias.", "**Minhas** ou **Todas**.", "Cada cartão é uma oportunidade: arraste para mudar de etapa."],
+          ),
           passos(
             [
               "Em [[/crm/funil]], clique em **Nova oportunidade**.",
@@ -319,6 +364,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/crm/atividades"],
         blocos: [
           texto("[[/crm/atividades]] é a agenda comercial: **Atrasadas**, **Hoje**, **Próximos 7 dias** e **Concluídas hoje**. A tela abre em **Minhas** (as suas atividades); **De todos** mostra as da equipe. O número ao lado do item no menu mostra as suas atividades atrasadas ou de hoje."),
+          imagem(
+            "atividades",
+            "A agenda: atrasadas, de hoje, dos próximos 7 dias e concluídas hoje.",
+            "Tela de atividades com as listas de atrasadas, de hoje, dos próximos sete dias e concluídas hoje.",
+            ["**Nova atividade**.", "**Minhas** ou **De todos**.", "Marque a caixa para concluir."],
+          ),
           passos([
             "Clique em **Nova atividade**.",
             "Escolha o **Tipo** (ligação, WhatsApp, e-mail, reunião, visita ou tarefa), escreva **O que fazer** e informe a **Data**, a **Hora** (opcional), o **Responsável** e, se quiser, o **Cliente**. Os atalhos **Hoje**, **Amanhã**, **Em 3 dias** e **Em 1 semana** preenchem a data.",
@@ -351,6 +402,12 @@ export const MANUAL: Secao[] = [
             "Escreva as observações: **Para o cliente** sai no PDF; **Internas** fica só no sistema.",
             "Salve. A proposta recebe o próximo número da empresa e fica como rascunho.",
           ]),
+          imagem(
+            "proposta",
+            "Uma proposta em rascunho, com os botões de cada etapa.",
+            "Tela de uma proposta com os itens, os dados do cliente e os botões Editar, Marcar como enviada, Aprovar, Recusar, Cancelar, PDF e Enviar por e-mail.",
+            ["**Marcar como enviada**, depois de mandar ao cliente.", "**Aprovar** (ou **Recusar**), com a resposta do cliente.", "**PDF** da proposta.", "**Enviar por e-mail**, com o PDF anexo."],
+          ),
         ],
       },
       {
@@ -382,6 +439,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/vendas/pedidos"],
         blocos: [
           texto("O pedido nasce da proposta aprovada (**Gerar pedido**) ou direto em [[/vendas/pedidos]] › **Novo pedido**, por exemplo numa venda de recicláveis sem proposta. Enquanto está em aberto, pode ser editado. **Cancelar pedido** impede o faturamento e guarda o histórico."),
+          imagem(
+            "pedido",
+            "Um pedido em aberto.",
+            "Tela de um pedido de venda em aberto com os itens e os botões Editar, Faturar, Cancelar, PDF e Enviar por e-mail.",
+            ["**Faturar**: gera as contas a receber.", "**PDF** do pedido.", "**Enviar por e-mail**."],
+          ),
           dica("Na tela de saldos do estoque, o botão **Vender** abre um pedido já com o material."),
         ],
       },
@@ -394,6 +457,11 @@ export const MANUAL: Secao[] = [
             "Confira a **Data do faturamento**, a **Condição de pagamento** (as parcelas), a **Forma de pagamento**, a **Conta prevista**, a **Categoria dos produtos**, a **Categoria dos serviços** e o **Centro de custo**.",
             "Confirme. O sistema cria as contas a receber (uma por parcela) e dá baixa no estoque dos materiais do pedido.",
           ]),
+          imagem(
+            "faturar",
+            "Ao **Faturar**, confira a data, a condição e a forma de pagamento, a categoria e a conta: as parcelas aparecem antes de confirmar.",
+            "Janela Faturar pedido com a data do faturamento, a condição de pagamento, a categoria dos serviços, a forma de pagamento, a conta prevista, o centro de custo e as parcelas.",
+          ),
           atencao("Se faltar saldo de algum material, o faturamento é recusado com a lista do que falta: lance a entrada no estoque antes. Faturar gera contas a receber, então só os perfis Financeiro e Administrador faturam; o perfil Vendas pede a alguém do Financeiro."),
           texto("**Desfazer faturamento** exclui as contas a receber do pedido e devolve o estoque; só é possível se nenhuma parcela tiver recebimento. Depois de faturado, o pedido mostra os blocos da NF-e (produtos) e da NFS-e (serviços): veja [[ajuda:fiscal#nfe|Emitir NF-e]] e [[ajuda:fiscal#nfse|Emitir NFS-e]]."),
         ],
@@ -416,6 +484,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/estoque/materiais"],
         blocos: [
           texto("Em [[/estoque]] ficam os materiais (papel, papelão, plásticos, metais…) com o saldo em cada estabelecimento, o preço de venda, o valor estimado (saldo × preço), o custo médio, a última entrada e o vendido em 30 dias. Filtre por estabelecimento, grupo ou nome."),
+          imagem(
+            "estoque",
+            "Os saldos dos materiais, por grupo.",
+            "Tela de estoque com os botões Atualizar preços, Importar planilha, Ajustar e Nova entrada, os cartões de resumo e a lista de materiais com o botão Vender.",
+            ["**Nova entrada**: a produção que chega.", "**Ajustar**: inventário e perdas.", "**Atualizar preços** de venda de vários materiais.", "**Vender**: abre um pedido com o material."],
+          ),
           passos(
             [
               "Sem materiais ainda? Clique em **Escolher materiais** e marque os recicláveis que a empresa vende (cada um vira um produto vendido por kg), ou importe uma planilha ([[ajuda:estoque#importar|Importar planilha]]).",
@@ -480,6 +554,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/estoque/compras"],
         blocos: [
           texto("[[/estoque/compras]] lista, mês a mês, as NF-e de compra emitidas contra o CNPJ (elas chegam sozinhas pela busca de notas) e o que falta fazer em cada uma: **Contas a pagar** (Lançada ou Pendente) e **Estoque** (Entrada nº…, Pendente ou Aguardando XML). Os cartões do topo filtram as pendências."),
+          imagem(
+            "compras",
+            "As compras do mês e o que falta fazer em cada nota.",
+            "Tela de compras com os cartões de pendências, as abas e a lista de notas dos fornecedores com o botão Abrir.",
+            ["Notas **Sem entrada no estoque**.", "Notas **Sem conta a pagar**.", "**Abrir** a nota para lançar."],
+          ),
           passos(
             [
               "Clique em **Abrir** na nota.",
@@ -498,6 +578,11 @@ export const MANUAL: Secao[] = [
         caminhos: ["/estoque/importar"],
         blocos: [
           texto("Em [[/estoque/importar]] você cadastra materiais e lança quantidades de uma vez, a partir de uma planilha."),
+          imagem(
+            "importar",
+            "Os dois passos: **Baixar modelo (.xlsx)** e enviar a planilha preenchida.",
+            "Tela de importar planilha com o passo 1, baixar o modelo, e o passo 2, enviar a planilha com o estabelecimento, o tipo de lançamento e a data.",
+          ),
           passos([
             "Clique em **Baixar modelo (.xlsx)**. Ele vem com os materiais cadastrados e o saldo atual do estabelecimento (ou com os recicláveis mais comuns, se ainda não houver materiais). A aba **Instruções** explica cada coluna.",
             "Preencha a planilha: **Código**, **Descrição**, **Unidade**, **Grupo**, **NCM**, **Preço de venda**, **Quantidade** e **Custo unitário**. A coluna **Saldo atual** é só para conferência.",
@@ -578,6 +663,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/servicos/armazem"],
         blocos: [
           texto("O armazém guarda mercadorias de **depositantes** (os clientes donos da mercadoria). Cada entrada é um **recebimento**. Na conferência, o que chegou é separado em **caixas** e **pallets** numerados (CX-0001, PL-0001), com o código, o lote e a quantidade de cada item, e cada volume vai para um **endereço** do armazém (ex.: A-01-02)."),
+          imagem(
+            "armazem",
+            "Os itens armazenados, por depositante.",
+            "Tela de itens armazenados com o campo de localizar, o botão Novo recebimento, os cartões de resumo, a tabela por depositante e as abas por volume e por código e lote.",
+            ["**Localizar**: digite ou leia o QR de uma caixa, pallet ou endereço.", "**Novo recebimento**.", "**Por código e lote**: onde está cada item."],
+          ),
           passos(
             [
               "Cadastre as posições em [[/servicos/armazem/enderecos]] (uma vez só).",
@@ -644,6 +735,12 @@ export const MANUAL: Secao[] = [
             "Acompanhe o quadro **Esperado × conferido**: **Confere**, **Falta**, **Sobra** ou **Fora da nota**, por código e lote (nota sem lote: pelo total do código).",
             "Clique em **Concluir conferência**. Com divergência, o sistema mostra o resumo e pede uma explicação, que fica no histórico.",
           ]),
+          imagem(
+            "conferencia",
+            "Um recebimento conferido.",
+            "Tela de um recebimento com os botões Nova caixa, Novo pallet e Mais, a lista de documentos e o quadro esperado e conferido.",
+            ["**Nova caixa**.", "**Novo pallet**.", "**Mais**: etiquetas, juntar nota, reabrir ou excluir.", "**Esperado × conferido**: o que falta ou sobra."],
+          ),
           lista([
             "Itens com o mesmo código e lote no mesmo volume são somados.",
             "Depois da conferência, mudar o conteúdo de um volume é **ajuste**: pede o motivo e fica no histórico.",
@@ -665,6 +762,12 @@ export const MANUAL: Secao[] = [
               "Clique em **Colocar em …**.",
             ],
             "Vários de uma vez",
+          ),
+          imagem(
+            "volumes",
+            "Endereçar vários volumes de uma vez.",
+            "Tela de caixas e pallets com as abas por situação, um volume marcado e a barra com os botões Endereçar, Etiquetas e Dar saída.",
+            ["Aba **Sem endereço**.", "Marque os volumes.", "**Endereçar** os marcados."],
           ),
           lista([
             "Um volume só: **Endereçar** (ou **Mudar endereço**) no próprio volume. **Tirar do endereço** volta para sem endereço.",
@@ -724,6 +827,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/servicos/armazem/faturamento"],
         blocos: [
           texto("A armazenagem é cobrada por palete, todo mês e vencida: no fim de cada mês o sistema faz a **apuração** da quantidade de paletes armazenados de cada depositante, e a tarifa transforma essa quantidade no valor a cobrar. A fotografia dos paletes é feita de hora em hora (vale a última do dia); a apuração usa a do último dia do mês."),
+          imagem(
+            "faturamento-armazem",
+            "O faturamento da armazenagem, com um mês vencido a faturar.",
+            "Tela de faturamento da armazenagem com os cartões de resumo, as abas e a linha de um cliente com a apuração, o valor e o botão Faturar.",
+            ["Abas: **A faturar**, **Em andamento**, **Faturados** e **Sem tarifa**.", "**Apuração**: os paletes do último dia do mês.", "**Faturar** o mês do cliente.", "**Atualizar fotografia de hoje**."],
+          ),
           texto("A apuração olha só o último dia do mês: quem entra no fim do mês paga o **mês cheio** pelos paletes que estão no armazém nesse dia, e o palete que **entra e sai dentro do mesmo mês não é cobrado**. No primeiro mês, a nota sai com o mês por extenso (por exemplo, outubro de 2026), mesmo que a mercadoria tenha chegado no dia 27."),
           lista(
             [
@@ -825,6 +934,12 @@ export const MANUAL: Secao[] = [
             "Clique em **Emitir NF-e**. O aviso mostra o ambiente: HOMOLOGAÇÃO (teste) ou PRODUÇÃO (com valor fiscal).",
             "Autorizada, baixe o **DANFE** e o XML ou use **Enviar por e-mail**: o cliente recebe os dois.",
           ]),
+          imagem(
+            "nfe",
+            "O bloco **Nota fiscal (NF-e)** no pedido, com a nota autorizada.",
+            "Bloco Nota fiscal no pedido com a NF-e autorizada e os botões DANFE e abrir a nota.",
+            ["**DANFE** da nota; ao lado, o botão que abre a nota."],
+          ),
           lista(
             [
               "**Rejeitada**: a mensagem da SEFAZ diz o motivo. Corrija o cadastro (cliente, produto, empresa) e emita de novo: o reenvio usa o mesmo número.",
@@ -859,6 +974,12 @@ export const MANUAL: Secao[] = [
             "Clique em **Emitir NFS-e**. Serviços com códigos de tributação diferentes saem em notas separadas.",
             "Gerada, baixe a **DANFSe** e o XML ou envie por e-mail.",
           ]),
+          imagem(
+            "nfse",
+            "O bloco **Nota fiscal de serviço (NFS-e)** no pedido.",
+            "Bloco Nota fiscal de serviço no pedido com a NFS-e gerada e os botões DANFSe e abrir a nota.",
+            ["**DANFSe** da nota gerada."],
+          ),
           lista([
             "**Cancelar**: escolha o motivo (erro na emissão, serviço não prestado ou outro) e escreva a justificativa. O prazo para cancelar é definido pelo município.",
             "Recusada: corrija o que a mensagem indicar e use **Corrigir e reenviar a NFS-e**.",
@@ -872,6 +993,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/fiscal/recebidas"],
         blocos: [
           texto("Com a busca ligada, o sistema procura a cada hora, direto na SEFAZ e no Ambiente Nacional, as NF-e, CT-e e NFS-e emitidas contra o CNPJ (a primeira busca traz os últimos 90 dias). O número ao lado do item no menu mostra as NF-e sem manifestação final. Quem pode editar o fiscal tem o botão **Buscar agora**, para não esperar a próxima hora."),
+          imagem(
+            "recebidas",
+            "As notas que chegaram contra o CNPJ da empresa.",
+            "Tela de notas recebidas com o botão Buscar agora, as abas por situação da manifestação e a lista de notas com a coluna Contas a pagar.",
+            ["**Buscar agora**.", "Aba **Sem manifestação**: falta confirmar ou recusar.", "Coluna **Contas a pagar**: se a nota já foi lançada."],
+          ),
           passos([
             "Em [[/fiscal/recebidas]], veja as notas nas abas **Sem manifestação**, **Com ciência**, **Confirmadas**, **Recusadas**, **Canceladas** e **Todas**.",
             "A **ciência** (automática, se ligada) libera o XML completo da NF-e, que chega na busca seguinte.",
@@ -888,6 +1015,12 @@ export const MANUAL: Secao[] = [
         caminhos: ["/contador"],
         blocos: [
           texto("[[/contador]] reúne o que o contador precisa do mês (competência), das empresas que você acessa: o resumo das notas emitidas e recebidas e do que foi recebido e pago."),
+          imagem(
+            "contador",
+            "O fechamento do mês para o contador.",
+            "Tela de fechamento mensal com o mês escolhido, os totais de notas e recebimentos, o botão para baixar o XML da competência e os relatórios em CSV.",
+            ["Escolha o mês.", "**Baixar XML** da competência (um arquivo ZIP).", "**Relatórios em CSV**."],
+          ),
           lista([
             "**XML da competência**: um arquivo ZIP com as NF-e e NFS-e emitidas (com cancelamentos e cartas de correção) e as notas recebidas, separado por CNPJ.",
             "**Relatórios em CSV**, que abrem no Excel: NF-e emitidas, NFS-e emitidas, notas recebidas, recebimentos, pagamentos e DRE do ano.",
@@ -919,6 +1052,12 @@ export const MANUAL: Secao[] = [
             "Confira o **Indicador de IE** (contribuinte, isento ou não contribuinte) e o endereço com o **Código IBGE** (vem pelo CEP): a NF-e precisa dos dois.",
             "Salve.",
           ]),
+          imagem(
+            "cliente",
+            "O cadastro de cliente ou fornecedor: comece pelo CNPJ.",
+            "Formulário de novo cliente ou fornecedor com o tipo, o CNPJ com o botão de busca, o nome, o nome fantasia e as opções é cliente e é fornecedor.",
+            ["A lupa (**Buscar na Receita**) preenche os dados pelo CNPJ.", "**É cliente**.", "**É fornecedor** (pode ser os dois)."],
+          ),
           dica("Cada empresa do grupo tem os próprios clientes e fornecedores; o mesmo CNPJ pode estar cadastrado nas duas."),
         ],
       },

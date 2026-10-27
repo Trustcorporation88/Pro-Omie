@@ -1,9 +1,11 @@
+import Image from "next/image";
 import { Lightbulb, TriangleAlert } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { IMAGENS_MANUAL } from "@/modules/ajuda/imagens";
 import type { Bloco } from "@/modules/ajuda/tipos";
 import { TextoAjuda } from "./texto-ajuda";
 
-/** Um bloco do manual (parágrafo, passos, lista, dica, atenção ou tabela). */
+/** Um bloco do manual (parágrafo, passos, lista, dica, atenção, tabela ou imagem da tela). */
 export function BlocoAjuda({ b }: { b: Bloco }) {
   switch (b.tipo) {
     case "texto":
@@ -64,6 +66,43 @@ export function BlocoAjuda({ b }: { b: Bloco }) {
           </span>
         </p>
       );
+    case "imagem": {
+      const d = IMAGENS_MANUAL[b.imagem];
+      const src = `/manual/${b.imagem}.png`;
+      return (
+        <figure className="space-y-3">
+          {/* a imagem fica atrás do login, como o manual: vai direto ao navegador (unoptimized), com a sessão */}
+          <a
+            href={src}
+            target="_blank"
+            rel="noopener"
+            title="Abrir a imagem em tamanho real"
+            className="block w-fit max-w-full overflow-hidden rounded-lg border bg-muted/30 shadow-sm transition-shadow hover:shadow-md"
+          >
+            <Image src={src} alt={b.alt} width={d.largura} height={d.altura} unoptimized className="h-auto max-w-full" style={{ width: d.largura / 2 }} />
+          </a>
+          <figcaption className="space-y-2 text-sm">
+            <p className="text-muted-foreground">
+              <TextoAjuda texto={b.legenda} />
+            </p>
+            {b.marcas?.length ? (
+              <ol className="grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+                {b.marcas.map((m, i) => (
+                  <li key={i} className="flex gap-2">
+                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-[#ea580c] text-[11px] font-semibold text-white" aria-hidden>
+                      {i + 1}
+                    </span>
+                    <span className="leading-relaxed text-muted-foreground">
+                      <TextoAjuda texto={m} />
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            ) : null}
+          </figcaption>
+        </figure>
+      );
+    }
     case "tabela":
       return (
         <div className="overflow-hidden rounded-lg border">

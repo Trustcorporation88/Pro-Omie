@@ -78,7 +78,9 @@ export async function listarCadastro(entidade: EntidadeCadastro, f: FiltroCadast
             </div>,
             <span key="c" className="text-sm">{p.cidade ? `${p.cidade}/${p.uf ?? ""}` : "—"}</span>,
             <div key="ct" className="text-sm">
-              {p.email ?? "—"}
+              <div className="max-w-48 truncate" title={p.email ?? undefined}>
+                {p.email ?? "—"}
+              </div>
               {sub(fmtTelefone(p.telefone))}
             </div>,
             <SeloAtivo key="s" ativo={p.ativo} />,

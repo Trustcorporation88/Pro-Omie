@@ -35,7 +35,7 @@ const paletes = (n: number) => `${num(n, 0)} ${n === 1 ? "palete" : "paletes"}`;
 
 /** O número que vai para a cobrança, conforme o método: paletes no fim do período, paletes-dia ou o pico. */
 function Apuracao({ l }: { l: LinhaFaturamento }) {
-  const sub = (t: string) => <span className="block text-xs whitespace-nowrap text-muted-foreground">{t}</span>;
+  const sub = (t: string) => <span className="block text-xs text-muted-foreground">{t}</span>;
   if (l.situacao === "SEM_TARIFA") {
     const hoje = l.dias.length ? l.dias[l.dias.length - 1].posicoes : 0;
     return (
@@ -259,7 +259,7 @@ export default async function Pagina({ searchParams }: Props) {
                       <Apuracao l={l} />
                     </TableCell>
                     {!semTarifa && (
-                      <TableCell className="min-w-36 text-right text-sm tabular-nums whitespace-normal">
+                      <TableCell className="min-w-28 text-right text-sm tabular-nums whitespace-normal">
                         {valor !== null ? (
                           <>
                             <span className="font-medium">{fmtMoeda(valor)}</span>
@@ -353,13 +353,13 @@ export default async function Pagina({ searchParams }: Props) {
                     {fmtMoeda(t.valorPosicao)}
                     <span className="block text-xs text-muted-foreground">{t.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"}</span>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="min-w-36 text-sm whitespace-normal">
                     {ROTULO_METODO_CURTO[t.metodo]}
                     <span className="block text-xs text-muted-foreground">
                       {[t.minimoPosicoes ? `mínimo ${t.minimoPosicoes}` : null, t.cobrarReservadas ? "reservadas contam" : "reservadas não contam"].filter(Boolean).join(" · ")}
                     </span>
                   </TableCell>
-                  <TableCell className="text-sm">
+                  <TableCell className="min-w-44 text-sm whitespace-normal">
                     <span className="flex items-center gap-1">
                       <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden /> {t.periodo === "DIAS30" ? "30 dias, vencido" : "mês, vencido"}
                     </span>

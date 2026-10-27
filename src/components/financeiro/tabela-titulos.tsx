@@ -138,10 +138,10 @@ export function TabelaTitulos({
                       </Selo>
                     )}
                   </TableCell>
-                  <TableCell className="max-w-52 truncate" title={l.pessoaNome ?? undefined}>
+                  <TableCell className="max-w-48 truncate" title={l.pessoaNome ?? undefined}>
                     {l.pessoaNome ?? <span className="text-muted-foreground">—</span>}
                   </TableCell>
-                  <TableCell className="max-w-96 min-w-56 whitespace-normal">
+                  <TableCell className="max-w-96 min-w-48 whitespace-normal">
                     <Link href={`/financeiro/titulos/${l.id}`} className="line-clamp-1 font-medium hover:underline">
                       {l.descricao}
                     </Link>
