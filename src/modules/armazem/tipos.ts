@@ -317,10 +317,15 @@ export function periodosDaTarifa(t: { periodo: TipoPeriodo; inicio: string }, at
   return saida;
 }
 
-/** Mês inteiro do calendário: "outubro de 2026"; os demais: "27/10/2026 a 25/11/2026". */
-export function rotuloPeriodo(p: Pick<Periodo, "inicio" | "fim">, tipo: TipoPeriodo = "DIAS30"): string {
-  const comp = p.inicio.slice(0, 7);
-  if (tipo === "MES" && p.inicio.endsWith("-01") && p.fim === `${comp}-${String(diasNoMes(comp)).padStart(2, "0")}`) return rotuloCompetencia(comp);
+/**
+ * Mês do calendário: o mês por extenso ("outubro de 2026") quando o período é o mês inteiro ou quando a cobrança é a
+ * apuração no fim do mês (o mês é cobrado cheio, mesmo que a tarifa comece no meio dele). Os demais: "27/10/2026 a 25/11/2026".
+ */
+export function rotuloPeriodo(p: Pick<Periodo, "inicio" | "fim">, tipo: TipoPeriodo = "DIAS30", metodo?: MetodoArmazenagem): string {
+  const comp = p.fim.slice(0, 7);
+  const mesmoMes = p.inicio.slice(0, 7) === comp;
+  const inteiro = mesmoMes && p.inicio === `${comp}-01` && p.fim === `${comp}-${String(diasNoMes(comp)).padStart(2, "0")}`;
+  if (tipo === "MES" && (inteiro || (metodo === "FIM_PERIODO" && mesmoMes))) return rotuloCompetencia(comp);
   return `${dataBr(p.inicio)} a ${dataBr(p.fim)}`;
 }
 
@@ -463,6 +468,6 @@ export function descricaoArmazenagem(descricao: string, p: Periodo, tipo: TipoPe
         : `${num(c.posicoesDia)} paletes-dia (média de ${paletes(c.media)})`;
   const minimo = c.minimoAplicado ? `; mínimo contratado de ${t.minimoPosicoes} paletes` : "";
   const proporcional = t.metodo !== "FIM_PERIODO" && c.diasVigencia < c.diasPeriodo ? `; proporcional a ${c.diasVigencia} de ${c.diasPeriodo} dias` : "";
-  const periodo = tipo === "DIAS30" ? `período de ${rotuloPeriodo(p)} (30 dias)` : rotuloPeriodo(p, "MES");
+  const periodo = tipo === "DIAS30" ? `período de ${rotuloPeriodo(p)} (30 dias)` : rotuloPeriodo(p, "MES", t.metodo);
   return `${descricao} - ${periodo}: ${base}${minimo}${proporcional} × ${preco} por palete ${tipo === "DIAS30" ? "a cada 30 dias" : "por mês"}`;
 }
