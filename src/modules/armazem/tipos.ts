@@ -241,12 +241,17 @@ export function linhasDoItemNota(quantidade: number, lotes: { numero: string; qu
 // ───────────────────────── Cobrança por posição-pallet ─────────────────────────
 
 export type MetodoArmazenagem = "PRO_RATA" | "PICO";
-export const ROTULO_METODO: Record<MetodoArmazenagem, string> = { PRO_RATA: "Proporcional aos dias (posição-dia)", PICO: "Maior ocupação do mês" };
-export const ROTULO_METODO_CURTO: Record<MetodoArmazenagem, string> = { PRO_RATA: "por dia", PICO: "pico do mês" };
+export const ROTULO_METODO: Record<MetodoArmazenagem, string> = { PRO_RATA: "Proporcional aos dias (posição-dia)", PICO: "Maior ocupação do período" };
+export const ROTULO_METODO_CURTO: Record<MetodoArmazenagem, string> = { PRO_RATA: "por dia", PICO: "pico do período" };
+
+/** DIAS30: períodos de 30 dias contados do início da tarifa, cobrados vencidos (ao fim de cada um). MES: mês do calendário. */
+export type TipoPeriodo = "DIAS30" | "MES";
+export const ROTULO_TIPO_PERIODO: Record<TipoPeriodo, string> = { DIAS30: "A cada 30 dias", MES: "Mês do calendário" };
 
 const MESES_PT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 
 export const ehCompetencia = (s: unknown): s is string => typeof s === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(s);
+export const ehDataISO = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(`${s}T00:00:00Z`)) && new Date(`${s}T00:00:00Z`).toISOString().slice(0, 10) === s;
 export function diasNoMes(competencia: string): number {
   const [a, m] = competencia.split("-").map(Number);
   return new Date(Date.UTC(a, m, 0)).getUTCDate();
@@ -256,29 +261,62 @@ export function rotuloCompetencia(competencia: string): string {
   const [a, m] = competencia.split("-").map(Number);
   return `${MESES_PT[m - 1]} de ${a}`;
 }
-/** "2026-09" → "09/2026" */
-export const competenciaCurta = (competencia: string) => `${competencia.slice(5, 7)}/${competencia.slice(0, 4)}`;
 export function mudarCompetencia(competencia: string, meses: number): string {
   const [a, m] = competencia.split("-").map(Number);
   const d = new Date(Date.UTC(a, m - 1 + meses, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
 }
-function somarDias(iso: string, n: number): string {
+export function somarDias(iso: string, n: number): string {
   const d = new Date(`${iso}T00:00:00Z`);
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
-/** Dias (AAAA-MM-DD) da competência, até `ate` (inclusive), se informado. */
-export function diasDaCompetencia(competencia: string, ate?: string): string[] {
-  const n = diasNoMes(competencia);
+/** Dias corridos de `de` a `ate`, contando os dois. */
+export const diasEntre = (de: string, ate: string) => Math.round((Date.parse(`${ate}T00:00:00Z`) - Date.parse(`${de}T00:00:00Z`)) / 86_400_000) + 1;
+/** Datas (AAAA-MM-DD) de `de` a `ate`. */
+export function diasDoIntervalo(de: string, ate: string): string[] {
   const dias: string[] = [];
-  for (let i = 1; i <= n; i++) {
-    const d = `${competencia}-${String(i).padStart(2, "0")}`;
-    if (ate && d > ate) break;
-    dias.push(d);
-  }
+  for (let d = de; d <= ate; d = somarDias(d, 1)) dias.push(d);
   return dias;
 }
+/** "2026-10-27" → "27/10/2026" */
+export const dataBr = (iso: string) => iso.split("-").reverse().join("/");
+
+export type Periodo = {
+  /** 1 = o primeiro período da tarifa */
+  numero: number;
+  inicio: string;
+  fim: string;
+  /** divisor do proporcional: 30 (ou os dias do mês) */
+  divisor: number;
+  /** dias do período a partir do início da tarifa */
+  diasVigencia: number;
+};
+
+/** Períodos da tarifa que começam até `ate`: de 30 em 30 dias a partir do início, ou meses do calendário (o primeiro, do início ao fim do mês). */
+export function periodosDaTarifa(t: { periodo: TipoPeriodo; inicio: string }, ate: string, maximo = 400): Periodo[] {
+  const saida: Periodo[] = [];
+  if (t.periodo === "MES") {
+    let inicio = t.inicio;
+    while (inicio <= ate && saida.length < maximo) {
+      const comp = inicio.slice(0, 7);
+      const n = diasNoMes(comp);
+      const fim = `${comp}-${String(n).padStart(2, "0")}`;
+      saida.push({ numero: saida.length + 1, inicio, fim, divisor: n, diasVigencia: diasEntre(inicio, fim) });
+      inicio = `${mudarCompetencia(comp, 1)}-01`;
+    }
+    return saida;
+  }
+  for (let k = 0; saida.length < maximo; k++) {
+    const inicio = somarDias(t.inicio, 30 * k);
+    if (inicio > ate) break;
+    saida.push({ numero: k + 1, inicio, fim: somarDias(inicio, 29), divisor: 30, diasVigencia: 30 });
+  }
+  return saida;
+}
+
+/** "27/10/2026 a 25/11/2026" */
+export const rotuloPeriodo = (p: Pick<Periodo, "inicio" | "fim">) => `${dataBr(p.inicio)} a ${dataBr(p.fim)}`;
 
 export type EstadoOcupacao = { posicoes: number; reservadasVazias: number; volumes: number; volumesForaPosicao: number; enderecos: string[] };
 export type OrigemDia = "FOTOGRAFIA" | "REPETIDO" | "SEM_DADOS";
@@ -287,7 +325,7 @@ export const ESTADO_VAZIO: EstadoOcupacao = { posicoes: 0, reservadasVazias: 0, 
 
 /**
  * Ocupação dia a dia de cada depositante. Dia fotografado: vale o que a fotografia registrou (depositante ausente = zero).
- * Dia sem fotografia: repete o último dia fotografado (inclusive de antes do mês, em `anterior`). Antes da primeira fotografia: zero.
+ * Dia sem fotografia: repete o último dia fotografado (inclusive de antes do intervalo, em `anterior`). Antes da primeira fotografia: zero.
  */
 export function ocupacaoDiaADia(
   dias: string[],
@@ -322,20 +360,21 @@ export function ocupacaoDiaADia(
   return saida;
 }
 
-export type TarifaCalculo = { valorPosicao: number; metodo: MetodoArmazenagem; minimoPosicoes: number | null; cobrarReservadas: boolean; inicio: string };
+export type TarifaCalculo = { valorPosicao: number; metodo: MetodoArmazenagem; minimoPosicoes: number | null; cobrarReservadas: boolean; inicio: string; periodo: TipoPeriodo };
 
 export type CalculoArmazenagem = {
-  diasMes: number;
-  /** dias do mês a partir do início da tarifa */
+  /** divisor do proporcional (30, ou os dias do mês) */
+  diasPeriodo: number;
+  /** dias do período a partir do início da tarifa */
   diasVigencia: number;
-  /** dias com dados (até hoje, no mês em andamento) */
+  /** dias com dados (até hoje, no período em andamento) */
   diasContados: number;
   diasRepetidos: number;
   /** soma das posições de cada dia (com as reservadas vazias, se cobradas) */
   posicoesDia: number;
   reservadasDia: number;
   pico: number;
-  /** média do mês: posições-dia ÷ dias do mês */
+  /** média do período: posições-dia ÷ dias do período */
   media: number;
   posicoesCobradas: number;
   minimoAplicado: boolean;
@@ -346,16 +385,11 @@ const arred2 = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
 const arred4 = (n: number) => Math.round((n + Number.EPSILON) * 10000) / 10000;
 
 /**
- * Valor da armazenagem do mês. PRO_RATA: posições-dia × valor ÷ dias do mês, com o mínimo valendo para os dias de vigência.
- * PICO: maior ocupação (ou o mínimo) × valor, proporcional aos dias de vigência. Dias antes do início da tarifa não entram.
+ * Valor da armazenagem de um período. PRO_RATA: posições-dia × valor ÷ dias do período, com o mínimo valendo para os dias de vigência.
+ * PICO: maior ocupação (ou o mínimo) × valor, proporcional aos dias de vigência. Dias fora do período ou antes do início da tarifa não entram.
  */
-export function calcularArmazenagem(dias: Pick<DiaOcupacao, "dia" | "posicoes" | "reservadasVazias" | "origem">[], t: TarifaCalculo, competencia: string): CalculoArmazenagem {
-  const diasMes = diasNoMes(competencia);
-  const primeiro = `${competencia}-01`;
-  const ultimo = `${competencia}-${String(diasMes).padStart(2, "0")}`;
-  const inicio = t.inicio > primeiro ? t.inicio : primeiro;
-  const diasVigencia = inicio > ultimo ? 0 : Math.round((Date.parse(`${ultimo}T00:00:00Z`) - Date.parse(`${inicio}T00:00:00Z`)) / 86_400_000) + 1;
-  const vigentes = dias.filter((d) => d.dia >= inicio && d.dia <= ultimo);
+export function calcularArmazenagem(dias: Pick<DiaOcupacao, "dia" | "posicoes" | "reservadasVazias" | "origem">[], t: TarifaCalculo, p: Periodo): CalculoArmazenagem {
+  const vigentes = dias.filter((d) => d.dia >= p.inicio && d.dia <= p.fim && d.dia >= t.inicio);
   const porDia = vigentes.map((d) => d.posicoes + (t.cobrarReservadas ? d.reservadasVazias : 0));
   const posicoesDia = porDia.reduce((a, n) => a + n, 0);
   const reservadasDia = t.cobrarReservadas ? vigentes.reduce((a, d) => a + d.reservadasVazias, 0) : 0;
@@ -364,43 +398,42 @@ export function calcularArmazenagem(dias: Pick<DiaOcupacao, "dia" | "posicoes" |
   let posicoesCobradas = 0;
   let valor = 0;
   let minimoAplicado = false;
-  if (diasVigencia > 0) {
+  if (p.diasVigencia > 0 && p.divisor > 0) {
     if (t.metodo === "PICO") {
       minimoAplicado = minimo > pico;
       posicoesCobradas = Math.max(pico, minimo);
-      valor = arred2((posicoesCobradas * t.valorPosicao * diasVigencia) / diasMes);
+      valor = arred2((posicoesCobradas * t.valorPosicao * p.diasVigencia) / p.divisor);
     } else {
-      const minimoDia = minimo * diasVigencia;
+      const minimoDia = minimo * p.diasVigencia;
       minimoAplicado = minimoDia > posicoesDia;
       const base = Math.max(posicoesDia, minimoDia);
-      posicoesCobradas = arred4(base / diasMes);
-      valor = arred2((base * t.valorPosicao) / diasMes);
+      posicoesCobradas = arred4(base / p.divisor);
+      valor = arred2((base * t.valorPosicao) / p.divisor);
     }
   }
   return {
-    diasMes,
-    diasVigencia,
+    diasPeriodo: p.divisor,
+    diasVigencia: p.diasVigencia,
     diasContados: vigentes.length,
     diasRepetidos: vigentes.filter((d) => d.origem === "REPETIDO").length,
     posicoesDia,
     reservadasDia,
     pico,
-    media: arred2(posicoesDia / diasMes),
+    media: arred2(posicoesDia / Math.max(1, p.divisor)),
     posicoesCobradas,
     minimoAplicado,
     valor,
   };
 }
 
-/** Vencimento: o dia combinado no mês seguinte ao da competência; se ele já passou (ou falta menos de 3 dias), hoje + 5 dias. */
-export function vencimentoArmazenagem(competencia: string, dia: number, hoje: string): string {
-  const seguinte = mudarCompetencia(competencia, 1);
-  const combinado = `${seguinte}-${String(Math.min(28, Math.max(1, Math.trunc(dia) || 10))).padStart(2, "0")}`;
+/** Vencimento: o prazo (em dias) depois do fim do período; se essa data já passou (ou falta menos de 3 dias), hoje + 5 dias. */
+export function vencimentoArmazenagem(fimPeriodo: string, prazo: number, hoje: string): string {
+  const combinado = somarDias(fimPeriodo, Math.max(0, Math.trunc(prazo) || 0));
   return combinado < somarDias(hoje, 3) ? somarDias(hoje, 5) : combinado;
 }
 
-/** Texto do item do pedido (sai na NFS-e): o cálculo por extenso. */
-export function descricaoArmazenagem(descricao: string, competencia: string, c: CalculoArmazenagem, t: Pick<TarifaCalculo, "metodo" | "valorPosicao" | "minimoPosicoes">): string {
+/** Texto do item do pedido (sai na NFS-e): o período e o cálculo por extenso. */
+export function descricaoArmazenagem(descricao: string, p: Periodo, tipo: TipoPeriodo, c: CalculoArmazenagem, t: Pick<TarifaCalculo, "metodo" | "valorPosicao" | "minimoPosicoes">): string {
   const num = (n: number, casas = 2) => n.toLocaleString("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: casas });
   const preco = t.valorPosicao.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }).replace(/\s/g, " ");
   const base =
@@ -408,6 +441,7 @@ export function descricaoArmazenagem(descricao: string, competencia: string, c: 
       ? `maior ocupação de ${num(c.pico)} ${c.pico === 1 ? "posição" : "posições"}-pallet`
       : `${num(c.posicoesDia)} posições-pallet-dia (média de ${num(c.media)} ${c.media === 1 ? "posição" : "posições"})`;
   const minimo = c.minimoAplicado ? `; mínimo contratado de ${t.minimoPosicoes} posições` : "";
-  const proporcional = c.diasVigencia < c.diasMes ? `; proporcional a ${c.diasVigencia} de ${c.diasMes} dias` : "";
-  return `${descricao} - ${competenciaCurta(competencia)}: ${base}${minimo}${proporcional} × ${preco} por posição/mês`;
+  const proporcional = c.diasVigencia < c.diasPeriodo ? `; proporcional a ${c.diasVigencia} de ${c.diasPeriodo} dias` : "";
+  const periodo = tipo === "DIAS30" ? `período de ${rotuloPeriodo(p)} (30 dias)` : rotuloPeriodo(p);
+  return `${descricao} - ${periodo}: ${base}${minimo}${proporcional} × ${preco} por posição ${tipo === "DIAS30" ? "a cada 30 dias" : "por mês"}`;
 }

@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, ArrowRight, CalendarRange, CircleAlert, Download, FileCheck2, Info, ReceiptText, TriangleAlert, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft, CalendarClock, CircleAlert, FileCheck2, Hourglass, ReceiptText, TriangleAlert, Users } from "lucide-react";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EstadoVazio, PageHeader } from "@/components/page-header";
-import { SelectFiltro } from "@/components/filtros";
+import { AbasFiltro, SelectFiltro } from "@/components/filtros";
 import { CartaoKpi } from "@/components/relatorios/cartao-kpi";
 import { Selo } from "@/components/selos";
 import { AcoesTarifa, BotaoAtualizarFotografia, BotaoFaturar, BotaoGerarTodos, BotaoNovaTarifa, MenuLinhaFaturamento, SeloSituacao, type OpcoesTarifa } from "@/components/armazem/faturamento";
@@ -15,8 +14,8 @@ import { escopoEmpresa } from "@/lib/auth/empresa";
 import { prisma } from "@/lib/db";
 import { fmtData, fmtDataHora, fmtDocumento, fmtMoeda } from "@/lib/format";
 import { carregarOpcoesFinanceiras } from "@/modules/financeiro/opcoes";
-import { carregarFaturamento, lerFiltrosFaturamento } from "@/modules/armazem/faturamento";
-import { ROTULO_METODO_CURTO, mudarCompetencia } from "@/modules/armazem/tipos";
+import { carregarFaturamento, lerFiltrosFaturamento, type AbaFaturamento, type LinhaFaturamento } from "@/modules/armazem/faturamento";
+import { ROTULO_METODO_CURTO, somarDias } from "@/modules/armazem/tipos";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 
 export const metadata: Metadata = { title: "Faturamento da armazenagem" };
@@ -25,6 +24,12 @@ type Props = { searchParams: Promise<Record<string, string | string[] | undefine
 
 const num = (n: number, casas = 2) => n.toLocaleString("pt-BR", { maximumFractionDigits: casas });
 const ROTULO_TITULO: Record<string, string> = { ABERTO: "a receber", PARCIAL: "recebido em parte", QUITADO: "recebido", CANCELADO: "título cancelado" };
+const VAZIO: Record<AbaFaturamento, { titulo: string; descricao: string }> = {
+  pendentes: { titulo: "Nenhum período vencido a faturar", descricao: "Cada período é cobrado depois que termina (cobrança vencida). Os que estão correndo ficam em Em andamento." },
+  andamento: { titulo: "Nenhum período em andamento", descricao: "Cadastre a tarifa de cada depositante: os períodos de 30 dias começam a contar no início da tarifa." },
+  faturados: { titulo: "Nenhum faturamento ainda", descricao: "Os períodos faturados aparecem aqui, com o pedido e a conta a receber." },
+  "sem-tarifa": { titulo: "Todos os depositantes com posições têm tarifa", descricao: "Quem ocupar posições sem tarifa aparece aqui, com as posições dos últimos 30 dias." },
+};
 
 export default async function Pagina({ searchParams }: Props) {
   const u = await exigirUsuario("armazem:ver");
@@ -45,19 +50,23 @@ export default async function Pagina({ searchParams }: Props) {
       categorias: fin.categoriasReceita,
       contas: fin.contas,
       formas: fin.formas,
-      inicioPadrao: `${dados.competencia}-01`,
+      inicioPadrao: dados.hoje,
     };
   }
-  const link = (extra: Record<string, string>) => {
-    const p = new URLSearchParams(Object.entries({ competencia: dados.competencia, estab: f.estab, ...extra }).filter(([, v]) => v));
-    return `/servicos/armazem/faturamento?${p.toString()}`;
+  const link = (aba: AbaFaturamento) => {
+    const p = new URLSearchParams(Object.entries({ aba: aba === "pendentes" ? "" : aba, estab: f.estab, depositante: f.depositante }).filter(([, v]) => v));
+    return `/servicos/armazem/faturamento${p.size ? `?${p.toString()}` : ""}`;
   };
-  const csv = (depositante?: string) => {
-    const p = new URLSearchParams(Object.entries({ competencia: dados.competencia, estab: f.estab, depositante: depositante ?? "" }).filter(([, v]) => v));
+  const csv = (l: LinhaFaturamento) => {
+    const de = l.periodo?.inicio ?? somarDias(dados.hoje, -29);
+    const fim = l.periodo?.fim ?? dados.hoje;
+    const p = new URLSearchParams({ de, ate: fim < dados.hoje ? fim : dados.hoje, depositante: l.depositanteId, estab: l.empresaId });
     return `/api/armazem/ocupacao?${p.toString()}`;
   };
   const varios = dados.estabelecimentos.length > 1;
-  const primeiroDoMesSeguinte = `${mudarCompetencia(dados.competencia, 1)}-01`;
+  const aba = dados.aba;
+  const semTarifa = aba === "sem-tarifa";
+  const faturados = aba === "faturados";
 
   return (
     <>
@@ -66,52 +75,50 @@ export default async function Pagina({ searchParams }: Props) {
       </Link>
       <PageHeader
         titulo="Faturamento da armazenagem"
-        descricao="Cobrança por posição-pallet: todo dia o sistema fotografa as posições ocupadas por depositante; no fim do mês, a tarifa vira o pedido, a conta a receber e o boleto ou Pix."
+        descricao="Cobrança por posição-pallet, vencida: todo dia o sistema fotografa as posições ocupadas; quando o período de 30 dias de cada depositante termina, a tarifa vira o pedido, a conta a receber e o boleto ou Pix."
       >
         {podeFotografar && <BotaoAtualizarFotografia />}
-        {podeFaturar && dados.liberada && <BotaoGerarTodos competencia={dados.competencia} estab={f.estab} pendentes={dados.totais.pendentes} total={dados.totais.aFaturar} />}
+        {podeFaturar && <BotaoGerarTodos estab={f.estab} pendentes={dados.contagem.pendentes} total={dados.totais.aFaturar} />}
       </PageHeader>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline" size="sm">
-          <Link href={link({ competencia: mudarCompetencia(dados.competencia, -1) })} aria-label="Mês anterior">
-            <ArrowLeft />
-          </Link>
-        </Button>
-        <span className="min-w-48 text-center text-lg font-semibold first-letter:uppercase">{dados.rotulo}</span>
-        <Button asChild variant="outline" size="sm">
-          <Link href={link({ competencia: mudarCompetencia(dados.competencia, 1) })} aria-label="Mês seguinte">
-            <ArrowRight />
-          </Link>
-        </Button>
-        {varios && <SelectFiltro parametro="estab" rotuloTodos="Todos os estabelecimentos" opcoes={dados.estabelecimentos.map((e) => ({ valor: e.id, rotulo: e.nome }))} />}
-        <Button asChild variant="ghost" size="sm" className="sm:ml-auto">
-          <a href={csv()}>
-            <Download /> Extrato do mês (CSV)
-          </a>
-        </Button>
+      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <CartaoKpi titulo="A faturar" valor={fmtMoeda(dados.totais.aFaturar)} icone={ReceiptText} tom={dados.contagem.pendentes ? "alerta" : "neutro"} href={link("pendentes")}>
+          {dados.contagem.pendentes} {dados.contagem.pendentes === 1 ? "período vencido" : "períodos vencidos"}
+        </CartaoKpi>
+        <CartaoKpi titulo="Em andamento" valor={fmtMoeda(dados.totais.emAndamento)} icone={Hourglass} tom="roxo" href={link("andamento")}>
+          acumulado até hoje em {dados.contagem.andamento} {dados.contagem.andamento === 1 ? "período" : "períodos"}
+        </CartaoKpi>
+        <CartaoKpi titulo="Faturado este mês" valor={fmtMoeda(dados.totais.faturadoNoMes)} icone={FileCheck2} tom="sucesso" href={link("faturados")}>
+          {dados.totais.faturadosNoMes} pedido(s) gerado(s)
+        </CartaoKpi>
+        <CartaoKpi titulo="Sem tarifa" valor={String(dados.contagem["sem-tarifa"])} icone={Users} tom={dados.contagem["sem-tarifa"] ? "perigo" : "neutro"} href={link("sem-tarifa")}>
+          ocupam posições, mas não têm preço
+        </CartaoKpi>
       </div>
 
-      <div className="mb-5 space-y-2">
-        {dados.emAndamento && (
-          <div className="flex gap-2 rounded-lg border border-chart-5/30 bg-chart-5/5 p-3 text-sm">
-            <CalendarRange className="mt-0.5 size-4 shrink-0 text-chart-5" aria-hidden />
-            <span>
-              <strong>Mês em andamento:</strong> os números vão até hoje ({fmtData(dados.hoje)}). O faturamento fica liberado em {fmtData(primeiroDoMesSeguinte)}.
-            </span>
-          </div>
-        )}
-        {dados.futura && (
-          <div className="flex gap-2 rounded-lg border bg-muted/40 p-3 text-sm">
-            <Info className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden />
-            <span>Este mês ainda não começou.</span>
-          </div>
-        )}
+      <div className="mb-3 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <AbasFiltro
+          parametro="aba"
+          padrao="pendentes"
+          opcoes={[
+            { valor: "pendentes", rotulo: "A faturar", contador: dados.contagem.pendentes },
+            { valor: "andamento", rotulo: "Em andamento", contador: dados.contagem.andamento },
+            { valor: "faturados", rotulo: "Faturados", contador: dados.contagem.faturados },
+            { valor: "sem-tarifa", rotulo: "Sem tarifa", contador: dados.contagem["sem-tarifa"] },
+          ]}
+        />
+        <div className="flex flex-wrap items-center gap-2">
+          {dados.depositantes.length > 1 && <SelectFiltro parametro="depositante" rotuloTodos="Todos os depositantes" opcoes={dados.depositantes.map((d) => ({ valor: d.id, rotulo: d.nome }))} />}
+          {varios && <SelectFiltro parametro="estab" rotuloTodos="Todos os estabelecimentos" opcoes={dados.estabelecimentos.map((e) => ({ valor: e.id, rotulo: e.nome }))} />}
+        </div>
+      </div>
+
+      <div className="mb-4 space-y-2">
         {dados.totais.diasRepetidos > 0 && (
           <div className="flex gap-2 rounded-lg border border-warning/40 bg-warning/10 p-3 text-sm">
             <TriangleAlert className="mt-0.5 size-4 shrink-0 text-[oklch(0.5_0.13_65)]" aria-hidden />
             <span>
-              {dados.totais.diasRepetidos} {dados.totais.diasRepetidos === 1 ? "dia ficou" : "dias ficaram"} sem fotografia e {dados.totais.diasRepetidos === 1 ? "repetiu" : "repetiram"} o último dia fotografado. Confira no dia a dia de cada depositante.
+              Até {dados.totais.diasRepetidos} {dados.totais.diasRepetidos === 1 ? "dia ficou" : "dias ficaram"} sem fotografia e {dados.totais.diasRepetidos === 1 ? "repetiu" : "repetiram"} o último dia fotografado. Confira no dia a dia de cada depositante.
             </span>
           </div>
         )}
@@ -120,36 +127,19 @@ export default async function Pagina({ searchParams }: Props) {
         </p>
       </div>
 
-      <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <CartaoKpi titulo="Posições-dia no mês" valor={num(dados.totais.posicoesDia, 0)} icone={CalendarRange} tom="info">
-          soma das posições ocupadas de cada dia
-        </CartaoKpi>
-        <CartaoKpi titulo={dados.emAndamento ? "Acumulado até hoje" : "A faturar"} valor={fmtMoeda(dados.emAndamento ? dados.linhas.reduce((a, l) => a + (l.calculo?.valor ?? 0), 0) : dados.totais.aFaturar)} icone={ReceiptText} tom={dados.totais.pendentes ? "alerta" : "neutro"}>
-          {dados.emAndamento ? "parcial: o valor final sai no fim do mês" : `${dados.totais.pendentes} ${dados.totais.pendentes === 1 ? "depositante" : "depositantes"}`}
-        </CartaoKpi>
-        <CartaoKpi titulo="Faturado" valor={fmtMoeda(dados.totais.faturado)} icone={FileCheck2} tom="sucesso">
-          {dados.linhas.filter((l) => l.faturamento).length} pedido(s) gerado(s)
-        </CartaoKpi>
-        <CartaoKpi titulo="Sem tarifa" valor={String(dados.totais.semTarifa)} icone={Users} tom={dados.totais.semTarifa ? "perigo" : "neutro"}>
-          ocupam posições, mas não têm preço
-        </CartaoKpi>
-      </div>
-
       {dados.linhas.length === 0 ? (
-        <EstadoVazio
-          titulo={`Nenhuma posição ocupada em ${dados.rotulo}`}
-          descricao="A cobrança usa a fotografia diária das posições ocupadas por depositante. Endereçe as caixas e os pallets e cadastre a tarifa de cada depositante."
-        />
+        <EstadoVazio titulo={VAZIO[aba].titulo} descricao={VAZIO[aba].descricao} />
       ) : (
         <Card className="mb-6 overflow-hidden p-0">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="pl-3">Depositante</TableHead>
-                <TableHead>Tarifa</TableHead>
+                <TableHead>{semTarifa ? "Desde" : "Período"}</TableHead>
+                {!faturados && !semTarifa && <TableHead>Tarifa</TableHead>}
                 <TableHead className="text-right">Posições-dia</TableHead>
-                <TableHead className="text-right">Média · pico</TableHead>
-                <TableHead className="text-right">Valor</TableHead>
+                <TableHead className="text-right">{faturados || semTarifa ? "Pico" : "Média · pico"}</TableHead>
+                {!semTarifa && <TableHead className="text-right">Valor</TableHead>}
                 <TableHead>Situação</TableHead>
                 <TableHead className="pr-3 text-right">
                   <span className="sr-only">Ações</span>
@@ -158,13 +148,11 @@ export default async function Pagina({ searchParams }: Props) {
             </TableHeader>
             <TableBody>
               {dados.linhas.map((l) => {
-                const brutoDia = l.dias.reduce((a, d) => a + d.posicoes, 0);
-                const brutoPico = l.dias.reduce((a, d) => Math.max(a, d.posicoes), 0);
                 const fat = l.faturamento;
-                const posDia = fat ? fat.posicoesDia : (l.calculo?.posicoesDia ?? brutoDia);
-                const pico = fat ? fat.pico : (l.calculo?.pico ?? brutoPico);
-                const media = l.calculo?.media ?? Math.round((brutoDia / Math.max(1, l.calculo?.diasMes ?? l.dias.length)) * 100) / 100;
+                const posDia = fat?.posicoesDia ?? l.calculo?.posicoesDia ?? l.bruto.posicoesDia;
+                const pico = fat?.pico ?? l.calculo?.pico ?? l.bruto.pico;
                 const valor = fat?.valor ?? l.calculo?.valor ?? null;
+                const primeira = dados.primeiraEntrada[`${l.empresaId}|${l.depositanteId}`] ?? null;
                 return (
                   <TableRow key={l.chave}>
                     <TableCell className="max-w-72 min-w-52 pl-3 whitespace-normal">
@@ -179,38 +167,62 @@ export default async function Pagina({ searchParams }: Props) {
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-sm whitespace-nowrap">
-                      {l.tarifa ? (
+                    <TableCell className="min-w-40 text-sm whitespace-normal">
+                      {l.periodo ? (
                         <>
-                          {fmtMoeda(l.tarifa.valorPosicao)}
+                          <span className="whitespace-nowrap">
+                            {fmtData(l.periodo.inicio)} a {fmtData(l.periodo.fim)}
+                          </span>
                           <span className="block text-xs text-muted-foreground">
-                            {ROTULO_METODO_CURTO[l.tarifa.metodo]}
-                            {l.tarifa.minimoPosicoes ? ` · mín. ${l.tarifa.minimoPosicoes}` : ""}
-                            {!l.tarifa.ativo ? " · suspensa" : ""}
+                            {l.periodo.tipo === "DIAS30" ? "30 dias" : "mês do calendário"}
+                            {l.periodo.numero ? ` · ${l.periodo.numero}º período` : ""}
+                            {l.situacao === "EM_ANDAMENTO" && l.calculo ? ` · ${l.calculo.diasContados} de ${l.calculo.diasPeriodo} dias` : ""}
                           </span>
                         </>
                       ) : (
-                        <span className="text-muted-foreground">—</span>
+                        <>
+                          {primeira ? fmtData(primeira) : "—"}
+                          <span className="block text-xs text-muted-foreground">primeira entrada · últimos 30 dias ao lado</span>
+                        </>
                       )}
                     </TableCell>
+                    {!faturados && !semTarifa && (
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {l.tarifa ? (
+                          <>
+                            {fmtMoeda(l.tarifa.valorPosicao)}
+                            <span className="block text-xs text-muted-foreground">
+                              {ROTULO_METODO_CURTO[l.tarifa.metodo]}
+                              {l.tarifa.minimoPosicoes ? ` · mín. ${l.tarifa.minimoPosicoes}` : ""}
+                            </span>
+                          </>
+                        ) : (
+                          "—"
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-right text-sm tabular-nums">
                       {num(posDia, 0)}
                       {l.calculo && l.calculo.reservadasDia > 0 && <span className="block text-xs text-muted-foreground">{l.calculo.reservadasDia} de reservadas</span>}
                     </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {num(media)} · {pico}
-                    </TableCell>
-                    <TableCell className="text-right text-sm tabular-nums">
-                      {valor !== null ? (
-                        <>
-                          <span className="font-medium">{fmtMoeda(valor)}</span>
-                          {l.calculo?.minimoAplicado && !fat && <span className="block text-xs text-muted-foreground">mínimo contratado</span>}
-                          {(fat?.vencimento ?? l.vencimento) && <span className="block text-xs text-muted-foreground">vence {fmtData(fat?.vencimento ?? l.vencimento!)}</span>}
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
+                    <TableCell className="text-right text-sm tabular-nums">{faturados || semTarifa ? pico : `${num(l.calculo?.media ?? 0)} · ${pico}`}</TableCell>
+                    {!semTarifa && (
+                      <TableCell className="min-w-36 text-right text-sm tabular-nums whitespace-normal">
+                        {valor !== null ? (
+                          <>
+                            <span className="font-medium">{fmtMoeda(valor)}</span>
+                            {l.calculo?.minimoAplicado && <span className="block text-xs text-muted-foreground">mínimo contratado</span>}
+                            {l.situacao === "EM_ANDAMENTO" ? (
+                              <span className="block text-xs text-muted-foreground">parcial · fatura em {fmtData(somarDias(l.periodo!.fim, 1))}</span>
+                            ) : (
+                              (fat?.vencimento ?? l.vencimento) && <span className="block text-xs text-muted-foreground">vence {fmtData(fat?.vencimento ?? l.vencimento!)}</span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    )}
                     <TableCell className="text-sm">
                       <SeloSituacao situacao={l.situacao} />
                       {fat?.pedido && (
@@ -223,14 +235,17 @@ export default async function Pagina({ searchParams }: Props) {
                     </TableCell>
                     <TableCell className="pr-3">
                       <span className="flex items-center justify-end gap-1">
-                        {podeFaturar && l.situacao === "PENDENTE" && l.calculo && <BotaoFaturar empresaId={l.empresaId} depositanteId={l.depositanteId} competencia={dados.competencia} depositante={l.depositante} valor={l.calculo.valor} />}
-                        {podeFaturar && opcoes && l.situacao === "SEM_TARIFA" && !l.tarifa && (
-                          <BotaoNovaTarifa opcoes={opcoes} depositante={{ id: l.depositanteId, nome: l.depositante, empresaId: l.empresaId }} rotulo="Tarifa" tamanho="sm" />
+                        {podeFaturar && l.situacao === "PENDENTE" && l.calculo && l.periodo && (
+                          <BotaoFaturar empresaId={l.empresaId} depositanteId={l.depositanteId} periodoInicio={l.periodo.inicio} depositante={l.depositante} valor={l.calculo.valor} />
                         )}
+                        {podeFaturar && opcoes && semTarifa && !l.tarifa && (
+                          <BotaoNovaTarifa opcoes={opcoes} depositante={{ id: l.depositanteId, nome: l.depositante, empresaId: l.empresaId, inicio: primeira }} rotulo="Tarifa" tamanho="sm" />
+                        )}
+                        {semTarifa && l.tarifa && !l.tarifa.ativo && <Selo>tarifa suspensa</Selo>}
                         <MenuLinhaFaturamento
                           depositante={l.depositante}
-                          competencia={dados.competencia}
-                          csv={csv(l.depositanteId)}
+                          rotulo={l.periodo ? `${fmtData(l.periodo.inicio)} a ${fmtData(l.periodo.fim)}` : "últimos 30 dias"}
+                          csv={csv(l)}
                           dias={l.dias}
                           faturamento={fat ? { id: fat.id, pedidoId: fat.pedido?.id ?? null } : null}
                           podeFaturar={podeFaturar}
@@ -249,7 +264,7 @@ export default async function Pagina({ searchParams }: Props) {
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-3 py-4">
           <div className="space-y-1">
             <CardTitle className="text-base">Tarifas</CardTitle>
-            <CardDescription>Preço por posição-pallet/mês de cada depositante. O faturamento guarda a tarifa usada: mudar o preço não muda o que já foi faturado.</CardDescription>
+            <CardDescription>Preço por posição-pallet de cada depositante. O faturamento guarda a tarifa usada: mudar o preço não muda o que já foi faturado.</CardDescription>
           </div>
           {podeFaturar && opcoes && <BotaoNovaTarifa opcoes={opcoes} />}
         </CardHeader>
@@ -260,9 +275,9 @@ export default async function Pagina({ searchParams }: Props) {
             <TableHeader>
               <TableRow className="bg-muted/40">
                 <TableHead className="pl-4">Depositante</TableHead>
-                <TableHead className="text-right">Por posição/mês</TableHead>
+                <TableHead className="text-right">Por posição</TableHead>
                 <TableHead>Como conta</TableHead>
-                <TableHead>Vencimento</TableHead>
+                <TableHead>Período e vencimento</TableHead>
                 <TableHead>Serviço (NFS-e)</TableHead>
                 <TableHead className="pr-4 text-right">
                   <span className="sr-only">Ações</span>
@@ -278,10 +293,14 @@ export default async function Pagina({ searchParams }: Props) {
                     </span>
                     <span className="block text-xs text-muted-foreground">
                       desde {fmtData(t.inicio)}
+                      {t.ultimoFaturado ? ` · faturada até ${fmtData(t.ultimoFaturado)}` : ""}
                       {varios ? ` · ${t.estabelecimento}` : ""}
                     </span>
                   </TableCell>
-                  <TableCell className="text-right text-sm tabular-nums">{fmtMoeda(t.valorPosicao)}</TableCell>
+                  <TableCell className="text-right text-sm tabular-nums">
+                    {fmtMoeda(t.valorPosicao)}
+                    <span className="block text-xs text-muted-foreground">{t.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"}</span>
+                  </TableCell>
                   <TableCell className="text-sm">
                     {ROTULO_METODO_CURTO[t.metodo]}
                     <span className="block text-xs text-muted-foreground">
@@ -289,8 +308,12 @@ export default async function Pagina({ searchParams }: Props) {
                     </span>
                   </TableCell>
                   <TableCell className="text-sm">
-                    dia {t.diaVencimento}
-                    <span className="block text-xs text-muted-foreground">{t.gerarCobranca ? "com boleto/Pix" : "sem boleto/Pix"}</span>
+                    <span className="flex items-center gap-1">
+                      <CalendarClock className="size-3.5 text-muted-foreground" aria-hidden /> {t.periodo === "DIAS30" ? "30 dias, vencido" : "mês do calendário"}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      vence {t.prazoPagamento} {t.prazoPagamento === 1 ? "dia" : "dias"} após o período · {t.gerarCobranca ? "com boleto/Pix" : "sem boleto/Pix"}
+                    </span>
                   </TableCell>
                   <TableCell className="max-w-56 truncate text-sm">{t.produto ?? <span className="text-[oklch(0.5_0.13_65)]">sem serviço: a NFS-e não sai</span>}</TableCell>
                   <TableCell className="pr-4 text-right">{podeFaturar && opcoes && <AcoesTarifa tarifa={t} opcoes={opcoes} />}</TableCell>

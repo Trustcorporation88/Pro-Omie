@@ -1892,14 +1892,16 @@ model TarifaArmazem {
   minimoPosicoes   Int?
   /// posições reservadas para o depositante contam mesmo vazias
   cobrarReservadas Boolean  @default(true)
-  /// início da cobrança: os dias antes dele não entram
+  /// DIAS30: períodos de 30 dias contados do início (cobrados vencidos, ao fim de cada período). MES: mês do calendário.
+  periodo          String   @default("DIAS30")
+  /// início da cobrança: os períodos de 30 dias contam a partir dele (em geral, a primeira entrada); os dias antes não entram
   inicio           DateTime @db.Date
   /// serviço do cadastro (dá o código de tributação da NFS-e)
   produtoId        String?
   produto          Produto? @relation(fields: [produtoId], references: [id])
   descricao        String   @default("Armazenagem de mercadorias")
-  /// dia do vencimento no mês seguinte ao da competência (1 a 28)
-  diaVencimento    Int      @default(10)
+  /// prazo de pagamento: dias depois do fim do período
+  prazoPagamento   Int      @default(10)
   categoriaId      String?
   contaBancariaId  String?
   formaPagamentoId String?
@@ -1924,13 +1926,16 @@ model FaturamentoArmazem {
   depositante      Pessoa         @relation(fields: [depositanteId], references: [id])
   tarifaId         String?
   tarifa           TarifaArmazem? @relation(fields: [tarifaId], references: [id], onDelete: SetNull)
-  /// primeiro dia do mês da competência
-  competencia      DateTime       @db.Date
+  /// período cobrado (inclusive): 30 dias contados do início da tarifa, ou o mês do calendário
+  periodoInicio    DateTime       @db.Date
+  periodoFim       DateTime       @db.Date
+  tipoPeriodo      String         @default("DIAS30")
   metodo           String
   valorPosicao     Decimal        @db.Decimal(14, 2)
   minimoPosicoes   Int?
   cobrarReservadas Boolean
-  diasMes          Int
+  /// divisor do proporcional: dias do período (30, ou os dias do mês)
+  diasPeriodo      Int
   diasVigencia     Int
   /// dias sem fotografia (repetiram o dia anterior)
   diasRepetidos    Int            @default(0)
@@ -1950,8 +1955,8 @@ model FaturamentoArmazem {
   criadoPorId      String?
   createdAt        DateTime       @default(now())
 
-  @@unique([empresaId, depositanteId, competencia])
-  @@index([empresaId, competencia])
+  @@unique([empresaId, depositanteId, periodoInicio])
+  @@index([empresaId, periodoFim])
   @@map("faturamentos_armazem")
 }
 
