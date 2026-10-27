@@ -282,7 +282,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: t.depositanteId,
       depositante: nomePessoa(t.depositante),
       documento: t.depositante.documento,
-      periodo: { numero: periodo.numero, inicio: periodo.inicio, fim: periodo.fim, rotulo: rotuloPeriodo(periodo, tc.periodo), tipo: tc.periodo },
+      periodo: { numero: periodo.numero, inicio: periodo.inicio, fim: periodo.fim, rotulo: rotuloPeriodo(periodo, tc.periodo, tc.metodo), tipo: tc.periodo },
       dias,
       foraPosicaoDia: dias.reduce((a, d) => a + d.volumesForaPosicao, 0),
       tarifa: resumoTarifa(t),
@@ -311,7 +311,7 @@ export async function carregarFaturamento(f: FiltrosFaturamento) {
       depositanteId: x.depositanteId,
       depositante: nomePessoa(x.depositante),
       documento: x.depositante.documento,
-      periodo: { numero: 0, inicio, fim, rotulo: rotuloPeriodo({ inicio, fim }, x.tipoPeriodo === "MES" ? "MES" : "DIAS30"), tipo: (x.tipoPeriodo === "MES" ? "MES" : "DIAS30") as TipoPeriodo },
+      periodo: { numero: 0, inicio, fim, rotulo: rotuloPeriodo({ inicio, fim }, x.tipoPeriodo === "MES" ? "MES" : "DIAS30", ehMetodo(x.metodo) ? x.metodo : undefined), tipo: (x.tipoPeriodo === "MES" ? "MES" : "DIAS30") as TipoPeriodo },
       dias: [],
       foraPosicaoDia: 0,
       tarifa: t ? resumoTarifa(t) : null,
@@ -456,7 +456,7 @@ export async function gerarFaturamentoArmazem(p: { empresaId: string; depositant
   const tarifa = tarifaCalculo(t);
   const periodo = periodosDaTarifa({ periodo: tarifa.periodo, inicio: tarifa.inicio }, p.periodoInicio).find((x) => x.inicio === p.periodoInicio);
   if (!periodo) throw new ErroAcao(`${dataBr(p.periodoInicio)} não é o começo de um período desta tarifa.`);
-  const rotulo = rotuloPeriodo(periodo, tarifa.periodo);
+  const rotulo = rotuloPeriodo(periodo, tarifa.periodo, tarifa.metodo);
   if (periodo.fim >= hoje) throw new ErroAcao(`O período de ${rotulo} ainda não terminou: a cobrança é feita vencida, a partir de ${dataBr(somarDias(periodo.fim, 1))}.`);
   const ja = await prisma.faturamentoArmazem.findUnique({ where: { empresaId_depositanteId_periodoInicio: { empresaId: p.empresaId, depositanteId: p.depositanteId, periodoInicio: isoParaDate(periodo.inicio) } }, include: { pedido: { select: { numero: true } } } });
   if (ja) throw new ErroAcao(`O período de ${rotulo} já foi faturado${ja.pedido ? ` (pedido nº ${String(ja.pedido.numero).padStart(4, "0")})` : ""}.`);
@@ -541,7 +541,7 @@ export async function desfazerFaturamentoArmazem(id: string, escopoIds: string[]
   const f = await prisma.faturamentoArmazem.findFirst({ where: { id, empresaId: { in: escopoIds } }, include: { pedido: { select: { id: true, numero: true, status: true } }, depositante: { select: { nome: true, nomeFantasia: true } } } });
   if (!f) throw new ErroAcao("Faturamento não encontrado nesta empresa.");
   const periodo = { inicio: iso(f.periodoInicio), fim: iso(f.periodoFim) };
-  const rotulo = rotuloPeriodo(periodo, f.tipoPeriodo === "MES" ? "MES" : "DIAS30");
+  const rotulo = rotuloPeriodo(periodo, f.tipoPeriodo === "MES" ? "MES" : "DIAS30", ehMetodo(f.metodo) ? f.metodo : undefined);
   const pedidoId = f.pedido?.id ?? null;
   if (pedidoId) {
     const [nfse, nfe] = await Promise.all([

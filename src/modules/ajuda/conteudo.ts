@@ -713,6 +713,7 @@ export const MANUAL: Secao[] = [
         caminhos: ["/servicos/armazem/faturamento"],
         blocos: [
           texto("A armazenagem é cobrada por palete, todo mês e vencida: no fim de cada mês o sistema faz a **apuração** da quantidade de paletes armazenados de cada depositante, e a tarifa transforma essa quantidade no valor a cobrar. A fotografia dos paletes é feita de hora em hora (vale a última do dia); a apuração usa a do último dia do mês."),
+          texto("A apuração olha só o último dia do mês: quem entra no fim do mês paga o **mês cheio** pelos paletes que estão no armazém nesse dia, e o palete que **entra e sai dentro do mesmo mês não é cobrado**. No primeiro mês, a nota sai com o mês por extenso (por exemplo, outubro de 2026), mesmo que a mercadoria tenha chegado no dia 27."),
           lista(
             [
               "Cada **pallet** conferido do depositante conta como um palete, esteja numa posição, sem endereço ou na doca.",
