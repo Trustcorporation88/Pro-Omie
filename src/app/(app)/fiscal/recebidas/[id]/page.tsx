@@ -16,6 +16,8 @@ import { obterRecebida, opcoesLancamento } from "@/modules/fiscal/consultas";
 import { EntradaNota } from "@/components/estoque/entrada-nota";
 import { sugestoesEntradaNota } from "@/modules/estoque/entrada-nota";
 import { escopoEmpresa } from "@/lib/auth/empresa";
+import { BotaoReceberNota } from "@/components/armazem/recebimento";
+import { numeroRecebimento } from "@/modules/armazem/tipos";
 import { ROTULO_DIRECAO, ROTULO_EVENTO, ROTULO_MANIFESTACAO, ROTULO_MOTOR, ROTULO_TIPO_DOC } from "@/modules/fiscal/tipos";
 
 export const metadata: Metadata = { title: "Nota recebida" };
@@ -43,9 +45,13 @@ export default async function Pagina({ params }: Props) {
   const autorizada = n.situacao === "AUTORIZADO";
   const recusada = n.manifestacao === "DESCONHECIMENTO" || n.manifestacao === "NAO_REALIZADA";
   const podeManifestar = pode(u.papel, "fiscal:editar") && n.tipo === "NFE" && entrada && autorizada;
-  const podeLancar = pode(u.papel, "fiscal:editar") && pode(u.papel, "financeiro:editar") && entrada && autorizada && !n.lancadoEm && !recusada && (n.valor ?? 0) > 0;
+  // remessa para armazenagem: a mercadoria é do depositante (armazém geral), não é compra nem conta a pagar
+  const remessaArmazem = n.tipo === "NFE" && n.armazenagem;
+  const podeLancar = pode(u.papel, "fiscal:editar") && pode(u.papel, "financeiro:editar") && entrada && autorizada && !n.lancadoEm && !recusada && (n.valor ?? 0) > 0 && !remessaArmazem;
   const opcoes = podeLancar ? await opcoesLancamento(n.estabelecimento.matrizId) : null;
-  const entradaEstoque = n.tipo === "NFE" && entrada && pode(u.papel, "estoque:ver") ? await sugestoesEntradaNota(id, (await escopoEmpresa()).ids).catch(() => null) : null;
+  const entradaEstoque = n.tipo === "NFE" && entrada && !remessaArmazem && pode(u.papel, "estoque:ver") ? await sugestoesEntradaNota(id, (await escopoEmpresa()).ids).catch(() => null) : null;
+  const blocoArmazem = pode(u.papel, "armazem:ver") && (remessaArmazem || n.tipo === "CTE" || !!n.recebimentoArmazem);
+  const podeReceber = pode(u.papel, "armazem:editar") && autorizada && n.completo && !recusada && !n.recebimentoArmazem;
   const titulo = `${ROTULO_TIPO_DOC[n.tipo]}${n.numero ? ` nº ${n.numero}` : ""}${n.serie ? ` · série ${n.serie}` : ""}`;
   const emissao = n.emitidoEm ? dateParaISO(new Date(n.emitidoEm)) : hojeISO();
 
@@ -102,6 +108,28 @@ export default async function Pagina({ params }: Props) {
               Por enquanto só chegou o resumo da nota. A SEFAZ libera o XML completo (itens, impostos e duplicatas) depois da ciência ou da confirmação; ele
               aparece aqui na busca seguinte.
             </span>
+          </div>
+        )}
+
+        {blocoArmazem && (
+          <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              <strong>Armazém geral.</strong>{" "}
+              {n.recebimentoArmazem ? (
+                <>
+                  Esta nota já deu entrada no armazém:{" "}
+                  <Link href={`/servicos/armazem/recebimentos/${n.recebimentoArmazem.id}`} className="font-medium underline">
+                    recebimento {numeroRecebimento(n.recebimentoArmazem.numero)}
+                  </Link>
+                  {n.recebimentoArmazem.status === "CONFERENCIA" ? " (em conferência)." : " (conferido)."}
+                </>
+              ) : remessaArmazem ? (
+                "Remessa para armazenagem (CFOP 5.905/6.905): a mercadoria é do depositante, não é compra. Dê entrada no armazém para conferir em caixas e pallets e endereçar."
+              ) : (
+                "CT-e de transporte: se a carga é de um depositante, dê entrada no armazém (as NF-e transportadas que a busca já trouxe entram junto)."
+              )}
+            </span>
+            {podeReceber && <BotaoReceberNota documentoId={n.id} />}
           </div>
         )}
 

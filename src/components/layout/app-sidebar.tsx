@@ -38,6 +38,10 @@ import {
   UserCog,
   Users,
   Wallet,
+  Warehouse,
+  ClipboardCheck,
+  PackageOpen,
+  MapPin,
   type LucideIcon,
 } from "lucide-react";
 import {
@@ -94,6 +98,10 @@ const ICONES: Record<string, LucideIcon> = {
   UserCog,
   Users,
   Wallet,
+  Warehouse,
+  ClipboardCheck,
+  PackageOpen,
+  MapPin,
 };
 
 export function AppSidebar({
@@ -168,7 +176,7 @@ export function AppSidebar({
         })}
       </SidebarContent>
       <SidebarFooter className="px-4 py-3 text-[11px] opacity-50 group-data-[collapsible=icon]:hidden">
-        Financeiro · vendas · estoque · fiscal · serviços
+        Financeiro · vendas · estoque · fiscal · serviços · armazém
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

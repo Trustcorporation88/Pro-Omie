@@ -56,6 +56,10 @@ export const NAVEGACAO: GrupoNav[] = [
     itens: [
       { titulo: "Contratos recorrentes", href: "/cadastros/contratos", icone: "Repeat", permissao: "cadastros:ver" },
       { titulo: "Ordens de serviço", href: "/cadastros/ordens", icone: "Wrench", permissao: "cadastros:ver" },
+      { titulo: "Itens armazenados", href: "/servicos/armazem", icone: "Warehouse", permissao: "armazem:ver" },
+      { titulo: "Recebimentos (armazém)", href: "/servicos/armazem/recebimentos", icone: "ClipboardCheck", permissao: "armazem:ver" },
+      { titulo: "Caixas e pallets", href: "/servicos/armazem/volumes", icone: "PackageOpen", permissao: "armazem:ver" },
+      { titulo: "Endereços do armazém", href: "/servicos/armazem/enderecos", icone: "MapPin", permissao: "armazem:ver" },
     ],
   },
   {

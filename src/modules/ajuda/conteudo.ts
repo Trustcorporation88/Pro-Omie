@@ -73,10 +73,10 @@ export const MANUAL: Secao[] = [
             ["Perfil", "O que pode fazer"],
             [
               ["Administrador", "Tudo, inclusive empresas, certificado digital, emissão de notas, cobrança, usuários, e-mails e auditoria. O administrador do grupo vê todas as empresas; o administrador de uma empresa vê e gerencia só a dele."],
-              ["Financeiro", "Contas a receber e a pagar, cobranças, bancos e conciliação, relatórios, faturamento de pedidos, estoque, emissão de NF-e e NFS-e e notas recebidas. Não mexe em configurações nem em usuários."],
-              ["Vendas", "CRM, propostas e pedidos e os cadastros de clientes e produtos; consulta o estoque. Para faturar um pedido, precisa de alguém do Financeiro."],
-              ["Estoque", "Saldos, entradas, ajustes, importação de planilha e entrada no estoque pela nota de compra; consulta pedidos, cadastros e notas."],
-              ["Contador (somente leitura)", "Consulta o financeiro, os relatórios, as vendas, o estoque e as notas e baixa o fechamento mensal. Não altera nada."],
+              ["Financeiro", "Contas a receber e a pagar, cobranças, bancos e conciliação, relatórios, faturamento de pedidos, estoque, armazém geral, emissão de NF-e e NFS-e e notas recebidas. Não mexe em configurações nem em usuários."],
+              ["Vendas", "CRM, propostas e pedidos e os cadastros de clientes e produtos; consulta o estoque e o armazém geral. Para faturar um pedido, precisa de alguém do Financeiro."],
+              ["Estoque", "Saldos, entradas, ajustes, importação de planilha, entrada no estoque pela nota de compra e o armazém geral (recebimento, conferência, endereços e saída); consulta pedidos, cadastros e notas."],
+              ["Contador (somente leitura)", "Consulta o financeiro, os relatórios, as vendas, o estoque, o armazém geral e as notas e baixa o fechamento mensal. Não altera nada."],
             ],
           ),
         ],
@@ -555,6 +555,171 @@ export const MANUAL: Secao[] = [
   },
 
   {
+    id: "armazem",
+    titulo: "Armazém geral",
+    resumo: "Mercadorias dos depositantes: recebimento pela NF-e ou CT-e, conferência em caixas e pallets numerados com código e lote, endereços do armazém, localização, transferência, saída e etiquetas com QR.",
+    icone: "Warehouse",
+    permissao: "armazem:ver",
+    quem: "Estoque, Financeiro e administradores operam; Vendas e Contador consultam.",
+    caminhos: ["/servicos/armazem"],
+    topicos: [
+      {
+        id: "como-funciona",
+        titulo: "Como funciona",
+        caminhos: ["/servicos/armazem"],
+        blocos: [
+          texto("O armazém guarda mercadorias de **depositantes** (os clientes donos da mercadoria). Cada entrada é um **recebimento**. Na conferência, o que chegou é separado em **caixas** e **pallets** numerados (CX-0001, PL-0001), com o código, o lote e a quantidade de cada item, e cada volume vai para um **endereço** do armazém (ex.: A-01-02)."),
+          passos(
+            [
+              "Cadastre as posições em [[/servicos/armazem/enderecos]] (uma vez só).",
+              "Crie o recebimento com o XML da NF-e de remessa e/ou do CT-e em [[/servicos/armazem/recebimentos]].",
+              "Na conferência, crie as caixas e os pallets e lance o que vai dentro de cada um.",
+              "Confira o quadro **Esperado × conferido** e clique em **Concluir conferência**.",
+              "Endereçe os volumes, um por um ou vários de uma vez.",
+              "Consulte em [[/servicos/armazem]] onde está cada código e lote.",
+            ],
+            "O caminho de uma carga",
+          ),
+          dica("Os itens chegaram misturados, com vários códigos e lotes na mesma caixa? Monte as caixas do jeito que elas vão ficar guardadas (por exemplo, a caixa 01 com os códigos X, Y e Z). O sistema soma por código e lote e compara com a nota."),
+        ],
+      },
+      {
+        id: "enderecos",
+        titulo: "Endereços do armazém",
+        caminhos: ["/servicos/armazem/enderecos"],
+        blocos: [
+          texto("Endereço é a posição predeterminada onde ficam os volumes: rua, módulo e nível (A-01-02), com etiqueta própria."),
+          passos([
+            "Em [[/servicos/armazem/enderecos]], clique em **Gerar endereços**.",
+            "Informe as **Ruas** (A-C, A,B,D ou 1-3), os **Módulos** e os **Níveis** (e as **Posições**, se houver). A prévia mostra quantos endereços serão criados.",
+            "Escolha o **Tipo** e, se quiser limitar quantos volumes cabem em cada posição, a **Capacidade (volumes)**. Clique em **Gerar**.",
+          ]),
+          lista([
+            "**Novo endereço** cria uma posição avulsa.",
+            "**Reservado para**: só volumes daquele depositante entram na posição.",
+            "**Etiquetas** imprime as etiquetas das posições, com QR, dez por folha A4 (da rua escolhida no filtro). A etiqueta de uma posição só sai no menu da linha.",
+            "Posição com volumes não pode ser inativada nem excluída.",
+          ]),
+        ],
+      },
+      {
+        id: "recebimento",
+        titulo: "Recebimento pela NF-e ou CT-e",
+        caminhos: ["/servicos/armazem/recebimentos"],
+        blocos: [
+          passos([
+            "Em [[/servicos/armazem/recebimentos]], clique em **Novo recebimento**.",
+            "Em **Pela NF-e ou CT-e (XML)**, escolha os arquivos (podem ir a NF-e e o CT-e juntos), confira a **Chegada** e clique em **Criar recebimento**.",
+            "O depositante (o emitente da NF-e ou, sem NF-e, o remetente do CT-e) é achado pelo CNPJ e cadastrado se for novo. Os itens da nota viram os **itens esperados**, com o lote quando a nota traz.",
+          ]),
+          lista([
+            "**Sem documento**: escolha o **Depositante**. Serve para o inventário do que já está no armazém ou para mercadoria cuja nota ainda não chegou.",
+            "**Notas de remessa aguardando recebimento**: as NF-e de remessa para armazenagem (CFOP 5.905/6.905) que a busca de notas trouxe aparecem no topo da lista, com o botão **Receber**. Na tela da nota, o botão é **Receber no armazém**.",
+            "CT-e cujas NF-e a busca já trouxe: as notas entram junto, com os itens.",
+            "**Juntar NF-e ou CT-e** (em **Mais**) acrescenta outra nota do mesmo depositante, ou o CT-e, a um recebimento em conferência.",
+            "A mesma nota não entra duas vezes no armazém.",
+          ]),
+          atencao("Remessa para armazenagem não é compra: essas notas não aparecem em [[/estoque/compras]] e não pedem lançamento no contas a pagar nem entrada no estoque próprio."),
+        ],
+      },
+      {
+        id: "conferencia",
+        titulo: "Conferência em caixas e pallets",
+        blocos: [
+          passos([
+            "No recebimento, clique em **Nova caixa** ou **Novo pallet** (dá para criar vários de uma vez). Cada volume ganha o número da etiqueta: CX-0001, PL-0001.",
+            "No volume, clique em **Lançar itens** (depois, **Conteúdo**) e preencha uma linha por item: **Código**, **Lote** e **Quantidade**. **Enter** na quantidade abre a linha seguinte.",
+            "Código que não é do depositante pede a **Descrição** e vira produto dele.",
+            "**Colocar o que falta** põe no volume tudo o que ainda não está em nenhuma caixa ou pallet (quando a nota inteira vai para um pallet, por exemplo).",
+            "Acompanhe o quadro **Esperado × conferido**: **Confere**, **Falta**, **Sobra** ou **Fora da nota**, por código e lote (nota sem lote: pelo total do código).",
+            "Clique em **Concluir conferência**. Com divergência, o sistema mostra o resumo e pede uma explicação, que fica no histórico.",
+          ]),
+          lista([
+            "Itens com o mesmo código e lote no mesmo volume são somados.",
+            "Depois da conferência, mudar o conteúdo de um volume é **ajuste**: pede o motivo e fica no histórico.",
+            "**Reabrir conferência** (em **Mais**) volta os volumes do recebimento para em conferência.",
+            "**Etiquetas dos volumes** (em **Mais**) imprime as etiquetas de todos os volumes do recebimento.",
+          ]),
+        ],
+      },
+      {
+        id: "enderecamento",
+        titulo: "Endereçar caixas e pallets",
+        caminhos: ["/servicos/armazem/volumes"],
+        blocos: [
+          passos(
+            [
+              "Em [[/servicos/armazem/volumes]], na aba **Sem endereço**, marque os volumes.",
+              "Clique em **Endereçar**, digite o código da posição e escolha. A lista mostra quantos volumes já estão em cada posição, com as reservadas para o depositante primeiro.",
+              "Clique em **Colocar em …**.",
+            ],
+            "Vários de uma vez",
+          ),
+          lista([
+            "Um volume só: **Endereçar** (ou **Mudar endereço**) no próprio volume. **Tirar do endereço** volta para sem endereço.",
+            "Na tela de um endereço (o QR da etiqueta da posição abre ela), **Colocar aqui** endereça a caixa ou o pallet digitado ou lido.",
+            "O sistema não deixa passar da **capacidade** nem pôr volume de outro depositante em posição reservada.",
+          ]),
+        ],
+      },
+      {
+        id: "consulta",
+        titulo: "Onde está cada item",
+        blocos: [
+          texto("Em [[/servicos/armazem]], a lista mostra cada item guardado com o volume, o endereço e o recebimento (e a NF-e) de origem."),
+          lista([
+            "Busque por código, descrição, lote, caixa (CX-0012) ou endereço.",
+            "**Por código e lote** junta as quantidades e mostra em quais volumes e endereços o item está.",
+            "**Por depositante** resume as caixas, os pallets e o valor declarado (o das notas) de cada cliente.",
+            "**CSV** exporta a lista do filtro para o Excel.",
+            "**Localizar**: digite (ou leia com o leitor) o código da caixa, do pallet, do endereço ou do recebimento (REC-0001), ou o QR da etiqueta, e vá direto para a tela.",
+          ]),
+          dica("No celular, o QR da etiqueta abre a tela da caixa ou da posição (depois de entrar no sistema)."),
+        ],
+      },
+      {
+        id: "transferencia-saida",
+        titulo: "Transferir itens e dar saída",
+        blocos: [
+          passos(
+            [
+              "No volume, em **Mais**, clique em **Transferir itens**.",
+              "Marque o que vai passar e ajuste as quantidades.",
+              "Escolha **Volume novo** (caixa ou pallet) ou **Volume existente** do mesmo depositante e clique em **Transferir**.",
+            ],
+            "Transferir",
+          ),
+          passos(
+            [
+              "Marque os volumes em [[/servicos/armazem/volumes]] (ou abra o volume) e clique em **Dar saída**.",
+              "Informe a **Data** e o **Documento da saída** (ex.: NF-e de retorno nº 123) e clique em **Registrar saída**. O volume sai inteiro e libera o endereço.",
+            ],
+            "Saída",
+          ),
+          lista([
+            "Para tirar só parte de um volume, transfira antes esses itens para um volume novo e dê saída nele.",
+            "Cada item guarda o recebimento e a NF-e de origem, que servem para a nota de retorno.",
+            "**Desfazer saída** (com motivo) traz o volume de volta ao armazém, sem endereço.",
+            "O **Histórico** do volume mostra conferência, ajustes, endereços, transferências e saída, com data e usuário.",
+          ]),
+          atencao("A NF-e de retorno da mercadoria ao depositante (CFOP 5.906/6.906) ainda é emitida fora deste módulo. Confirme a tributação com o contador."),
+        ],
+      },
+      {
+        id: "etiquetas",
+        titulo: "Etiquetas",
+        blocos: [
+          lista([
+            "Caixa ou pallet: **Etiqueta 10 × 15 cm** (impressora térmica) ou **Etiqueta em folha A4** (duas por folha), no menu **Mais** do volume. Várias de uma vez: marque os volumes em [[/servicos/armazem/volumes]] e clique em **Etiquetas**, ou use **Etiquetas dos volumes** no recebimento.",
+            "A etiqueta do volume traz o número grande (CX-0001), o depositante, o recebimento e as NF-e, o endereço, o conteúdo (código, lote e quantidade) e o QR.",
+            "Endereço: **Etiqueta** na tela do endereço ou **Etiquetas** na lista de endereços, dez por folha A4.",
+          ]),
+        ],
+      },
+    ],
+  },
+
+  {
     id: "fiscal",
     titulo: "Fiscal",
     resumo: "Emissão de NF-e e NFS-e pelos pedidos, notas recebidas dos fornecedores e o fechamento mensal para o contador.",
@@ -889,6 +1054,7 @@ export const MANUAL: Secao[] = [
     quem: "Todos.",
     caminhos: [],
     topicos: [
+      { id: "onde-esta", titulo: "Onde está o código X, lote Y, no armazém?", blocos: [texto("Em [[/servicos/armazem]], busque pelo código ou pelo lote e escolha **Por código e lote**: a lista mostra a quantidade e cada caixa ou pallet com o endereço.")] },
       { id: "senha", titulo: "Esqueci a senha ou o acesso foi bloqueado", blocos: [texto("Use **Esqueci minha senha** na tela de entrada. Depois de 5 tentativas erradas, o acesso fica bloqueado por 15 minutos; um administrador pode liberar antes, em [[/configuracoes/usuarios]].")] },
       { id: "nao-vejo", titulo: "Não vejo uma empresa, um menu ou um botão", blocos: [texto("O menu mostra só o que o seu perfil pode usar, e cada usuário só vê as empresas liberadas para ele. Confira a empresa ativa no topo do menu e peça a um administrador para ajustar o seu acesso.")] },
       { id: "faturar", titulo: "O pedido não fatura", blocos: [texto("Ou faltou saldo de algum material (a mensagem lista o que falta: lance a entrada antes), ou o seu perfil não inclui o Financeiro: peça a alguém do Financeiro para faturar.")] },

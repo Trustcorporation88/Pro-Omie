@@ -16,6 +16,8 @@ export type Permissao =
   | "estoque:editar"
   | "fiscal:ver"
   | "fiscal:editar"
+  | "armazem:ver"
+  | "armazem:editar"
   | "config:admin";
 
 const MATRIZ: Record<PapelUsuario, Permissao[]> = {
@@ -33,6 +35,8 @@ const MATRIZ: Record<PapelUsuario, Permissao[]> = {
     "estoque:editar",
     "fiscal:ver",
     "fiscal:editar",
+    "armazem:ver",
+    "armazem:editar",
     "config:admin",
   ],
   FINANCEIRO: [
@@ -49,13 +53,16 @@ const MATRIZ: Record<PapelUsuario, Permissao[]> = {
     "estoque:editar",
     "fiscal:ver",
     "fiscal:editar",
+    "armazem:ver",
+    "armazem:editar",
   ],
   // notas recebidas: financeiro manifesta e lança no contas a pagar; estoque e contador só consultam
   // vendas cria propostas e pedidos; faturar (gerar contas a receber) exige também financeiro:editar
   // vendas consulta o saldo para vender; a baixa no estoque acontece sozinha ao faturar
-  VENDAS: ["cadastros:ver", "cadastros:editar", "vendas:ver", "vendas:editar", "crm:ver", "crm:editar", "estoque:ver"],
-  ESTOQUE: ["cadastros:ver", "cadastros:editar", "vendas:ver", "estoque:ver", "estoque:editar", "fiscal:ver"],
-  CONTADOR: ["financeiro:ver", "cadastros:ver", "relatorios:ver", "vendas:ver", "estoque:ver", "fiscal:ver"],
+  // armazém geral: estoque (operação) e financeiro editam; vendas e contador consultam o que está guardado
+  VENDAS: ["cadastros:ver", "cadastros:editar", "vendas:ver", "vendas:editar", "crm:ver", "crm:editar", "estoque:ver", "armazem:ver"],
+  ESTOQUE: ["cadastros:ver", "cadastros:editar", "vendas:ver", "estoque:ver", "estoque:editar", "fiscal:ver", "armazem:ver", "armazem:editar"],
+  CONTADOR: ["financeiro:ver", "cadastros:ver", "relatorios:ver", "vendas:ver", "estoque:ver", "fiscal:ver", "armazem:ver"],
 };
 
 export function pode(papel: PapelUsuario | null | undefined, permissao: Permissao): boolean {
