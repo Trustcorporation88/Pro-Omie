@@ -1876,7 +1876,7 @@ model MovimentoArmazem {
 
 // ───────────────────────── Armazém geral: cobrança por posição-pallet ─────────────────────────
 
-/// Tarifa de armazenagem do depositante no estabelecimento: R$ por posição-pallet por mês e como contar as posições.
+/// Tarifa de armazenagem do depositante no estabelecimento: R$ por palete no período e como contar os paletes.
 model TarifaArmazem {
   id               String   @id @default(cuid())
   /// estabelecimento que presta o serviço (emite o pedido e a nota)
@@ -1884,16 +1884,16 @@ model TarifaArmazem {
   empresa          Empresa  @relation(fields: [empresaId], references: [id])
   depositanteId    String
   depositante      Pessoa   @relation(fields: [depositanteId], references: [id])
-  /// R$ por posição-pallet por mês
+  /// R$ por palete (posição-pallet) no período
   valorPosicao     Decimal  @db.Decimal(14, 2)
-  /// PRO_RATA: soma das posições de cada dia ÷ dias do mês (posição-dia). PICO: maior ocupação do mês.
-  metodo           String   @default("PRO_RATA")
+  /// FIM_PERIODO: paletes no último dia do período (apuração do fim do mês). PRO_RATA: palete-dia ÷ dias do período. PICO: maior quantidade do período.
+  metodo           String   @default("FIM_PERIODO")
   /// mínimo de posições cobradas no mês (posições contratadas)
   minimoPosicoes   Int?
   /// posições reservadas para o depositante contam mesmo vazias
-  cobrarReservadas Boolean  @default(true)
+  cobrarReservadas Boolean  @default(false)
   /// DIAS30: períodos de 30 dias contados do início (cobrados vencidos, ao fim de cada período). MES: mês do calendário.
-  periodo          String   @default("DIAS30")
+  periodo          String   @default("MES")
   /// início da cobrança: os períodos de 30 dias contam a partir dele (em geral, a primeira entrada); os dias antes não entram
   inicio           DateTime @db.Date
   /// serviço do cadastro (dá o código de tributação da NFS-e)
@@ -1945,6 +1945,8 @@ model FaturamentoArmazem {
   reservadasDia    Int            @default(0)
   pico             Int
   posicoesCobradas Decimal        @db.Decimal(12, 4)
+  /// paletes apurados no último dia do período
+  apurado          Int            @default(0)
   valor            Decimal        @db.Decimal(14, 2)
   vencimento       DateTime       @db.Date
   pedidoId         String?        @unique
@@ -1960,20 +1962,20 @@ model FaturamentoArmazem {
   @@map("faturamentos_armazem")
 }
 
-/// Fotografia das posições ocupadas por depositante num dia (a última do dia vale). Base da cobrança por posição-pallet.
+/// Fotografia dos paletes de cada depositante num dia (a última do dia vale). Base da apuração mensal da armazenagem.
 model OcupacaoArmazem {
   id                 String   @id @default(cuid())
   /// estabelecimento
   empresaId          String
   depositanteId      String
   dia                DateTime @db.Date
-  /// endereços ocupados por volumes do depositante (a doca não conta)
+  /// paletes do depositante: cada palete conferido (em posição ou não) + cada posição só com caixas dele (a doca não conta como posição)
   posicoes           Int
   /// posições reservadas para o depositante e vazias
   reservadasVazias   Int      @default(0)
   /// volumes com itens no armazém (não expedidos)
   volumes            Int      @default(0)
-  /// volumes conferidos sem endereço ou na doca: não entram na cobrança
+  /// caixas conferidas sem endereço ou na doca: não entram na cobrança
   volumesForaPosicao Int      @default(0)
   /// códigos dos endereços ocupados
   enderecos          String[] @default([])

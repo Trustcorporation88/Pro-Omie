@@ -78,10 +78,10 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
     estabelecimentoId: tarifa?.empresaId ?? depositante?.empresaId ?? (opcoes.estabelecimentos.length === 1 ? opcoes.estabelecimentos[0].valor : ""),
     depositanteId: tarifa?.depositanteId ?? depositante?.id ?? null,
     valorPosicao: tarifa?.valorPosicao ?? 0,
-    metodo: (tarifa?.metodo ?? "PRO_RATA") as MetodoArmazenagem,
+    metodo: (tarifa?.metodo ?? "FIM_PERIODO") as MetodoArmazenagem,
     minimo: tarifa?.minimoPosicoes ? String(tarifa.minimoPosicoes) : "",
-    cobrarReservadas: tarifa?.cobrarReservadas ?? true,
-    periodo: (tarifa?.periodo ?? "DIAS30") as TipoPeriodo,
+    cobrarReservadas: tarifa?.cobrarReservadas ?? false,
+    periodo: (tarifa?.periodo ?? "MES") as TipoPeriodo,
     inicio: tarifa?.inicio ?? depositante?.inicio ?? opcoes.inicioPadrao,
     produtoId: tarifa?.produtoId ?? (opcoes.servicos.length === 1 ? opcoes.servicos[0].valor : ""),
     descricao: tarifa?.descricao ?? "Armazenagem de mercadorias",
@@ -140,7 +140,7 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
     <>
       <DialogHeader>
         <DialogTitle>{tarifa ? `Tarifa de ${tarifa.depositante}` : "Nova tarifa de armazenagem"}</DialogTitle>
-        <DialogDescription>Preço por posição-pallet. Todo dia o sistema fotografa as posições ocupadas pelo depositante; quando o período termina, a tarifa vira o valor da armazenagem (cobrança vencida).</DialogDescription>
+        <DialogDescription>Preço por palete. Todo dia o sistema fotografa os paletes de cada cliente; no fim do período faz a apuração, e a tarifa vira o valor da armazenagem (cobrança vencida).</DialogDescription>
       </DialogHeader>
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo id="tar-dep" rotulo="Depositante" obrigatorio erro={erros.depositanteId} className="sm:col-span-2">
@@ -158,12 +158,12 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
             valor={v.periodo}
             onChange={(x) => set("periodo", x)}
             opcoes={[
+              { valor: "MES", rotulo: "Mês do calendário (vencido)" },
               { valor: "DIAS30", rotulo: "A cada 30 dias (vencido)" },
-              { valor: "MES", rotulo: "Mês do calendário" },
             ]}
           />
         </div>
-        <Campo id="tar-valor" rotulo={v.periodo === "DIAS30" ? "Valor por posição-pallet a cada 30 dias" : "Valor por posição-pallet/mês"} obrigatorio erro={erros.valorPosicao}>
+        <Campo id="tar-valor" rotulo={v.periodo === "DIAS30" ? "Valor por palete a cada 30 dias" : "Valor por palete por mês"} obrigatorio erro={erros.valorPosicao}>
           <CampoMoeda id="tar-valor" valor={v.valorPosicao} onChange={(x) => set("valorPosicao", x)} />
         </Campo>
         <Campo
@@ -176,7 +176,7 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
               ? `Faturada até ${dataBr(tarifa.ultimoFaturado)}: o início só muda para depois disso.`
               : v.periodo === "DIAS30"
                 ? "Os períodos de 30 dias contam desta data (em geral, a primeira entrada)."
-                : "O primeiro mês é proporcional a partir desta data."
+                : "Cobra a partir desta data (em geral, a primeira entrada); cada mês é apurado no último dia."
           }
         >
           <Input
@@ -190,23 +190,26 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
           />
         </Campo>
         <div className="space-y-1.5 sm:col-span-2">
-          <p className="text-sm font-medium">Como contar as posições</p>
+          <p className="text-sm font-medium">Como contar os paletes</p>
           <Segmentado
-            rotulo="Como contar as posições"
+            rotulo="Como contar os paletes"
             valor={v.metodo}
             onChange={(x) => set("metodo", x)}
             opcoes={[
-              { valor: "PRO_RATA", rotulo: "Por dia (posição-dia)" },
-              { valor: "PICO", rotulo: "Maior ocupação do período" },
+              { valor: "FIM_PERIODO", rotulo: v.periodo === "MES" ? "Paletes no fim do mês" : "Paletes no fim do período" },
+              { valor: "PRO_RATA", rotulo: "Por dia (palete-dia)" },
+              { valor: "PICO", rotulo: "Maior quantidade do período" },
             ]}
           />
           <p className="text-xs text-muted-foreground">
-            {v.metodo === "PRO_RATA"
-              ? `Soma as posições de cada dia e divide pelos dias do período: 10 posições por 15 dias = 5 posições ${v.periodo === "DIAS30" ? "nos 30 dias" : "no mês"}.`
-              : "Cobra o maior número de posições ocupadas num mesmo dia do período."}
+            {v.metodo === "FIM_PERIODO"
+              ? `Apuração: conta os paletes armazenados no último dia ${v.periodo === "MES" ? "do mês" : "dos 30 dias"} e cobra o valor de cada um, sem proporcional.`
+              : v.metodo === "PRO_RATA"
+                ? `Soma os paletes de cada dia e divide pelos dias do período: 10 paletes por 15 dias = 5 paletes ${v.periodo === "DIAS30" ? "nos 30 dias" : "no mês"}.`
+                : "Cobra o maior número de paletes num mesmo dia do período."}
           </p>
         </div>
-        <Campo id="tar-minimo" rotulo="Mínimo de posições por período" erro={erros.minimoPosicoes} ajuda="Opcional: posições contratadas">
+        <Campo id="tar-minimo" rotulo="Mínimo de paletes por período" erro={erros.minimoPosicoes} ajuda="Opcional: paletes contratados">
           <Input id="tar-minimo" type="number" min={1} value={v.minimo} onChange={(e) => set("minimo", e.target.value)} placeholder="Sem mínimo" />
         </Campo>
         <div className="flex items-start gap-3 rounded-lg border px-3 py-2.5">
@@ -304,7 +307,7 @@ export function BotaoAtualizarFotografia() {
         iniciar(async () => {
           const r = await atualizarFotografiaArmazem();
           if (!r.ok) return void toast.error(r.erro);
-          toast.success(`Fotografia de hoje: ${r.data?.posicoes ?? 0} posições ocupadas por ${r.data?.depositantes ?? 0} depositante(s).`);
+          toast.success(`Fotografia de hoje: ${r.data?.posicoes ?? 0} paletes de ${r.data?.depositantes ?? 0} cliente(s).`);
           router.refresh();
         })
       }
@@ -440,7 +443,7 @@ export function DialogoDias({ aberto, onAbertoChange, depositante, rotulo, dias 
           <DialogTitle>
             {depositante} · {rotulo}
           </DialogTitle>
-          <DialogDescription>Posições ocupadas no fim de cada dia (a última fotografia do dia). Em cinza claro, as reservadas vazias.</DialogDescription>
+          <DialogDescription>Paletes no fim de cada dia (a última fotografia do dia). Em cinza claro, as posições reservadas vazias.</DialogDescription>
         </DialogHeader>
         <div className="space-y-1">
           {dias.map((d) => (

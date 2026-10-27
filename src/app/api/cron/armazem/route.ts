@@ -12,7 +12,7 @@ function autorizado(request: Request): boolean {
   return recebido.length === esperado.length && timingSafeEqual(recebido, esperado);
 }
 
-/** Cron da Vercel, de hora em hora: fotografa as posições ocupadas por depositante (vale a última do dia; base da cobrança por posição-pallet). */
+/** Cron da Vercel, de hora em hora: fotografa os paletes de cada depositante (vale a última do dia; base da apuração mensal da armazenagem). */
 export async function GET(request: Request) {
   if (!autorizado(request)) return Response.json({ erro: "Não autorizado." }, { status: 401 });
   const r = await fotografarOcupacao();
