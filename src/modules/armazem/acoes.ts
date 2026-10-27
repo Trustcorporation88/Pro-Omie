@@ -713,6 +713,7 @@ export async function salvarEndereco(entrada: z.input<typeof esquemaEndereco>): 
     const codigo = normalizarCodigoEndereco(d.codigo);
     if (!codigo) throw new ErroAcao("Use letras e números no código (ex.: A-01-02).", { codigo: "Código inválido." });
     const dep = await depositanteDaEmpresa(escopo, d.depositanteId);
+    if (dep && d.tipo === "DOCA") throw new ErroAcao("A doca é área de passagem: não pode ser reservada para um depositante.", { depositanteId: "Doca não é reservada." });
     const dados = { codigo, zona: d.zona ? normalizarCodigoEndereco(d.zona) || null : (codigo.split(/[-./]/)[0] ?? null), tipo: d.tipo, capacidade: d.capacidade ?? null, depositanteId: dep?.id ?? null, observacao: d.observacao || null };
     if (d.id) {
       const atual = await prisma.enderecoArmazem.findFirst({ where: { id: d.id, empresaId: { in: escopo.ids } } });
@@ -720,6 +721,7 @@ export async function salvarEndereco(entrada: z.input<typeof esquemaEndereco>): 
       const volumes = await prisma.volumeArmazem.findMany({ where: { enderecoId: atual.id, status: { not: "EXPEDIDO" } }, select: { depositanteId: true } });
       if (dados.capacidade !== null && volumes.length > dados.capacidade) throw new ErroAcao(`Há ${volumes.length} volumes neste endereço; a capacidade não pode ser menor.`, { capacidade: "Menor que a ocupação." });
       if (dados.depositanteId && volumes.some((v) => v.depositanteId !== dados.depositanteId)) throw new ErroAcao("Há volumes de outro depositante neste endereço. Tire-os antes de reservar.", { depositanteId: "Há volumes de outro depositante." });
+      if (atual.tipo === "DOCA" && dados.tipo !== "DOCA" && new Set(volumes.map((v) => v.depositanteId)).size > 1) throw new ErroAcao("Há volumes de mais de um depositante nesta doca. Tire-os antes de mudar o tipo.", { tipo: "Volumes de vários depositantes." });
       try {
         await prisma.enderecoArmazem.update({ where: { id: atual.id }, data: dados });
       } catch (e) {
@@ -767,6 +769,7 @@ export async function gerarEnderecos(entrada: z.input<typeof esquemaGerar>): Pro
     const g = gerarCodigosEnderecos(d);
     if ("erro" in g) throw new ErroAcao(g.erro);
     const dep = await depositanteDaEmpresa(escopo, d.depositanteId);
+    if (dep && d.tipo === "DOCA") throw new ErroAcao("A doca é área de passagem: não pode ser reservada para um depositante.");
     const r = await prisma.enderecoArmazem.createMany({
       data: g.codigos.map((c) => ({ empresaId: d.estabelecimentoId, codigo: c.codigo, zona: c.zona, tipo: d.tipo, capacidade: d.capacidade ?? null, depositanteId: dep?.id ?? null })),
       skipDuplicates: true,

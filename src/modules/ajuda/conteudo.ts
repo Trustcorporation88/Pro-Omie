@@ -73,9 +73,9 @@ export const MANUAL: Secao[] = [
             ["Perfil", "O que pode fazer"],
             [
               ["Administrador", "Tudo, inclusive empresas, certificado digital, emissão de notas, cobrança, usuários, e-mails e auditoria. O administrador do grupo vê todas as empresas; o administrador de uma empresa vê e gerencia só a dele."],
-              ["Financeiro", "Contas a receber e a pagar, cobranças, bancos e conciliação, relatórios, faturamento de pedidos, estoque, armazém geral, emissão de NF-e e NFS-e e notas recebidas. Não mexe em configurações nem em usuários."],
+              ["Financeiro", "Contas a receber e a pagar, cobranças, bancos e conciliação, relatórios, faturamento de pedidos, estoque, armazém geral (com tarifas e faturamento da armazenagem), emissão de NF-e e NFS-e e notas recebidas. Não mexe em configurações nem em usuários."],
               ["Vendas", "CRM, propostas e pedidos e os cadastros de clientes e produtos; consulta o estoque e o armazém geral. Para faturar um pedido, precisa de alguém do Financeiro."],
-              ["Estoque", "Saldos, entradas, ajustes, importação de planilha, entrada no estoque pela nota de compra e o armazém geral (recebimento, conferência, endereços e saída); consulta pedidos, cadastros e notas."],
+              ["Estoque", "Saldos, entradas, ajustes, importação de planilha, entrada no estoque pela nota de compra e o armazém geral (recebimento, conferência, endereços e saída; consulta o faturamento da armazenagem); consulta pedidos, cadastros e notas."],
               ["Contador (somente leitura)", "Consulta o financeiro, os relatórios, as vendas, o estoque, o armazém geral e as notas e baixa o fechamento mensal. Não altera nada."],
             ],
           ),
@@ -557,10 +557,10 @@ export const MANUAL: Secao[] = [
   {
     id: "armazem",
     titulo: "Armazém geral",
-    resumo: "Mercadorias dos depositantes: recebimento pela NF-e ou CT-e, conferência em caixas e pallets numerados com código e lote, endereços do armazém, localização, transferência, saída e etiquetas com QR.",
+    resumo: "Mercadorias dos depositantes: recebimento pela NF-e ou CT-e, conferência em caixas e pallets numerados com código e lote, endereços do armazém, localização, transferência, saída, etiquetas com QR e cobrança por posição-pallet.",
     icone: "Warehouse",
     permissao: "armazem:ver",
-    quem: "Estoque, Financeiro e administradores operam; Vendas e Contador consultam.",
+    quem: "Estoque, Financeiro e administradores operam; tarifas e faturamento ficam com o Financeiro e os administradores; Vendas e Contador consultam.",
     caminhos: ["/servicos/armazem"],
     topicos: [
       {
@@ -599,6 +599,7 @@ export const MANUAL: Secao[] = [
             "**Reservado para**: só volumes daquele depositante entram na posição.",
             "**Etiquetas** imprime as etiquetas das posições, com QR, dez por folha A4 (da rua escolhida no filtro). A etiqueta de uma posição só sai no menu da linha.",
             "Posição com volumes não pode ser inativada nem excluída.",
+            "Tipo **Doca / área de passagem**: aceita volumes de vários depositantes ao mesmo tempo (recebimento e expedição), não pode ser reservada e não entra na cobrança.",
           ]),
         ],
       },
@@ -659,6 +660,7 @@ export const MANUAL: Secao[] = [
             "Um volume só: **Endereçar** (ou **Mudar endereço**) no próprio volume. **Tirar do endereço** volta para sem endereço.",
             "Na tela de um endereço (o QR da etiqueta da posição abre ela), **Colocar aqui** endereça a caixa ou o pallet digitado ou lido.",
             "O sistema não deixa passar da **capacidade** nem pôr volume de outro depositante em posição reservada.",
+            "Cada posição guarda volumes de um só depositante (a cobrança é por posição). Só a doca aceita vários.",
           ]),
         ],
       },
@@ -703,6 +705,58 @@ export const MANUAL: Secao[] = [
             "O **Histórico** do volume mostra conferência, ajustes, endereços, transferências e saída, com data e usuário.",
           ]),
           atencao("A NF-e de retorno da mercadoria ao depositante (CFOP 5.906/6.906) ainda é emitida fora deste módulo. Confirme a tributação com o contador."),
+        ],
+      },
+      {
+        id: "cobranca",
+        titulo: "Cobrança por posição-pallet",
+        caminhos: ["/servicos/armazem/faturamento"],
+        blocos: [
+          texto("A armazenagem é cobrada por posição-pallet. De hora em hora, o sistema fotografa as posições ocupadas por cada depositante (vale a última fotografia do dia). No fim do mês, a tarifa do depositante transforma essas posições no valor do mês."),
+          lista(
+            [
+              "Cada endereço com volume do depositante vale **uma posição**, tenha um pallet ou várias caixas.",
+              "A **doca** não conta.",
+              "Volumes conferidos **sem endereço** não contam: a tela avisa quantos volumes-dia ficaram fora de posição. Endereçe-os.",
+              "Posições **reservadas** para o depositante contam mesmo vazias, se a tarifa mandar.",
+              "Dia sem fotografia (sistema fora do ar) repete o último dia fotografado e aparece marcado.",
+            ],
+            "O que conta como posição",
+          ),
+          passos(
+            [
+              "Em [[/servicos/armazem/faturamento]], clique em **Nova tarifa**.",
+              "Escolha o **Depositante**, o **Valor por posição-pallet/mês** e o **Início da cobrança**.",
+              "Em **Como contar as posições**, escolha **Por dia (posição-dia)**, que soma as posições de cada dia e divide pelos dias do mês, ou **Maior ocupação do mês**.",
+              "Se houver posições contratadas, informe o **Mínimo de posições por mês**.",
+              "Escolha o **Serviço do cadastro** (dá o código da NFS-e), o **Dia do vencimento** no mês seguinte e, se quiser, **Gerar boleto/Pix (Asaas)**. Clique em **Salvar tarifa**.",
+            ],
+            "Tarifa do depositante",
+          ),
+          tabela(
+            ["Exemplo (R$ 45,00 por posição/mês, mês de 30 dias)", "Por dia", "Maior ocupação"],
+            [
+              ["10 posições do dia 1 ao 15 e 12 do dia 16 ao 30", "330 posições-dia ÷ 30 = 11 posições: R$ 495,00", "12 posições: R$ 540,00"],
+              ["Mesma ocupação, com mínimo de 15 posições", "15 posições: R$ 675,00", "15 posições: R$ 675,00"],
+            ],
+          ),
+          passos(
+            [
+              "A partir do dia 1º, abra [[/servicos/armazem/faturamento]]. A tela já mostra o mês anterior.",
+              "Confira o valor de cada depositante. Em **Ver dia a dia** (no menu da linha), veja as posições de cada dia e os endereços.",
+              "Clique em **Faturar** na linha, ou em **Faturar os pendentes**. O sistema gera o pedido já faturado, a conta a receber e, se a tarifa pedir, o boleto ou Pix.",
+              "Abra o pedido (menu da linha) e emita a NFS-e, como em qualquer pedido de serviço.",
+            ],
+            "Fechamento do mês",
+          ),
+          lista([
+            "O mês só pode ser faturado depois que termina. Durante o mês, a tela mostra o acumulado até hoje.",
+            "Vencimento: o dia da tarifa no mês seguinte. Se essa data já passou, o vencimento fica 5 dias depois do faturamento.",
+            "**Desfazer faturamento** cancela o pedido, exclui a conta a receber e cancela o boleto ou Pix em aberto. Não é possível desfazer com recebimento registrado ou nota emitida.",
+            "**Extrato (CSV)** traz as posições dia a dia para mandar ao depositante.",
+            "O faturamento guarda a tarifa usada: mudar o preço depois não muda o que já foi faturado.",
+          ]),
+          atencao("Confirme com o contador o código do serviço de armazenagem na NFS-e (item 11.04 da lista do ISS) e a alíquota."),
         ],
       },
       {
@@ -1039,6 +1093,7 @@ export const MANUAL: Secao[] = [
               ["Reenvio dos e-mails que falharam", "A cada 30 minutos, até 5 tentativas", "[[/configuracoes/email]]"],
               ["Aviso de certificado digital vencendo", "30, 15, 7 e 1 dia antes e no vencimento", "E-mail dos administradores e painel"],
               ["Baixa e devolução do estoque", "Ao faturar e ao desfazer o faturamento", "[[/estoque/movimentacoes]]"],
+              ["Fotografia das posições ocupadas do armazém (base da cobrança por posição-pallet)", "De hora em hora; vale a última de cada dia", "[[/servicos/armazem/faturamento]]"],
             ],
           ),
         ],
@@ -1054,6 +1109,7 @@ export const MANUAL: Secao[] = [
     quem: "Todos.",
     caminhos: [],
     topicos: [
+      { id: "armazenagem-valor", titulo: "Como é calculada a armazenagem do mês?", blocos: [texto("Pelas posições-pallet ocupadas no fim de cada dia e pela tarifa do depositante: veja [[ajuda:armazem#cobranca|Cobrança por posição-pallet]]. O dia a dia de cada depositante fica em **Ver dia a dia**, no faturamento.")] },
       { id: "onde-esta", titulo: "Onde está o código X, lote Y, no armazém?", blocos: [texto("Em [[/servicos/armazem]], busque pelo código ou pelo lote e escolha **Por código e lote**: a lista mostra a quantidade e cada caixa ou pallet com o endereço.")] },
       { id: "senha", titulo: "Esqueci a senha ou o acesso foi bloqueado", blocos: [texto("Use **Esqueci minha senha** na tela de entrada. Depois de 5 tentativas erradas, o acesso fica bloqueado por 15 minutos; um administrador pode liberar antes, em [[/configuracoes/usuarios]].")] },
       { id: "nao-vejo", titulo: "Não vejo uma empresa, um menu ou um botão", blocos: [texto("O menu mostra só o que o seu perfil pode usar, e cada usuário só vê as empresas liberadas para ele. Confira a empresa ativa no topo do menu e peça a um administrador para ajustar o seu acesso.")] },
