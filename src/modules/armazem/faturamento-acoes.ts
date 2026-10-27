@@ -12,8 +12,8 @@ import { ehISOValido, isoParaDate } from "@/lib/datas";
 import { fmtMoeda } from "@/lib/format";
 import { fmtNumeroDoc } from "@/modules/vendas/calculos";
 import { urlBase } from "@/modules/email/acoes";
-import { carregarFaturamento, desfazerFaturamentoArmazem, fotografarOcupacao, gerarFaturamentoArmazem } from "./faturamento";
-import { ehCompetencia, rotuloCompetencia } from "./tipos";
+import { carregarFaturamento, desfazerFaturamentoArmazem, fotografarOcupacao, gerarFaturamentoArmazem, primeiraEntradaDepositante } from "./faturamento";
+import { dataBr, ehDataISO, rotuloPeriodo } from "./tipos";
 
 function revalidar() {
   revalidatePath("/servicos/armazem", "layout");
@@ -35,10 +35,11 @@ const esquemaTarifa = z.object({
   metodo: z.enum(["PRO_RATA", "PICO"]),
   minimoPosicoes: z.number().int("Número inteiro de posições.").min(1, "Mínimo de 1 posição (ou deixe vazio).").max(100_000).optional().nullable(),
   cobrarReservadas: z.boolean(),
+  periodo: z.enum(["DIAS30", "MES"]),
   inicio: z.string().refine((s) => ehISOValido(s), "Informe o início da cobrança."),
   produtoId: idOpc,
   descricao: z.string().trim().min(3, "Informe a descrição (sai no pedido e na nota).").max(120),
-  diaVencimento: z.number().int().min(1, "Dia de 1 a 28.").max(28, "Dia de 1 a 28."),
+  prazoPagamento: z.number({ message: "Informe o prazo em dias." }).int("Número inteiro de dias.").min(0, "Prazo de 0 a 90 dias.").max(90, "Prazo de 0 a 90 dias."),
   categoriaId: idOpc,
   contaBancariaId: idOpc,
   formaPagamentoId: idOpc,
@@ -80,10 +81,11 @@ export async function salvarTarifaArmazem(entrada: EntradaTarifa): Promise<Resul
       metodo: d.metodo,
       minimoPosicoes: d.minimoPosicoes ?? null,
       cobrarReservadas: d.cobrarReservadas,
+      periodo: d.periodo,
       inicio: isoParaDate(d.inicio),
       produtoId: d.produtoId,
       descricao: d.descricao,
-      diaVencimento: d.diaVencimento,
+      prazoPagamento: d.prazoPagamento,
       categoriaId: d.categoriaId,
       contaBancariaId: d.contaBancariaId,
       formaPagamentoId: d.formaPagamentoId,
@@ -93,8 +95,16 @@ export async function salvarTarifaArmazem(entrada: EntradaTarifa): Promise<Resul
     let id: string;
     try {
       if (d.id) {
-        const atual = await prisma.tarifaArmazem.findFirst({ where: { id: d.id, empresaId: { in: escopo.ids } }, select: { id: true } });
+        const atual = await prisma.tarifaArmazem.findFirst({ where: { id: d.id, empresaId: { in: escopo.ids } }, select: { id: true, empresaId: true, depositanteId: true, inicio: true, periodo: true } });
         if (!atual) throw new ErroAcao("Tarifa não encontrada nesta empresa.");
+        // os períodos contam do início: mudar o início ou o tipo de período não pode deslocar períodos já faturados
+        const ultimo = await prisma.faturamentoArmazem.findFirst({ where: { empresaId: atual.empresaId, depositanteId: atual.depositanteId }, orderBy: { periodoFim: "desc" }, select: { periodoFim: true } });
+        const mudouPeriodos = atual.inicio.toISOString().slice(0, 10) !== d.inicio || atual.periodo !== d.periodo || atual.empresaId !== d.estabelecimentoId || atual.depositanteId !== d.depositanteId;
+        if (ultimo && mudouPeriodos) {
+          const fim = ultimo.periodoFim.toISOString().slice(0, 10);
+          if (atual.empresaId !== d.estabelecimentoId || atual.depositanteId !== d.depositanteId) throw new ErroAcao("Esta tarifa já tem faturamentos: o depositante e o estabelecimento não mudam.");
+          if (d.inicio <= fim) throw new ErroAcao(`Esta tarifa já foi faturada até ${dataBr(fim)}: o novo início precisa ser depois disso.`, { inicio: `Depois de ${dataBr(fim)}.` });
+        }
         id = (await prisma.tarifaArmazem.update({ where: { id: atual.id }, data: dados, select: { id: true } })).id;
       } else {
         id = (await prisma.tarifaArmazem.create({ data: dados, select: { id: true } })).id;
@@ -103,7 +113,12 @@ export async function salvarTarifaArmazem(entrada: EntradaTarifa): Promise<Resul
       if ((e as { code?: string }).code === "P2002") throw new ErroAcao(`${dep.nome} já tem tarifa neste estabelecimento: edite a que existe.`, { depositanteId: "Já tem tarifa." });
       throw e;
     }
-    await auditar(d.id ? "editar_tarifa_armazem" : "criar_tarifa_armazem", "armazem", id, `Tarifa de armazenagem de ${dep.nome}: ${fmtMoeda(d.valorPosicao)} por posição-pallet/mês (${d.metodo === "PICO" ? "maior ocupação" : "por dia"}${d.minimoPosicoes ? `, mínimo ${d.minimoPosicoes}` : ""})`);
+    await auditar(
+      d.id ? "editar_tarifa_armazem" : "criar_tarifa_armazem",
+      "armazem",
+      id,
+      `Tarifa de armazenagem de ${dep.nome}: ${fmtMoeda(d.valorPosicao)} por posição-pallet ${d.periodo === "DIAS30" ? "a cada 30 dias" : "por mês"} desde ${dataBr(d.inicio)} (${d.metodo === "PICO" ? "maior ocupação" : "por dia"}${d.minimoPosicoes ? `, mínimo ${d.minimoPosicoes}` : ""}; vence ${d.prazoPagamento} dias após o período)`,
+    );
     revalidar();
     return { id };
   }, "Tarifa salva.");
@@ -133,52 +148,60 @@ export async function atualizarFotografiaArmazem(): Promise<Resultado<{ deposita
   }, "Fotografia de hoje atualizada.");
 }
 
-async function gerarUm(empresaId: string, depositanteId: string, competencia: string, usuarioId: string, base: string, matrizId: string) {
-  const r = await gerarFaturamentoArmazem({ empresaId, depositanteId, competencia, usuarioId, urlBase: base });
+/** Data sugerida para o início da tarifa: a primeira entrada do depositante no estabelecimento. */
+export async function inicioSugeridoArmazem(empresaId: string, depositanteId: string): Promise<Resultado<{ inicio: string }>> {
+  return executar(async () => {
+    await exigirPermissao("armazem:ver");
+    const escopo = await escopoEmpresa();
+    exigirEmpresaNoEscopo(escopo, String(empresaId), "Estabelecimento fora da empresa atual.");
+    return { inicio: await primeiraEntradaDepositante(String(empresaId), String(depositanteId)) };
+  });
+}
+
+async function gerarUm(empresaId: string, depositanteId: string, periodoInicio: string, usuarioId: string, base: string, matrizId: string) {
+  const r = await gerarFaturamentoArmazem({ empresaId, depositanteId, periodoInicio, usuarioId, urlBase: base });
   await auditar(
     "faturar_armazenagem",
     "armazem",
     r.faturamentoId,
-    `Armazenagem de ${rotuloCompetencia(competencia)} · ${r.cliente} · ${r.calculo.posicoesDia} posições-dia, pico ${r.calculo.pico} · ${fmtMoeda(r.valor)} → pedido nº ${fmtNumeroDoc(r.numero)}${r.cobrancaId ? " · boleto/Pix gerado" : ""}`,
-    { competencia, calculo: r.calculo },
+    `Armazenagem de ${rotuloPeriodo(r.periodo)} · ${r.cliente} · ${r.calculo.posicoesDia} posições-dia, pico ${r.calculo.pico} · ${fmtMoeda(r.valor)} → pedido nº ${fmtNumeroDoc(r.numero)}${r.cobrancaId ? " · boleto/Pix gerado" : ""}`,
+    { periodo: r.periodo, calculo: r.calculo },
     { usuarioId, empresaId: matrizId },
   );
   return r;
 }
 
-/** Gera o faturamento do mês de um depositante. */
-export async function gerarFaturamentoArmazemAcao(empresaId: string, depositanteId: string, competencia: string): Promise<Resultado<{ pedidoId: string; numero: number }>> {
+/** Fatura um período fechado de um depositante (a cobrança é vencida: depois que o período termina). */
+export async function gerarFaturamentoArmazemAcao(empresaId: string, depositanteId: string, periodoInicio: string): Promise<Resultado<{ pedidoId: string; numero: number }>> {
   let mensagem = "";
   const r = await executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const escopo = await escopoEmpresa();
     exigirEmpresaNoEscopo(escopo, String(empresaId), "Estabelecimento fora da empresa atual.");
-    if (!ehCompetencia(competencia)) throw new ErroAcao("Competência inválida.");
-    const res = await gerarUm(String(empresaId), String(depositanteId), competencia, u.id, await urlBase(), escopo.ativa.id);
+    if (!ehDataISO(periodoInicio)) throw new ErroAcao("Período inválido.");
+    const res = await gerarUm(String(empresaId), String(depositanteId), periodoInicio, u.id, await urlBase(), escopo.ativa.id);
     revalidar();
-    mensagem = `Pedido nº ${fmtNumeroDoc(res.numero)} faturado: ${fmtMoeda(res.valor)}, vencimento ${res.vencimento.split("-").reverse().join("/")}.${res.cobrancaId ? " Boleto/Pix gerado e enviado." : res.erroCobranca ? ` Atenção: a cobrança não foi gerada (${res.erroCobranca}).` : ""}`;
+    mensagem = `Pedido nº ${fmtNumeroDoc(res.numero)} faturado: ${fmtMoeda(res.valor)} (${rotuloPeriodo(res.periodo)}), vencimento ${dataBr(res.vencimento)}.${res.cobrancaId ? " Boleto/Pix gerado e enviado." : res.erroCobranca ? ` Atenção: a cobrança não foi gerada (${res.erroCobranca}).` : ""}`;
     return { pedidoId: res.pedidoId, numero: res.numero };
   });
   return r.ok ? { ...r, mensagem } : r;
 }
 
-/** Gera o faturamento de todos os depositantes pendentes da competência (com tarifa e valor a cobrar). */
-export async function gerarTodosFaturamentosArmazem(competencia: string, estab?: string | null): Promise<Resultado<{ gerados: number; erros: { depositante: string; erro: string }[] }>> {
+/** Fatura todos os períodos fechados e pendentes (com tarifa e valor a cobrar). */
+export async function gerarTodosFaturamentosArmazem(estab?: string | null): Promise<Resultado<{ gerados: number; erros: { depositante: string; erro: string }[] }>> {
   let mensagem = "";
   const r = await executar(async () => {
     const u = await exigirPermissao("financeiro:editar");
     const escopo = await escopoEmpresa();
-    if (!ehCompetencia(competencia)) throw new ErroAcao("Competência inválida.");
-    const dados = await carregarFaturamento({ competencia, estab: estab ?? "" });
-    if (!dados.liberada) throw new ErroAcao(`${rotuloCompetencia(competencia)} ainda não terminou: o faturamento fica liberado a partir do dia 1º do mês seguinte.`);
-    const pendentes = dados.linhas.filter((l) => l.situacao === "PENDENTE");
-    if (!pendentes.length) throw new ErroAcao("Nenhum depositante pendente nesta competência.");
+    const dados = await carregarFaturamento({ aba: "pendentes", estab: estab ?? "", depositante: "" });
+    const pendentes = dados.linhas.filter((l) => l.situacao === "PENDENTE" && l.periodo);
+    if (!pendentes.length) throw new ErroAcao("Nenhum período pendente de faturamento.");
     const base = await urlBase();
     const gerados: number[] = [];
     const erros: { depositante: string; erro: string }[] = [];
     for (const l of pendentes) {
       try {
-        gerados.push((await gerarUm(l.empresaId, l.depositanteId, competencia, u.id, base, escopo.ativa.id)).numero);
+        gerados.push((await gerarUm(l.empresaId, l.depositanteId, l.periodo!.inicio, u.id, base, escopo.ativa.id)).numero);
       } catch (e) {
         erros.push({ depositante: l.depositante, erro: (e instanceof Error ? e.message : String(e)).slice(0, 300) });
       }
@@ -201,7 +224,7 @@ export async function desfazerFaturamentoArmazemAcao(id: string): Promise<Result
       "desfazer_faturamento_armazenagem",
       "armazem",
       String(id),
-      `Armazenagem de ${rotuloCompetencia(r.competencia)} · ${r.depositante} · ${fmtMoeda(r.valor)} desfeita${r.numero ? ` (pedido nº ${fmtNumeroDoc(r.numero)} cancelado)` : ""}${r.cobrancasCanceladas ? " · cobrança cancelada no Asaas" : ""}`,
+      `Armazenagem de ${rotuloPeriodo(r.periodo)} · ${r.depositante} · ${fmtMoeda(r.valor)} desfeita${r.numero ? ` (pedido nº ${fmtNumeroDoc(r.numero)} cancelado)` : ""}${r.cobrancasCanceladas ? " · cobrança cancelada no Asaas" : ""}`,
       undefined,
       { usuarioId: u.id, empresaId: escopo.ativa.id },
     );

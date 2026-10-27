@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -19,8 +19,8 @@ import { ConfirmarAcao } from "@/components/confirmar-acao";
 import { Selo } from "@/components/selos";
 import { fmtData, fmtMoeda } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { alternarTarifaArmazem, atualizarFotografiaArmazem, desfazerFaturamentoArmazemAcao, gerarFaturamentoArmazemAcao, gerarTodosFaturamentosArmazem, salvarTarifaArmazem } from "@/modules/armazem/faturamento-acoes";
-import { ROTULO_METODO, competenciaCurta, type DiaOcupacao, type MetodoArmazenagem } from "@/modules/armazem/tipos";
+import { alternarTarifaArmazem, atualizarFotografiaArmazem, desfazerFaturamentoArmazemAcao, gerarFaturamentoArmazemAcao, gerarTodosFaturamentosArmazem, inicioSugeridoArmazem, salvarTarifaArmazem } from "@/modules/armazem/faturamento-acoes";
+import { ROTULO_METODO, dataBr, type DiaOcupacao, type MetodoArmazenagem, type TipoPeriodo } from "@/modules/armazem/tipos";
 
 type Opcao = { valor: string; rotulo: string };
 export type OpcoesTarifa = { estabelecimentos: Opcao[]; servicos: Opcao[]; categorias: Opcao[]; contas: Opcao[]; formas: Opcao[]; inicioPadrao: string };
@@ -33,21 +33,26 @@ export type TarifaEdicao = {
   metodo: MetodoArmazenagem;
   minimoPosicoes: number | null;
   cobrarReservadas: boolean;
+  periodo: TipoPeriodo;
   inicio: string;
   produtoId: string | null;
   descricao: string;
-  diaVencimento: number;
+  prazoPagamento: number;
   categoriaId: string | null;
   contaBancariaId: string | null;
   formaPagamentoId: string | null;
   gerarCobranca: boolean;
   observacoes: string | null;
   ativo: boolean;
+  /** fim do último período faturado (o início só muda para depois dele) */
+  ultimoFaturado: string | null;
 };
+
+type DepositanteInicial = { id: string; nome: string; empresaId: string; inicio?: string | null };
 
 // ───────────────────────── Tarifa ─────────────────────────
 
-export function BotaoNovaTarifa({ opcoes, depositante, rotulo = "Nova tarifa", variante = "outline", tamanho = "default" }: { opcoes: OpcoesTarifa; depositante?: { id: string; nome: string; empresaId: string }; rotulo?: string; variante?: "outline" | "default"; tamanho?: "default" | "sm" }) {
+export function BotaoNovaTarifa({ opcoes, depositante, rotulo = "Nova tarifa", variante = "outline", tamanho = "default" }: { opcoes: OpcoesTarifa; depositante?: DepositanteInicial; rotulo?: string; variante?: "outline" | "default"; tamanho?: "default" | "sm" }) {
   const [aberto, setAberto] = useState(false);
   return (
     <>
@@ -59,7 +64,7 @@ export function BotaoNovaTarifa({ opcoes, depositante, rotulo = "Nova tarifa", v
   );
 }
 
-function DialogoTarifa({ aberto, onAbertoChange, opcoes, tarifa, depositante }: { aberto: boolean; onAbertoChange: (v: boolean) => void; opcoes: OpcoesTarifa; tarifa?: TarifaEdicao; depositante?: { id: string; nome: string; empresaId: string } }) {
+function DialogoTarifa({ aberto, onAbertoChange, opcoes, tarifa, depositante }: { aberto: boolean; onAbertoChange: (v: boolean) => void; opcoes: OpcoesTarifa; tarifa?: TarifaEdicao; depositante?: DepositanteInicial }) {
   return (
     <Dialog open={aberto} onOpenChange={onAbertoChange}>
       <DialogContent className="max-h-[94vh] overflow-y-auto sm:max-w-2xl">{aberto && <CorpoTarifa opcoes={opcoes} tarifa={tarifa} depositante={depositante} fechar={() => onAbertoChange(false)} />}</DialogContent>
@@ -67,7 +72,7 @@ function DialogoTarifa({ aberto, onAbertoChange, opcoes, tarifa, depositante }: 
   );
 }
 
-function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTarifa; tarifa?: TarifaEdicao; depositante?: { id: string; nome: string; empresaId: string }; fechar: () => void }) {
+function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTarifa; tarifa?: TarifaEdicao; depositante?: DepositanteInicial; fechar: () => void }) {
   const router = useRouter();
   const [v, setV] = useState({
     estabelecimentoId: tarifa?.empresaId ?? depositante?.empresaId ?? (opcoes.estabelecimentos.length === 1 ? opcoes.estabelecimentos[0].valor : ""),
@@ -76,10 +81,11 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
     metodo: (tarifa?.metodo ?? "PRO_RATA") as MetodoArmazenagem,
     minimo: tarifa?.minimoPosicoes ? String(tarifa.minimoPosicoes) : "",
     cobrarReservadas: tarifa?.cobrarReservadas ?? true,
-    inicio: tarifa?.inicio ?? opcoes.inicioPadrao,
+    periodo: (tarifa?.periodo ?? "DIAS30") as TipoPeriodo,
+    inicio: tarifa?.inicio ?? depositante?.inicio ?? opcoes.inicioPadrao,
     produtoId: tarifa?.produtoId ?? (opcoes.servicos.length === 1 ? opcoes.servicos[0].valor : ""),
     descricao: tarifa?.descricao ?? "Armazenagem de mercadorias",
-    diaVencimento: String(tarifa?.diaVencimento ?? 10),
+    prazo: String(tarifa?.prazoPagamento ?? 10),
     categoriaId: tarifa?.categoriaId ?? "",
     contaBancariaId: tarifa?.contaBancariaId ?? "",
     formaPagamentoId: tarifa?.formaPagamentoId ?? "",
@@ -88,10 +94,19 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
   });
   const [erros, setErros] = useState<Record<string, string>>({});
   const [enviando, iniciar] = useTransition();
+  // início sugerido (primeira entrada do depositante) enquanto a pessoa não mexer na data
+  const inicioEditado = useRef(!!tarifa || !!depositante?.inicio);
   const set = <K extends keyof typeof v>(k: K, x: (typeof v)[K]) => setV((a) => ({ ...a, [k]: x }));
+  function escolherDepositante(id: string | null) {
+    set("depositanteId", id);
+    if (!id || inicioEditado.current || !v.estabelecimentoId) return;
+    void inicioSugeridoArmazem(v.estabelecimentoId, id).then((r) => {
+      if (r.ok && r.data && !inicioEditado.current) set("inicio", r.data.inicio);
+    });
+  }
   function salvar() {
     const minimo = v.minimo.trim() ? Number(v.minimo) : null;
-    const dia = Number(v.diaVencimento);
+    const prazo = Number(v.prazo);
     iniciar(async () => {
       const r = await salvarTarifaArmazem({
         id: tarifa?.id ?? null,
@@ -101,10 +116,11 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
         metodo: v.metodo,
         minimoPosicoes: minimo,
         cobrarReservadas: v.cobrarReservadas,
+        periodo: v.periodo,
         inicio: v.inicio,
         produtoId: v.produtoId || null,
         descricao: v.descricao,
-        diaVencimento: Number.isFinite(dia) ? Math.trunc(dia) : 0,
+        prazoPagamento: v.prazo.trim() && Number.isFinite(prazo) ? Math.trunc(prazo) : -1,
         categoriaId: v.categoriaId || null,
         contaBancariaId: v.contaBancariaId || null,
         formaPagamentoId: v.formaPagamentoId || null,
@@ -124,22 +140,54 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
     <>
       <DialogHeader>
         <DialogTitle>{tarifa ? `Tarifa de ${tarifa.depositante}` : "Nova tarifa de armazenagem"}</DialogTitle>
-        <DialogDescription>Preço por posição-pallet por mês. Todo dia o sistema fotografa as posições ocupadas pelo depositante; no fim do mês, a tarifa vira o valor da armazenagem.</DialogDescription>
+        <DialogDescription>Preço por posição-pallet. Todo dia o sistema fotografa as posições ocupadas pelo depositante; quando o período termina, a tarifa vira o valor da armazenagem (cobrança vencida).</DialogDescription>
       </DialogHeader>
       <div className="grid gap-3 sm:grid-cols-2">
         <Campo id="tar-dep" rotulo="Depositante" obrigatorio erro={erros.depositanteId} className="sm:col-span-2">
-          <SeletorPessoa id="tar-dep" valor={v.depositanteId} rotuloInicial={tarifa?.depositante ?? depositante?.nome} onChange={(id) => set("depositanteId", id)} papel="cliente" placeholder="Escolha o depositante…" invalido={!!erros.depositanteId} />
+          <SeletorPessoa id="tar-dep" valor={v.depositanteId} rotuloInicial={tarifa?.depositante ?? depositante?.nome} onChange={(id) => escolherDepositante(id)} papel="cliente" placeholder="Escolha o depositante…" invalido={!!erros.depositanteId} />
         </Campo>
         {opcoes.estabelecimentos.length > 1 && (
           <Campo id="tar-estab" rotulo="Estabelecimento" obrigatorio erro={erros.estabelecimentoId} ajuda="O que presta o serviço (emite o pedido e a nota)" className="sm:col-span-2">
             <CampoSelect id="tar-estab" opcoes={opcoes.estabelecimentos} valor={v.estabelecimentoId} onChange={(x) => set("estabelecimentoId", x)} vazio="Escolha…" />
           </Campo>
         )}
-        <Campo id="tar-valor" rotulo="Valor por posição-pallet/mês" obrigatorio erro={erros.valorPosicao}>
+        <div className="space-y-1.5 sm:col-span-2">
+          <p className="text-sm font-medium">Período de cobrança</p>
+          <Segmentado
+            rotulo="Período de cobrança"
+            valor={v.periodo}
+            onChange={(x) => set("periodo", x)}
+            opcoes={[
+              { valor: "DIAS30", rotulo: "A cada 30 dias (vencido)" },
+              { valor: "MES", rotulo: "Mês do calendário" },
+            ]}
+          />
+        </div>
+        <Campo id="tar-valor" rotulo={v.periodo === "DIAS30" ? "Valor por posição-pallet a cada 30 dias" : "Valor por posição-pallet/mês"} obrigatorio erro={erros.valorPosicao}>
           <CampoMoeda id="tar-valor" valor={v.valorPosicao} onChange={(x) => set("valorPosicao", x)} />
         </Campo>
-        <Campo id="tar-inicio" rotulo="Início da cobrança" obrigatorio erro={erros.inicio} ajuda="Os dias antes dele não entram">
-          <Input id="tar-inicio" type="date" value={v.inicio} onChange={(e) => set("inicio", e.target.value)} />
+        <Campo
+          id="tar-inicio"
+          rotulo="Início da cobrança"
+          obrigatorio
+          erro={erros.inicio}
+          ajuda={
+            tarifa?.ultimoFaturado
+              ? `Faturada até ${dataBr(tarifa.ultimoFaturado)}: o início só muda para depois disso.`
+              : v.periodo === "DIAS30"
+                ? "Os períodos de 30 dias contam desta data (em geral, a primeira entrada)."
+                : "O primeiro mês é proporcional a partir desta data."
+          }
+        >
+          <Input
+            id="tar-inicio"
+            type="date"
+            value={v.inicio}
+            onChange={(e) => {
+              inicioEditado.current = true;
+              set("inicio", e.target.value);
+            }}
+          />
         </Campo>
         <div className="space-y-1.5 sm:col-span-2">
           <p className="text-sm font-medium">Como contar as posições</p>
@@ -149,16 +197,16 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
             onChange={(x) => set("metodo", x)}
             opcoes={[
               { valor: "PRO_RATA", rotulo: "Por dia (posição-dia)" },
-              { valor: "PICO", rotulo: "Maior ocupação do mês" },
+              { valor: "PICO", rotulo: "Maior ocupação do período" },
             ]}
           />
           <p className="text-xs text-muted-foreground">
             {v.metodo === "PRO_RATA"
-              ? "Soma as posições de cada dia e divide pelos dias do mês: 10 posições por 15 dias = 5 posições no mês."
-              : "Cobra o maior número de posições ocupadas num mesmo dia do mês."}
+              ? `Soma as posições de cada dia e divide pelos dias do período: 10 posições por 15 dias = 5 posições ${v.periodo === "DIAS30" ? "nos 30 dias" : "no mês"}.`
+              : "Cobra o maior número de posições ocupadas num mesmo dia do período."}
           </p>
         </div>
-        <Campo id="tar-minimo" rotulo="Mínimo de posições por mês" erro={erros.minimoPosicoes} ajuda="Opcional: posições contratadas">
+        <Campo id="tar-minimo" rotulo="Mínimo de posições por período" erro={erros.minimoPosicoes} ajuda="Opcional: posições contratadas">
           <Input id="tar-minimo" type="number" min={1} value={v.minimo} onChange={(e) => set("minimo", e.target.value)} placeholder="Sem mínimo" />
         </Campo>
         <div className="flex items-start gap-3 rounded-lg border px-3 py-2.5">
@@ -174,8 +222,8 @@ function CorpoTarifa({ opcoes, tarifa, depositante, fechar }: { opcoes: OpcoesTa
         <Campo id="tar-desc" rotulo="Descrição (sai no pedido e na nota)" obrigatorio erro={erros.descricao}>
           <Input id="tar-desc" value={v.descricao} onChange={(e) => set("descricao", e.target.value)} />
         </Campo>
-        <Campo id="tar-dia" rotulo="Dia do vencimento" obrigatorio erro={erros.diaVencimento} ajuda="No mês seguinte ao da armazenagem (1 a 28)">
-          <Input id="tar-dia" type="number" min={1} max={28} value={v.diaVencimento} onChange={(e) => set("diaVencimento", e.target.value)} />
+        <Campo id="tar-prazo" rotulo="Prazo para pagamento (dias)" obrigatorio erro={erros.prazoPagamento} ajuda="Depois do fim do período (0 = vence quando o período termina)">
+          <Input id="tar-prazo" type="number" min={0} max={90} value={v.prazo} onChange={(e) => set("prazo", e.target.value)} />
         </Campo>
         <Campo id="tar-cat" rotulo="Categoria da receita" erro={erros.categoriaId}>
           <CampoSelect id="tar-cat" opcoes={opcoes.categorias} valor={v.categoriaId} onChange={(x) => set("categoriaId", x)} vazio="A primeira de receita" />
@@ -266,7 +314,7 @@ export function BotaoAtualizarFotografia() {
   );
 }
 
-export function BotaoGerarTodos({ competencia, estab, pendentes, total }: { competencia: string; estab: string; pendentes: number; total: number }) {
+export function BotaoGerarTodos({ estab, pendentes, total }: { estab: string; pendentes: number; total: number }) {
   const router = useRouter();
   const [aberto, setAberto] = useState(false);
   return (
@@ -277,11 +325,11 @@ export function BotaoGerarTodos({ competencia, estab, pendentes, total }: { comp
       <ConfirmarAcao
         aberto={aberto}
         onAbertoChange={setAberto}
-        titulo={`Faturar a armazenagem de ${competenciaCurta(competencia)}?`}
+        titulo="Faturar os períodos vencidos?"
         descricao={`Gera ${pendentes === 1 ? "1 pedido faturado" : `${pendentes} pedidos faturados`} (${fmtMoeda(total)}) com a conta a receber e, onde a tarifa pede, o boleto/Pix. Depois, emita a NFS-e em cada pedido.`}
         rotuloConfirmar="Faturar"
         acao={async () => {
-          const r = await gerarTodosFaturamentosArmazem(competencia, estab || null);
+          const r = await gerarTodosFaturamentosArmazem(estab || null);
           if (r.ok && r.data?.erros.length) toast.warning(r.mensagem ?? "", { duration: 12_000 });
           return r;
         }}
@@ -291,7 +339,7 @@ export function BotaoGerarTodos({ competencia, estab, pendentes, total }: { comp
   );
 }
 
-export function BotaoFaturar({ empresaId, depositanteId, competencia, depositante, valor }: { empresaId: string; depositanteId: string; competencia: string; depositante: string; valor: number }) {
+export function BotaoFaturar({ empresaId, depositanteId, periodoInicio, depositante, valor }: { empresaId: string; depositanteId: string; periodoInicio: string; depositante: string; valor: number }) {
   const router = useRouter();
   const [enviando, iniciar] = useTransition();
   return (
@@ -300,7 +348,7 @@ export function BotaoFaturar({ empresaId, depositanteId, competencia, depositant
       disabled={enviando}
       onClick={() =>
         iniciar(async () => {
-          const r = await gerarFaturamentoArmazemAcao(empresaId, depositanteId, competencia);
+          const r = await gerarFaturamentoArmazemAcao(empresaId, depositanteId, periodoInicio);
           if (!r.ok) return void toast.error(r.erro, { duration: 10_000 });
           toast.success(r.mensagem ?? `Armazenagem de ${depositante} faturada.`, { duration: 8_000 });
           router.refresh();
@@ -315,14 +363,14 @@ export function BotaoFaturar({ empresaId, depositanteId, competencia, depositant
 
 export function MenuLinhaFaturamento({
   depositante,
-  competencia,
+  rotulo,
   csv,
   dias,
   faturamento,
   podeFaturar,
 }: {
   depositante: string;
-  competencia: string;
+  rotulo: string;
   csv: string;
   dias: DiaOcupacao[];
   faturamento: { id: string; pedidoId: string | null } | null;
@@ -338,9 +386,11 @@ export function MenuLinhaFaturamento({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => setDialogo("dias")}>
-            <CalendarDays /> Ver dia a dia
-          </DropdownMenuItem>
+          {dias.length > 0 && (
+            <DropdownMenuItem onSelect={() => setDialogo("dias")}>
+              <CalendarDays /> Ver dia a dia
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem asChild>
             <a href={csv}>
               <Download /> Extrato (CSV)
@@ -363,7 +413,7 @@ export function MenuLinhaFaturamento({
           )}
         </DropdownMenuContent>
       </DropdownMenu>
-      <DialogoDias aberto={dialogo === "dias"} onAbertoChange={(x) => !x && setDialogo(null)} depositante={depositante} competencia={competencia} dias={dias} />
+      <DialogoDias aberto={dialogo === "dias"} onAbertoChange={(x) => !x && setDialogo(null)} depositante={depositante} rotulo={rotulo} dias={dias} />
       {faturamento && (
         <ConfirmarAcao
           aberto={dialogo === "desfazer"}
@@ -381,14 +431,14 @@ export function MenuLinhaFaturamento({
 
 const ROTULO_ORIGEM: Record<DiaOcupacao["origem"], string> = { FOTOGRAFIA: "fotografia", REPETIDO: "repetiu o dia anterior", SEM_DADOS: "sem dados" };
 
-export function DialogoDias({ aberto, onAbertoChange, depositante, competencia, dias }: { aberto: boolean; onAbertoChange: (v: boolean) => void; depositante: string; competencia: string; dias: DiaOcupacao[] }) {
+export function DialogoDias({ aberto, onAbertoChange, depositante, rotulo, dias }: { aberto: boolean; onAbertoChange: (v: boolean) => void; depositante: string; rotulo: string; dias: DiaOcupacao[] }) {
   const maximo = Math.max(1, ...dias.map((d) => d.posicoes + d.reservadasVazias));
   return (
     <Dialog open={aberto} onOpenChange={onAbertoChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            {depositante} · {competenciaCurta(competencia)}
+            {depositante} · {rotulo}
           </DialogTitle>
           <DialogDescription>Posições ocupadas no fim de cada dia (a última fotografia do dia). Em cinza claro, as reservadas vazias.</DialogDescription>
         </DialogHeader>
@@ -418,16 +468,16 @@ export function DialogoDias({ aberto, onAbertoChange, depositante, competencia, 
   );
 }
 
-export function SeloSituacao({ situacao }: { situacao: "SEM_TARIFA" | "PENDENTE" | "NADA_A_COBRAR" | "FATURADO" | "EM_ANDAMENTO" }) {
+export function SeloSituacao({ situacao }: { situacao: "SEM_TARIFA" | "PENDENTE" | "FATURADO" | "EM_ANDAMENTO" }) {
   const mapa = {
     SEM_TARIFA: { tom: "alerta", rotulo: "Sem tarifa" },
     PENDENTE: { tom: "info", rotulo: "A faturar" },
-    NADA_A_COBRAR: { tom: "neutro", rotulo: "Nada a cobrar" },
     FATURADO: { tom: "sucesso", rotulo: "Faturado" },
-    EM_ANDAMENTO: { tom: "roxo", rotulo: "Mês em andamento" },
+    EM_ANDAMENTO: { tom: "roxo", rotulo: "Em andamento" },
   } as const;
   const m = mapa[situacao];
   return <Selo tom={m.tom}>{m.rotulo}</Selo>;
 }
 
 export const rotuloMetodo = (m: MetodoArmazenagem) => ROTULO_METODO[m];
+export const rotuloData = dataBr;

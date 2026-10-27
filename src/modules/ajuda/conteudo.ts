@@ -712,7 +712,7 @@ export const MANUAL: Secao[] = [
         titulo: "Cobrança por posição-pallet",
         caminhos: ["/servicos/armazem/faturamento"],
         blocos: [
-          texto("A armazenagem é cobrada por posição-pallet. De hora em hora, o sistema fotografa as posições ocupadas por cada depositante (vale a última fotografia do dia). No fim do mês, a tarifa do depositante transforma essas posições no valor do mês."),
+          texto("A armazenagem é cobrada por posição-pallet, a cada 30 dias e vencida: cada período é cobrado depois que termina. De hora em hora, o sistema fotografa as posições ocupadas por cada depositante (vale a última fotografia do dia); quando o período termina, a tarifa transforma essas posições no valor a cobrar."),
           lista(
             [
               "Cada endereço com volume do depositante vale **uma posição**, tenha um pallet ou várias caixas.",
@@ -726,35 +726,39 @@ export const MANUAL: Secao[] = [
           passos(
             [
               "Em [[/servicos/armazem/faturamento]], clique em **Nova tarifa**.",
-              "Escolha o **Depositante**, o **Valor por posição-pallet/mês** e o **Início da cobrança**.",
-              "Em **Como contar as posições**, escolha **Por dia (posição-dia)**, que soma as posições de cada dia e divide pelos dias do mês, ou **Maior ocupação do mês**.",
-              "Se houver posições contratadas, informe o **Mínimo de posições por mês**.",
-              "Escolha o **Serviço do cadastro** (dá o código da NFS-e), o **Dia do vencimento** no mês seguinte e, se quiser, **Gerar boleto/Pix (Asaas)**. Clique em **Salvar tarifa**.",
+              "Escolha o **Depositante**. O **Início da cobrança** vem com a data da primeira entrada dele: os períodos de 30 dias contam a partir daí (do dia 27/10, por exemplo, o 1º período vai até 25/11 e o 2º começa em 26/11).",
+              "Em **Período de cobrança**, deixe **A cada 30 dias (vencido)**. **Mês do calendário** fica para quem cobra por mês.",
+              "Informe o **Valor por posição-pallet a cada 30 dias** e, em **Como contar as posições**, escolha **Por dia (posição-dia)** ou **Maior ocupação do período**.",
+              "Se houver posições contratadas, informe o **Mínimo de posições por período**.",
+              "Escolha o **Serviço do cadastro** (dá o código da NFS-e), o **Prazo para pagamento** em dias depois do fim do período e, se quiser, **Gerar boleto/Pix (Asaas)**. Clique em **Salvar tarifa**.",
             ],
             "Tarifa do depositante",
           ),
           tabela(
-            ["Exemplo (R$ 45,00 por posição/mês, mês de 30 dias)", "Por dia", "Maior ocupação"],
+            ["Exemplo (R$ 45,00 por posição a cada 30 dias)", "Por dia", "Maior ocupação"],
             [
-              ["10 posições do dia 1 ao 15 e 12 do dia 16 ao 30", "330 posições-dia ÷ 30 = 11 posições: R$ 495,00", "12 posições: R$ 540,00"],
+              ["10 posições nos primeiros 15 dias e 12 nos outros 15", "330 posições-dia ÷ 30 = 11 posições: R$ 495,00", "12 posições: R$ 540,00"],
               ["Mesma ocupação, com mínimo de 15 posições", "15 posições: R$ 675,00", "15 posições: R$ 675,00"],
             ],
           ),
           passos(
             [
-              "A partir do dia 1º, abra [[/servicos/armazem/faturamento]]. A tela já mostra o mês anterior.",
-              "Confira o valor de cada depositante. Em **Ver dia a dia** (no menu da linha), veja as posições de cada dia e os endereços.",
+              "Abra [[/servicos/armazem/faturamento]]. A aba **A faturar** mostra os períodos que já terminaram e ainda não foram cobrados.",
+              "Confira o valor de cada um. Em **Ver dia a dia** (no menu da linha), veja as posições de cada dia e os endereços.",
               "Clique em **Faturar** na linha, ou em **Faturar os pendentes**. O sistema gera o pedido já faturado, a conta a receber e, se a tarifa pedir, o boleto ou Pix.",
               "Abra o pedido (menu da linha) e emita a NFS-e, como em qualquer pedido de serviço.",
             ],
-            "Fechamento do mês",
+            "Faturar os períodos vencidos",
           ),
           lista([
-            "O mês só pode ser faturado depois que termina. Durante o mês, a tela mostra o acumulado até hoje.",
-            "Vencimento: o dia da tarifa no mês seguinte. Se essa data já passou, o vencimento fica 5 dias depois do faturamento.",
+            "**Em andamento** mostra o período de cada depositante que ainda está correndo, com o valor acumulado até hoje e a data em que ele poderá ser faturado.",
+            "Um período só pode ser faturado depois que termina (cobrança vencida).",
+            "Vencimento: o prazo da tarifa, contado do fim do período. Se essa data já passou quando o período é faturado, o vencimento fica 5 dias depois do faturamento.",
+            "**Faturados** guarda o histórico, com o pedido e a situação da conta a receber.",
+            "**Sem tarifa** lista quem ocupou posições nos últimos 30 dias sem preço cadastrado.",
             "**Desfazer faturamento** cancela o pedido, exclui a conta a receber e cancela o boleto ou Pix em aberto. Não é possível desfazer com recebimento registrado ou nota emitida.",
-            "**Extrato (CSV)** traz as posições dia a dia para mandar ao depositante.",
-            "O faturamento guarda a tarifa usada: mudar o preço depois não muda o que já foi faturado.",
+            "**Extrato (CSV)** traz as posições dia a dia do período para mandar ao depositante.",
+            "O faturamento guarda a tarifa usada. Depois do primeiro faturamento, o início da tarifa só pode mudar para depois do último período faturado.",
           ]),
           atencao("Confirme com o contador o código do serviço de armazenagem na NFS-e (item 11.04 da lista do ISS) e a alíquota."),
         ],
@@ -1109,7 +1113,7 @@ export const MANUAL: Secao[] = [
     quem: "Todos.",
     caminhos: [],
     topicos: [
-      { id: "armazenagem-valor", titulo: "Como é calculada a armazenagem do mês?", blocos: [texto("Pelas posições-pallet ocupadas no fim de cada dia e pela tarifa do depositante: veja [[ajuda:armazem#cobranca|Cobrança por posição-pallet]]. O dia a dia de cada depositante fica em **Ver dia a dia**, no faturamento.")] },
+      { id: "armazenagem-valor", titulo: "Como é calculada a armazenagem?", blocos: [texto("A cada 30 dias, depois que o período termina, pelas posições-pallet ocupadas no fim de cada dia e pela tarifa do depositante: veja [[ajuda:armazem#cobranca|Cobrança por posição-pallet]]. O dia a dia de cada depositante fica em **Ver dia a dia**, no faturamento.")] },
       { id: "onde-esta", titulo: "Onde está o código X, lote Y, no armazém?", blocos: [texto("Em [[/servicos/armazem]], busque pelo código ou pelo lote e escolha **Por código e lote**: a lista mostra a quantidade e cada caixa ou pallet com o endereço.")] },
       { id: "senha", titulo: "Esqueci a senha ou o acesso foi bloqueado", blocos: [texto("Use **Esqueci minha senha** na tela de entrada. Depois de 5 tentativas erradas, o acesso fica bloqueado por 15 minutos; um administrador pode liberar antes, em [[/configuracoes/usuarios]].")] },
       { id: "nao-vejo", titulo: "Não vejo uma empresa, um menu ou um botão", blocos: [texto("O menu mostra só o que o seu perfil pode usar, e cada usuário só vê as empresas liberadas para ele. Confira a empresa ativa no topo do menu e peça a um administrador para ajustar o seu acesso.")] },
