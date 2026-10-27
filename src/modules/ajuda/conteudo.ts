@@ -61,6 +61,7 @@ export const MANUAL: Secao[] = [
             "**Busca rápida**: clique em **Buscar clientes, títulos, produtos…**, no topo, ou aperte **Ctrl K**. Digite um nome, um CNPJ, o número de um título ou o nome de uma tela.",
             "**Painel**: a primeira tela, com o resumo do dia (veja [[ajuda:painel|Painel]]).",
             "**Manual**: o botão **Manual**, no topo de todas as telas, abre a parte deste manual sobre a tela em que você está.",
+            "No menu com o seu nome, no canto de cima: **Trocar senha**, **Tema escuro** (ou **Tema claro**, para voltar às cores normais) e **Sair**.",
           ]),
         ],
       },
@@ -136,7 +137,7 @@ export const MANUAL: Secao[] = [
         titulo: "Contas a receber e a pagar",
         caminhos: ["/financeiro/receber", "/financeiro/pagar", "/financeiro/titulos"],
         blocos: [
-          texto("Cada conta é um **título**: valor, vencimento, cliente ou fornecedor, categoria e situação (em aberto, parcial, quitado, vencido ou cancelado). Elas ficam em [[/financeiro/receber]] e [[/financeiro/pagar]], com busca e filtro por vencimento e situação."),
+          texto("Cada conta é um **título**: valor, vencimento, cliente ou fornecedor, categoria e situação (em aberto, parcial, quitado, vencido ou cancelado). Elas ficam em [[/financeiro/receber]] e [[/financeiro/pagar]], com busca e filtro por vencimento e situação. Os cartões do topo (**Em aberto**, **Vencido**, **Vence hoje**, **Próximos 7 dias** e **Quitado no mês**) somam os títulos; clique num cartão para filtrar a lista."),
           passos(
             [
               "Clique em **Nova conta a receber** (ou **Nova conta a pagar**).",
@@ -221,7 +222,7 @@ export const MANUAL: Secao[] = [
           passos([
             "No internet banking, exporte o extrato no formato **OFX**.",
             "Em [[/financeiro/conciliacao]], escolha a conta e clique em **Importar OFX** (até 2 MB). Lançamentos já importados não duplicam.",
-            "Para cada lançamento do extrato, o sistema sugere o título ou movimento correspondente. Confira e clique em **Conciliar**, ou use **Conciliar automaticamente** para aceitar todas as sugestões.",
+            "Para cada lançamento do extrato, o sistema sugere o título ou movimento correspondente. Confira e clique em **Conciliar**, ou use **Conciliar automaticamente** para aceitar todas as sugestões. Quando a sugestão é um título ainda em aberto, o botão é **Baixar e conciliar**: registra o recebimento ou o pagamento com a data e o valor do extrato e já concilia.",
             "Sem sugestão? **Criar lançamento** registra a tarifa, o rendimento ou a despesa e já concilia; **Outro movimento…** vincula a um movimento que você escolhe; **Ignorar** tira da lista o que não precisa de registro (aplicações e resgates automáticos).",
             "Confira no topo o **Saldo no sistema**, o **Saldo do extrato** e a **Diferença**.",
           ]),
@@ -285,6 +286,14 @@ export const MANUAL: Secao[] = [
             "Nova oportunidade",
           ),
           texto("Arraste o cartão para mudar de etapa; no celular, use o menu do cartão › **Mover para**. O aviso **Sem próxima atividade** lembra de agendar o próximo contato."),
+          lista(
+            [
+              "No topo: **Em aberto** (valor e número de oportunidades), **Previsão ponderada** (valor × chance de cada etapa), **Ganho em 90 dias** (com o ticket médio) e **Conversão em 90 dias** (ganhas sobre as fechadas no período).",
+              "**Minhas** mostra só as oportunidades de que você é o responsável; **Todas**, as da equipe. A busca acha pela oportunidade ou pelo cliente.",
+              "Embaixo, **Fechadas nos últimos 30 dias**: as **Ganhas**, as **Perdidas** e o quadro **Por que perdemos (90 dias)**, com os motivos de perda mais comuns.",
+            ],
+            "Indicadores e filtros",
+          ),
         ],
       },
       {
@@ -309,10 +318,10 @@ export const MANUAL: Secao[] = [
         titulo: "Atividades (agenda)",
         caminhos: ["/crm/atividades"],
         blocos: [
-          texto("[[/crm/atividades]] é a agenda comercial: **Atrasadas**, **Hoje**, as próximas e as **Concluídas hoje**. O número ao lado do item no menu mostra as suas atividades atrasadas ou de hoje."),
+          texto("[[/crm/atividades]] é a agenda comercial: **Atrasadas**, **Hoje**, **Próximos 7 dias** e **Concluídas hoje**. A tela abre em **Minhas** (as suas atividades); **De todos** mostra as da equipe. O número ao lado do item no menu mostra as suas atividades atrasadas ou de hoje."),
           passos([
             "Clique em **Nova atividade**.",
-            "Escolha o **Tipo** (ligação, WhatsApp, e-mail, reunião, visita ou tarefa), escreva **O que fazer** e informe a **Data**, a **Hora** (opcional), o **Responsável** e, se quiser, o **Cliente**.",
+            "Escolha o **Tipo** (ligação, WhatsApp, e-mail, reunião, visita ou tarefa), escreva **O que fazer** e informe a **Data**, a **Hora** (opcional), o **Responsável** e, se quiser, o **Cliente**. Os atalhos **Hoje**, **Amanhã**, **Em 3 dias** e **Em 1 semana** preenchem a data.",
             "Clique em **Agendar**.",
           ]),
           texto("Para concluir, marque a caixa ao lado da atividade. Ao concluir uma atividade de oportunidade, **Agendar próxima** já abre a seguinte."),
@@ -463,7 +472,7 @@ export const MANUAL: Secao[] = [
         id: "vendas-material",
         titulo: "Vendas por material",
         caminhos: ["/estoque/vendas"],
-        blocos: [texto("[[/estoque/vendas]] mostra, no período escolhido, quanto de cada material foi vendido: quantidade, receita, preço médio, número de vendas e compradores. As vendas entram quando o pedido é faturado.")],
+        blocos: [texto("[[/estoque/vendas]] mostra, no período escolhido, quanto de cada material foi vendido: quantidade, receita, preço médio, número de vendas e compradores. As vendas entram quando o pedido é faturado. **Exportar CSV** baixa a tabela para o Excel.")],
       },
       {
         id: "compras",
@@ -640,6 +649,7 @@ export const MANUAL: Secao[] = [
             "Depois da conferência, mudar o conteúdo de um volume é **ajuste**: pede o motivo e fica no histórico.",
             "**Reabrir conferência** (em **Mais**) volta os volumes do recebimento para em conferência.",
             "**Etiquetas dos volumes** (em **Mais**) imprime as etiquetas de todos os volumes do recebimento.",
+            "**Excluir recebimento** (em **Mais**) apaga um recebimento criado por engano. Antes, tire os itens dele das caixas e pallets.",
           ]),
         ],
       },
@@ -660,7 +670,7 @@ export const MANUAL: Secao[] = [
             "Um volume só: **Endereçar** (ou **Mudar endereço**) no próprio volume. **Tirar do endereço** volta para sem endereço.",
             "Na tela de um endereço (o QR da etiqueta da posição abre ela), **Colocar aqui** endereça a caixa ou o pallet digitado ou lido.",
             "O sistema não deixa passar da **capacidade** nem pôr volume de outro depositante em posição reservada.",
-            "Cada posição guarda volumes de um só depositante (a cobrança é por posição). Só a doca aceita vários.",
+            "Cada posição guarda volumes de um só depositante: assim, a posição só com caixas conta como um palete dele na cobrança. Só a doca aceita vários.",
           ]),
         ],
       },
@@ -702,6 +712,7 @@ export const MANUAL: Secao[] = [
             "Para tirar só parte de um volume, transfira antes esses itens para um volume novo e dê saída nele.",
             "Cada item guarda o recebimento e a NF-e de origem, que servem para a nota de retorno.",
             "**Desfazer saída** (com motivo) traz o volume de volta ao armazém, sem endereço.",
+            "**Excluir volume vazio** (em **Mais**) apaga a caixa ou o pallet criado a mais. Volume com itens ou que já saiu não pode ser excluído.",
             "O **Histórico** do volume mostra conferência, ajustes, endereços, transferências e saída, com data e usuário.",
           ]),
           atencao("A NF-e de retorno da mercadoria ao depositante (CFOP 5.906/6.906) ainda é emitida fora deste módulo. Confirme a tributação com o contador."),
@@ -749,13 +760,14 @@ export const MANUAL: Secao[] = [
             [
               "Abra [[/servicos/armazem/faturamento]]. A aba **A faturar** mostra os meses que já terminaram e ainda não foram cobrados, com a **Apuração** (os paletes do último dia).",
               "Confira o valor de cada um. Em **Ver dia a dia** (no menu da linha), veja os paletes de cada dia e os endereços.",
-              "Clique em **Faturar** na linha, ou em **Faturar os pendentes**. O sistema gera o pedido já faturado, a conta a receber e, se a tarifa pedir, o boleto ou Pix.",
+              "Clique em **Faturar** na linha, ou no botão do topo para faturar todos de uma vez (**Faturar o pendente**, ou **Faturar os 3** quando são três). O sistema gera o pedido já faturado, a conta a receber e, se a tarifa pedir, o boleto ou Pix.",
               "Abra o pedido (menu da linha) e emita a NFS-e, como em qualquer pedido de serviço.",
             ],
             "Faturar o mês",
           ),
           lista([
             "**Em andamento** mostra o mês que está correndo, com os paletes de hoje, o valor parcial e a data da apuração.",
+            "**Atualizar fotografia de hoje** conta os paletes na hora, sem esperar a próxima hora cheia (por exemplo, logo depois de um recebimento ou de uma saída).",
             "Um mês só pode ser faturado depois que termina (cobrança vencida): outubro, a partir de 01/11.",
             "Vencimento: o prazo da tarifa, contado do fim do mês (com 10 dias, outubro vence em 10/11). Se essa data já passou quando o mês é faturado, o vencimento fica 5 dias depois do faturamento.",
             "**Faturados** guarda o histórico, com a apuração, o pedido e a situação da conta a receber.",
@@ -817,7 +829,7 @@ export const MANUAL: Secao[] = [
             [
               "**Rejeitada**: a mensagem da SEFAZ diz o motivo. Corrija o cadastro (cliente, produto, empresa) e emita de novo: o reenvio usa o mesmo número.",
               "**SEFAZ-SP fora do ar**: use **Emitir em contingência (SVC-AN)** e escreva o motivo; a nota sai por outro autorizador, com outro número.",
-              "**Em processamento**, sem resposta: consulte a situação antes de emitir de novo, para não sair nota em duplicidade.",
+              "**Em processamento**, sem resposta: clique em **Consultar situação** (no pedido) ou **Consultar na SEFAZ** (na nota) antes de emitir de novo, para não sair nota em duplicidade.",
             ],
             "Se algo der errado",
           ),
@@ -850,6 +862,7 @@ export const MANUAL: Secao[] = [
           lista([
             "**Cancelar**: escolha o motivo (erro na emissão, serviço não prestado ou outro) e escreva a justificativa. O prazo para cancelar é definido pelo município.",
             "Recusada: corrija o que a mensagem indicar e use **Corrigir e reenviar a NFS-e**.",
+            "Sem resposta do emissor: **Consultar situação** (no pedido) ou **Consultar no emissor nacional** (na nota) traz o resultado. Consulte antes de emitir de novo.",
           ]),
         ],
       },
@@ -858,7 +871,7 @@ export const MANUAL: Secao[] = [
         titulo: "Notas recebidas (dos fornecedores)",
         caminhos: ["/fiscal/recebidas"],
         blocos: [
-          texto("Com a busca ligada, o sistema procura a cada hora, direto na SEFAZ e no Ambiente Nacional, as NF-e, CT-e e NFS-e emitidas contra o CNPJ (a primeira busca traz os últimos 90 dias). O número ao lado do item no menu mostra as NF-e sem manifestação final."),
+          texto("Com a busca ligada, o sistema procura a cada hora, direto na SEFAZ e no Ambiente Nacional, as NF-e, CT-e e NFS-e emitidas contra o CNPJ (a primeira busca traz os últimos 90 dias). O número ao lado do item no menu mostra as NF-e sem manifestação final. Quem pode editar o fiscal tem o botão **Buscar agora**, para não esperar a próxima hora."),
           passos([
             "Em [[/fiscal/recebidas]], veja as notas nas abas **Sem manifestação**, **Com ciência**, **Confirmadas**, **Recusadas**, **Canceladas** e **Todas**.",
             "A **ciência** (automática, se ligada) libera o XML completo da NF-e, que chega na busca seguinte.",
@@ -942,7 +955,7 @@ export const MANUAL: Secao[] = [
       {
         id: "inativar",
         titulo: "Editar, inativar e excluir",
-        blocos: [texto("Use **Editar** na linha. Para tirar um cadastro de uso sem perder o histórico, use **Inativar** (e **Reativar** para voltar). **Excluir** é permanente e só vale para registro sem lançamentos vinculados; se já tiver, inative.")],
+        blocos: [texto("Use **Editar** na linha. Para tirar um cadastro de uso sem perder o histórico, use **Inativar** (e **Reativar** para voltar). **Excluir** é permanente e só vale para registro sem lançamentos vinculados; se já tiver, inative. Os inativos aparecem no filtro **Inativos** da lista. Em [[/cadastros/pessoas]], **Só clientes** e **Só fornecedores** separam os dois.")],
       },
     ],
   },
@@ -983,6 +996,7 @@ export const MANUAL: Secao[] = [
             "A filial sem certificado próprio usa o da matriz.",
             "**Testar certificado** confere se ele continua válido.",
             "Na renovação, use **Trocar**. Os administradores recebem aviso por e-mail 30, 15, 7 e 1 dia antes do vencimento, e o painel mostra o alerta.",
+            "**Remover** apaga o certificado do sistema. Sem ele, a empresa não emite notas; numa filial, passa a valer o certificado da matriz, se houver.",
             "O arquivo e a senha ficam guardados cifrados: ninguém consegue baixar o certificado pelo sistema.",
           ]),
         ],
@@ -993,7 +1007,7 @@ export const MANUAL: Secao[] = [
         blocos: [
           passos([
             "No bloco **Notas recebidas**, clique em **Configurar**.",
-            "Ligue **Buscar notas contra este CNPJ**, escolha **O que buscar** (NF-e, CT-e e NFS-e) e deixe ligado **Dar ciência automaticamente nas NF-e**.",
+            "Ligue **Buscar notas contra este CNPJ**, escolha **O que buscar** (NF-e, CT-e e NFS-e) e deixe ligado **Dar ciência automaticamente nas NF-e**. Em **Motor**, deixe **SEFAZ direto** (sem custo); a **Focus NFe** fica de reserva.",
             "Clique em **Salvar**. A primeira busca traz as notas dos últimos 90 dias; depois, ela roda a cada hora.",
           ]),
           atencao("Se outro sistema já busca as notas do mesmo CNPJ, não ligue aqui: a SEFAZ bloqueia consultas em duplicidade."),
@@ -1019,7 +1033,7 @@ export const MANUAL: Secao[] = [
             ],
             "NFS-e",
           ),
-          texto("Os dois blocos têm o motor de reserva **Focus NFe**, para usar só se a emissão direta não for possível."),
+          texto("Em **Motor**, deixe a emissão direta: **SEFAZ direto** na NF-e e **Emissor nacional** na NFS-e, com o certificado A1 e sem custo. A **Focus NFe** é a reserva, para usar só se a emissão direta não for possível."),
         ],
       },
       {
